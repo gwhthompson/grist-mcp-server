@@ -22,6 +22,7 @@ import {
 import { formatErrorResponse, formatToolResponse } from '../services/formatter.js'
 import type { GristClient } from '../services/grist-client.js'
 import type { ApplyResponse } from '../types.js'
+import { toTableId } from '../types/advanced.js'
 
 // ============================================================================
 // 1. GRIST_CREATE_TABLE
@@ -53,7 +54,7 @@ export type CreateTableInput = z.infer<typeof CreateTableSchema>
 export async function createTable(client: GristClient, params: CreateTableInput) {
   try {
     // Build AddTable action
-    const action = buildAddTableAction(params.tableName, params.columns)
+    const action = buildAddTableAction(toTableId(params.tableName), params.columns)
 
     // Execute via /apply endpoint (expects array of actions directly)
     const response = await client.post<ApplyResponse>(`/docs/${params.docId}/apply`, [action])
@@ -109,7 +110,7 @@ export async function renameTable(client: GristClient, params: RenameTableInput)
     }
 
     // Build RenameTable action
-    const action = buildRenameTableAction(params.tableId, params.newTableId)
+    const action = buildRenameTableAction(toTableId(params.tableId), toTableId(params.newTableId))
 
     // Execute via /apply endpoint (expects array of actions directly)
     await client.post<ApplyResponse>(`/docs/${params.docId}/apply`, [action])
@@ -146,7 +147,7 @@ export type DeleteTableInput = z.infer<typeof DeleteTableSchema>
 export async function deleteTable(client: GristClient, params: DeleteTableInput) {
   try {
     // Build RemoveTable action
-    const action = buildRemoveTableAction(params.tableId)
+    const action = buildRemoveTableAction(toTableId(params.tableId))
 
     // Execute via /apply endpoint (expects array of actions directly)
     await client.post<ApplyResponse>(`/docs/${params.docId}/apply`, [action])

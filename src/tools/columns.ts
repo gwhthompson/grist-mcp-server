@@ -24,6 +24,7 @@ import {
 import { formatErrorResponse, formatToolResponse } from '../services/formatter.js'
 import type { GristClient } from '../services/grist-client.js'
 import type { ApplyResponse, UserAction } from '../types.js'
+import { toTableId, toColId } from '../types/advanced.js'
 
 // ============================================================================
 // Column Operation Schemas (Discriminated Union)
@@ -130,7 +131,7 @@ function buildModifyUpdates(op: ColumnOperation): any {
 function buildActionForOperation(op: ColumnOperation, tableId: string): UserAction {
   switch (op.action) {
     case 'add':
-      return buildAddColumnAction(tableId, op.colId, {
+      return buildAddColumnAction(toTableId(tableId), toColId(op.colId), {
         type: op.type,
         label: op.label,
         formula: op.formula,
@@ -138,11 +139,11 @@ function buildActionForOperation(op: ColumnOperation, tableId: string): UserActi
         widgetOptions: op.widgetOptions
       })
     case 'modify':
-      return buildModifyColumnAction(tableId, op.colId, buildModifyUpdates(op))
+      return buildModifyColumnAction(toTableId(tableId), toColId(op.colId), buildModifyUpdates(op))
     case 'delete':
-      return buildRemoveColumnAction(tableId, op.colId)
+      return buildRemoveColumnAction(toTableId(tableId), toColId(op.colId))
     case 'rename':
-      return buildRenameColumnAction(tableId, op.oldColId, op.newColId)
+      return buildRenameColumnAction(toTableId(tableId), toColId(op.oldColId), toColId(op.newColId))
   }
 }
 

@@ -1,17 +1,103 @@
 /**
- * GristClient - HTTP client for Grist API interactions
+ * GristClient - Type-safe HTTP client for Grist API interactions
  *
- * Handles all API communication with comprehensive error handling
- * and actionable error messages for AI assistants.
+ * Handles all API communication with:
+ * - Advanced generic type parameters for request/response safety
+ * - Optional runtime validation with Zod schemas
+ * - Comprehensive error handling with actionable messages
+ * - Template literal types for API path safety
+ *
+ * @example
+ * ```typescript
+ * // Without validation
+ * const data = await client.get<WorkspaceInfo[]>('/workspaces')
+ *
+ * // With validation
+ * const validated = await client.get(
+ *   '/workspaces',
+ *   undefined,
+ *   WorkspaceArraySchema
+ * )
+ * ```
  */
 
-import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios'
+import axios, {
+  type AxiosError,
+  type AxiosInstance,
+  type AxiosRequestConfig
+} from 'axios'
+import type { z } from 'zod'
 import { API_TIMEOUT } from '../constants.js'
+import { validateApiResponse, safeValidate } from '../schemas/api-responses.js'
+import type { ApiPath } from '../types/advanced.js'
 
+// ============================================================================
+// Type Definitions
+// ============================================================================
+
+/**
+ * HTTP method types for error handling
+ */
+type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+
+/**
+ * Generic constraint for request bodies
+ * Ensures only serializable data is passed
+ */
+type RequestBody = Record<string, unknown> | unknown[] | string | number | boolean | null
+
+/**
+ * Options for HTTP requests with optional validation
+ *
+ * @template TResponse - Expected response type
+ */
+interface RequestOptions<TResponse = unknown> {
+  /** Optional Zod schema for runtime response validation */
+  schema?: z.ZodSchema<TResponse>
+  /** Additional axios configuration */
+  config?: AxiosRequestConfig
+  /** Context string for better error messages during validation */
+  context?: string
+}
+
+/**
+ * Result of a validated API request
+ * Provides both raw and validated data when validation is used
+ *
+ * @template TResponse - Response data type
+ */
+interface ValidatedResponse<TResponse> {
+  /** The validated response data */
+  data: TResponse
+  /** Whether validation was performed */
+  validated: boolean
+  /** Raw response (only included if validation was performed) */
+  raw?: unknown
+}
+
+// ============================================================================
+// GristClient Class
+// ============================================================================
+
+/**
+ * Type-safe HTTP client for Grist API with optional runtime validation
+ *
+ * Features:
+ * - Generic type parameters for type-safe requests and responses
+ * - Optional Zod schema validation for runtime type safety
+ * - Comprehensive error handling with actionable guidance
+ * - Support for template literal API paths
+ */
 export class GristClient {
   private client: AxiosInstance
   private baseUrl: string
 
+  /**
+   * Create a new Grist API client
+   *
+   * @param baseUrl - Base URL of the Grist server (e.g., 'https://docs.getgrist.com')
+   * @param apiKey - API key for authentication
+   */
   constructor(baseUrl: string, apiKey: string) {
     this.baseUrl = baseUrl
 
@@ -26,63 +112,285 @@ export class GristClient {
     })
   }
 
+  // ==========================================================================
+  // HTTP Methods with Optional Validation
+  // ==========================================================================
+
   /**
-   * GET request with error handling
+   * Perform a GET request with optional validation
+   *
+   * @template TResponse - Expected response type
+   * @param path - API path (can be type-safe ApiPath)
+   * @param params - Optional query parameters
+   * @param options - Optional validation schema and request config
+   * @returns Promise resolving to typed response data
+   *
+   * @example
+   * ```typescript
+   * // Without validation
+   * const workspaces = await client.get<WorkspaceInfo[]>('/workspaces')
+   *
+   * // With validation
+   * const validated = await client.get('/workspaces', undefined, {
+   *   schema: WorkspaceArraySchema,
+   *   context: 'Fetching workspaces'
+   * })
+   * ```
    */
-  async get<T>(path: string, params?: Record<string, any>): Promise<T> {
+  async get<TResponse>(
+    path: string | ApiPath,
+    params?: Record<string, unknown>,
+    options?: RequestOptions<TResponse>
+  ): Promise<TResponse> {
     try {
-      const response = await this.client.get<T>(path, { params })
-      return response.data
+      const response = await this.client.get<TResponse>(path, {
+        params,
+        ...options?.config
+      })
+
+      return this.validateResponse(response.data, options)
     } catch (error) {
       throw this.handleError(error, 'GET', path)
     }
   }
 
   /**
-   * POST request with error handling
+   * Perform a POST request with optional validation
+   *
+   * @template TResponse - Expected response type
+   * @template TRequest - Request body type (defaults to unknown for flexibility)
+   * @param path - API path (can be type-safe ApiPath)
+   * @param data - Request body data
+   * @param options - Optional validation schema and request config
+   * @returns Promise resolving to typed response data
+   *
+   * @example
+   * ```typescript
+   * // Type-safe request and response
+   * interface CreateTableRequest {
+   *   tables: Array<{ id: string }>
+   * }
+   *
+   * const result = await client.post<ApplyResponse, CreateTableRequest>(
+   *   `/docs/${docId}/apply`,
+   *   { tables: [{ id: 'NewTable' }] },
+   *   { schema: ApplyResponseSchema }
+   * )
+   * ```
    */
-  async post<T>(path: string, data: any, config?: AxiosRequestConfig): Promise<T> {
+  async post<TResponse, TRequest = unknown>(
+    path: string | ApiPath,
+    data: TRequest,
+    options?: RequestOptions<TResponse>
+  ): Promise<TResponse> {
     try {
-      const response = await this.client.post<T>(path, data, config)
-      return response.data
+      const response = await this.client.post<TResponse>(
+        path,
+        data,
+        options?.config
+      )
+
+      return this.validateResponse(response.data, options)
     } catch (error) {
       throw this.handleError(error, 'POST', path)
     }
   }
 
   /**
-   * PUT request with error handling
+   * Perform a PUT request with optional validation
+   *
+   * @template TResponse - Expected response type
+   * @template TRequest - Request body type
+   * @param path - API path (can be type-safe ApiPath)
+   * @param data - Request body data
+   * @param options - Optional validation schema and request config
+   * @returns Promise resolving to typed response data
+   *
+   * @example
+   * ```typescript
+   * // Update records with validation
+   * const result = await client.put<UpsertResponse, UpsertRecord>(
+   *   `/docs/${docId}/tables/${tableId}/records`,
+   *   { require: { id: 1 }, fields: { name: 'Updated' } },
+   *   { schema: UpsertResponseSchema }
+   * )
+   * ```
    */
-  async put<T>(path: string, data: any): Promise<T> {
+  async put<TResponse, TRequest = unknown>(
+    path: string | ApiPath,
+    data: TRequest,
+    options?: RequestOptions<TResponse>
+  ): Promise<TResponse> {
     try {
-      const response = await this.client.put<T>(path, data)
-      return response.data
+      const response = await this.client.put<TResponse>(
+        path,
+        data,
+        options?.config
+      )
+
+      return this.validateResponse(response.data, options)
     } catch (error) {
       throw this.handleError(error, 'PUT', path)
     }
   }
 
   /**
-   * DELETE request with error handling
+   * Perform a PATCH request with optional validation
+   *
+   * @template TResponse - Expected response type
+   * @template TRequest - Request body type
+   * @param path - API path (can be type-safe ApiPath)
+   * @param data - Request body data
+   * @param options - Optional validation schema and request config
+   * @returns Promise resolving to typed response data
+   *
+   * @example
+   * ```typescript
+   * // Partial update with validation
+   * const updated = await client.patch<TableInfo, Partial<TableInfo>>(
+   *   `/docs/${docId}/tables/${tableId}`,
+   *   { fields: updatedFields },
+   *   { schema: TableInfoSchema }
+   * )
+   * ```
    */
-  async delete<T>(path: string): Promise<T> {
+  async patch<TResponse, TRequest = unknown>(
+    path: string | ApiPath,
+    data: TRequest,
+    options?: RequestOptions<TResponse>
+  ): Promise<TResponse> {
     try {
-      const response = await this.client.delete<T>(path)
-      return response.data
+      const response = await this.client.patch<TResponse>(
+        path,
+        data,
+        options?.config
+      )
+
+      return this.validateResponse(response.data, options)
+    } catch (error) {
+      throw this.handleError(error, 'PATCH', path)
+    }
+  }
+
+  /**
+   * Perform a DELETE request with optional validation
+   *
+   * @template TResponse - Expected response type (defaults to void)
+   * @param path - API path (can be type-safe ApiPath)
+   * @param options - Optional validation schema and request config
+   * @returns Promise resolving to typed response data
+   *
+   * @example
+   * ```typescript
+   * // Delete without response validation
+   * await client.delete(`/docs/${docId}/tables/${tableId}`)
+   *
+   * // Delete with response validation
+   * const result = await client.delete<DeleteResponse>(
+   *   `/docs/${docId}/tables/${tableId}`,
+   *   { schema: DeleteResponseSchema }
+   * )
+   * ```
+   */
+  async delete<TResponse = void>(
+    path: string | ApiPath,
+    options?: RequestOptions<TResponse>
+  ): Promise<TResponse> {
+    try {
+      const response = await this.client.delete<TResponse>(path, options?.config)
+
+      return this.validateResponse(response.data, options)
     } catch (error) {
       throw this.handleError(error, 'DELETE', path)
     }
   }
 
+  // ==========================================================================
+  // Validation Helpers
+  // ==========================================================================
+
+  /**
+   * Validate response data against a schema if provided
+   *
+   * @private
+   * @template TResponse - Expected response type
+   * @param data - Raw response data from axios
+   * @param options - Optional validation options
+   * @returns Validated response data
+   * @throws {Error} if validation fails
+   */
+  private validateResponse<TResponse>(
+    data: unknown,
+    options?: RequestOptions<TResponse>
+  ): TResponse {
+    // If no schema provided, return data as-is (trust TypeScript types)
+    if (!options?.schema) {
+      return data as TResponse
+    }
+
+    // Perform runtime validation with Zod
+    return validateApiResponse(
+      options.schema,
+      data,
+      options.context
+    )
+  }
+
+  /**
+   * Safely validate response without throwing
+   * Useful for optional validation or error recovery scenarios
+   *
+   * @template TResponse - Expected response type
+   * @param data - Raw response data
+   * @param schema - Zod schema to validate against
+   * @returns Result object with success status and data or error
+   *
+   * @example
+   * ```typescript
+   * const result = client.safeValidateResponse(data, WorkspaceArraySchema)
+   * if (result.success) {
+   *   console.log('Valid data:', result.data)
+   * } else {
+   *   console.error('Validation error:', result.error)
+   * }
+   * ```
+   */
+  safeValidateResponse<TResponse>(
+    data: unknown,
+    schema: z.ZodSchema<TResponse>
+  ): { success: true; data: TResponse } | { success: false; error: z.ZodError } {
+    return safeValidate(schema, data)
+  }
+
+  // ==========================================================================
+  // Error Handling
+  // ==========================================================================
+
   /**
    * Transform errors into agent-friendly messages
    * Provides actionable guidance for common error scenarios
+   *
+   * @private
+   * @param error - Unknown error from axios or other source
+   * @param method - HTTP method that was used
+   * @param path - API path that was accessed
+   * @returns Transformed Error with actionable message
    */
-  private handleError(error: unknown, method: string, path: string): Error {
+  private handleError(
+    error: unknown,
+    method: HttpMethod,
+    path: string
+  ): Error {
     if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError<any>
+      const axiosError = error as AxiosError<{
+        error?: { message?: string }
+        message?: string
+      }>
       const status = axiosError.response?.status
-      const message = axiosError.response?.data?.error?.message || axiosError.message
+      const message =
+        axiosError.response?.data?.error?.message ||
+        axiosError.response?.data?.message ||
+        axiosError.message
 
       switch (status) {
         case 401:
@@ -139,7 +447,11 @@ export class GristClient {
   }
 
   /**
-   * Build comprehensive 404 error with actionable guidance
+   * Build comprehensive 404 error with actionable guidance based on resource type
+   *
+   * @private
+   * @param path - API path that returned 404
+   * @returns Error with specific guidance for the missing resource type
    */
   private build404Error(path: string): Error {
     // Parse resource type and ID from path
@@ -222,10 +534,47 @@ export class GristClient {
     )
   }
 
+  // ==========================================================================
+  // Utility Methods
+  // ==========================================================================
+
   /**
    * Get the base URL for generating resource URLs
+   *
+   * @returns The base URL of the Grist server (without /api)
+   *
+   * @example
+   * ```typescript
+   * const baseUrl = client.getBaseUrl()
+   * const docUrl = `${baseUrl}/doc/${docId}`
+   * ```
    */
   getBaseUrl(): string {
     return this.baseUrl
   }
+
+  /**
+   * Get the underlying axios instance for advanced usage
+   * Use with caution - direct axios access bypasses type safety and validation
+   *
+   * @returns The axios instance used by this client
+   *
+   * @example
+   * ```typescript
+   * const axiosInstance = client.getAxiosInstance()
+   * axiosInstance.interceptors.request.use((config) => {
+   *   console.log('Request:', config)
+   *   return config
+   * })
+   * ```
+   */
+  getAxiosInstance(): AxiosInstance {
+    return this.client
+  }
 }
+
+// ============================================================================
+// Type Exports for External Use
+// ============================================================================
+
+export type { RequestOptions, ValidatedResponse, HttpMethod, RequestBody }

@@ -3,21 +3,25 @@
  *
  * Handles conversion between JSON and Markdown formats,
  * character limit enforcement, and truncation with guidance.
+ *
+ * Refactored with TypeScript generics for type safety
  */
 
 import { CHARACTER_LIMIT } from '../constants.js'
 import type { MCPToolResponse, ResponseFormat, TruncationInfo } from '../types.js'
+import type { ToolResponse } from '../types/advanced.js'
 
 /**
  * Format tool response with both text and structured content
  * CRITICAL: Always include BOTH content and structuredContent
  *
+ * @template T - The type of structured data being formatted
  * @param data - Data to format
  * @param format - Output format ('json' or 'markdown')
  * @returns MCP tool response with content and structuredContent
  */
-export function formatToolResponse(
-  data: any,
+export function formatToolResponse<T>(
+  data: T,
   format: ResponseFormat = 'markdown'
 ): MCPToolResponse {
   const text = format === 'markdown' ? formatAsMarkdown(data) : JSON.stringify(data, null, 2)
@@ -55,10 +59,11 @@ export function formatErrorResponse(errorMessage: string): MCPToolResponse {
  * Format data as Markdown string
  * Provides human-readable output with proper formatting
  *
+ * @template T - The type of data being formatted
  * @param data - Data to format
  * @returns Markdown-formatted string
  */
-export function formatAsMarkdown(data: any): string {
+export function formatAsMarkdown<T>(data: T): string {
   // Handle null/undefined
   if (data === null || data === undefined) {
     return 'No data'
@@ -76,7 +81,7 @@ export function formatAsMarkdown(data: any): string {
 
   // Handle plain objects
   if (typeof data === 'object') {
-    return formatObjectAsMarkdown(data)
+    return formatObjectAsMarkdown(data as Record<string, unknown>)
   }
 
   // Handle primitives
@@ -85,8 +90,9 @@ export function formatAsMarkdown(data: any): string {
 
 /**
  * Format array as Markdown list
+ * @template T - The type of items in the array
  */
-function formatArrayAsMarkdown(items: any[]): string {
+function formatArrayAsMarkdown<T>(items: T[]): string {
   if (items.length === 0) {
     return 'No items found'
   }
@@ -96,8 +102,9 @@ function formatArrayAsMarkdown(items: any[]): string {
 
 /**
  * Format single item as Markdown
+ * @template T - The type of item being formatted
  */
-function formatItemAsMarkdown(item: any): string {
+function formatItemAsMarkdown<T>(item: T): string {
   if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean') {
     return String(item)
   }
@@ -114,8 +121,9 @@ function formatItemAsMarkdown(item: any): string {
 
 /**
  * Format object as Markdown sections
+ * @template T - The type of object being formatted
  */
-function formatObjectAsMarkdown(obj: any): string {
+function formatObjectAsMarkdown<T extends Record<string, unknown>>(obj: T): string {
   return Object.entries(obj)
     .map(([key, value]) => {
       if (Array.isArray(value)) {
@@ -128,47 +136,63 @@ function formatObjectAsMarkdown(obj: any): string {
 
 /**
  * Format paginated response with metadata
+ * @template T - The type of paginated response data
  */
-function formatPaginatedResponse(data: any): string {
+function formatPaginatedResponse<T extends Record<string, unknown>>(data: T): string {
   const lines: string[] = []
 
+  // Type-safe access with proper checking
+  const items = 'items' in data ? data.items : undefined
+  const total = 'total' in data ? data.total : undefined
+  const hasMore = 'has_more' in data ? data.has_more : false
+  const nextOffset = 'next_offset' in data ? data.next_offset : undefined
+  const truncated = 'truncated' in data ? data.truncated : false
+  const truncationReason = 'truncation_reason' in data ? data.truncation_reason : undefined
+  const suggestions = 'suggestions' in data ? data.suggestions : undefined
+
   // Header with count info
-  if (data.total !== undefined) {
-    lines.push(`# Results (${data.items?.length || 0} of ${data.total} total)`)
+  if (total !== undefined && typeof total === 'number') {
+    const itemsLength = Array.isArray(items) ? items.length : 0
+    lines.push(`# Results (${itemsLength} of ${total} total)`)
   } else {
-    lines.push(`# Results (${data.items?.length || 0} items)`)
+    const itemsLength = Array.isArray(items) ? items.length : 0
+    lines.push(`# Results (${itemsLength} items)`)
   }
 
   lines.push('')
 
   // Items
-  if (data.items && data.items.length > 0) {
-    lines.push(formatArrayAsMarkdown(data.items))
+  if (Array.isArray(items) && items.length > 0) {
+    lines.push(formatArrayAsMarkdown(items))
   } else {
     lines.push('No items found')
   }
 
   // Pagination info
-  if (data.has_more) {
+  if (hasMore) {
     lines.push('')
     lines.push('---')
     lines.push('')
-    lines.push(`**More results available**. Use \`offset=${data.next_offset}\` to continue.`)
+    lines.push(`**More results available**. Use \`offset=${nextOffset}\` to continue.`)
   }
 
   // Truncation warning
-  if (data.truncated) {
+  if (truncated) {
     lines.push('')
     lines.push('---')
     lines.push('')
     lines.push('⚠️ **Response Truncated**')
     lines.push('')
-    lines.push(data.truncation_reason || 'Response exceeded character limit')
-    if (data.suggestions && data.suggestions.length > 0) {
+    lines.push(
+      typeof truncationReason === 'string' ? truncationReason : 'Response exceeded character limit'
+    )
+    if (Array.isArray(suggestions) && suggestions.length > 0) {
       lines.push('')
       lines.push('**Suggestions:**')
-      data.suggestions.forEach((suggestion: string) => {
-        lines.push(`- ${suggestion}`)
+      suggestions.forEach((suggestion) => {
+        if (typeof suggestion === 'string') {
+          lines.push(`- ${suggestion}`)
+        }
       })
     }
   }
@@ -178,8 +202,9 @@ function formatPaginatedResponse(data: any): string {
 
 /**
  * Format individual value for display
+ * @param value - Unknown value to format
  */
-function formatValue(value: any): string {
+function formatValue(value: unknown): string {
   if (value === null || value === undefined) {
     return 'null'
   }
@@ -216,16 +241,22 @@ function formatValue(value: any): string {
  * Check if response exceeds character limit and truncate if needed
  * Uses binary search to find maximum items that fit
  *
+ * @template T - The type of items in the array
+ * @template D - The type of additional data
  * @param items - Array of items to potentially truncate
  * @param format - Response format
  * @param additionalData - Additional data to include in response
  * @returns Object with text and optional truncation info
  */
-export function truncateIfNeeded(
-  items: any[],
+export function truncateIfNeeded<T, D extends Record<string, unknown> = Record<string, unknown>>(
+  items: T[],
   format: ResponseFormat,
-  additionalData: any = {}
-): { data: any; text: string; truncationInfo?: TruncationInfo } {
+  additionalData: D = {} as D
+): {
+  data: D & { items: T[] } & Partial<TruncationInfo>
+  text: string
+  truncationInfo?: TruncationInfo
+} {
   // Build full response first
   const fullData = {
     ...additionalData,
@@ -272,8 +303,13 @@ export function truncateIfNeeded(
 
 /**
  * Binary search to find maximum items that fit within character limit
+ * @template T - The type of items in the array
  */
-function findMaxItemsThatFit(items: any[], format: ResponseFormat, additionalData: any): number {
+function findMaxItemsThatFit<T>(
+  items: T[],
+  format: ResponseFormat,
+  additionalData: Record<string, unknown>
+): number {
   let left = 1
   let right = items.length
   let best = 1
@@ -302,11 +338,14 @@ function findMaxItemsThatFit(items: any[], format: ResponseFormat, additionalDat
 /**
  * Generate context-specific truncation suggestions
  */
-function generateTruncationSuggestions(data: any, itemsIncluded: number): string[] {
+function generateTruncationSuggestions(
+  data: Record<string, unknown>,
+  itemsIncluded: number
+): string[] {
   const suggestions: string[] = []
 
   // Suggest pagination
-  if (data.offset !== undefined) {
+  if ('offset' in data && typeof data.offset === 'number') {
     suggestions.push(
       `Use offset=${data.offset + itemsIncluded} to continue from where truncation occurred`
     )
@@ -315,22 +354,31 @@ function generateTruncationSuggestions(data: any, itemsIncluded: number): string
   }
 
   // Suggest reducing detail level
-  if (data.detail_level === 'detailed' || data.detail_level === 'full_schema') {
+  if (
+    'detail_level' in data &&
+    (data.detail_level === 'detailed' || data.detail_level === 'full_schema')
+  ) {
     suggestions.push(`Reduce detail_level to 'summary' or 'names' for more concise output`)
   }
 
   // Suggest column selection
-  if (!data.columns || data.columns === '*') {
+  if (!('columns' in data) || data.columns === '*') {
     suggestions.push(`Select specific columns instead of all columns to reduce data size`)
   }
 
   // Suggest filtering
-  if (!data.filters || Object.keys(data.filters).length === 0) {
+  const filters = 'filters' in data ? data.filters : undefined
+  if (
+    !filters ||
+    (typeof filters === 'object' &&
+      filters !== null &&
+      Object.keys(filters as Record<string, unknown>).length === 0)
+  ) {
     suggestions.push(`Add filters to reduce the result set`)
   }
 
   // Suggest smaller limit
-  if (data.limit && data.limit > 50) {
+  if ('limit' in data && typeof data.limit === 'number' && data.limit > 50) {
     suggestions.push(
       `Reduce limit parameter (currently ${data.limit}) to request fewer items per page`
     )

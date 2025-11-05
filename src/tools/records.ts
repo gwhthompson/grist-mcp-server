@@ -24,6 +24,7 @@ import {
 import { formatErrorResponse, formatToolResponse } from '../services/formatter.js'
 import type { GristClient } from '../services/grist-client.js'
 import type { ApplyResponse, UpsertResponse } from '../types.js'
+import { toTableId, toRowId } from '../types/advanced.js'
 
 // ============================================================================
 // 1. GRIST_ADD_RECORDS
@@ -49,7 +50,7 @@ export type AddRecordsInput = z.infer<typeof AddRecordsSchema>
 export async function addRecords(client: GristClient, params: AddRecordsInput) {
   try {
     // Build BulkAddRecord action
-    const action = buildBulkAddRecordAction(params.tableId, params.records)
+    const action = buildBulkAddRecordAction(toTableId(params.tableId), params.records)
 
     // Execute via /apply endpoint (expects array of actions directly)
     const response = await client.post<ApplyResponse>(`/docs/${params.docId}/apply`, [action])
@@ -95,7 +96,11 @@ export type UpdateRecordsInput = z.infer<typeof UpdateRecordsSchema>
 export async function updateRecords(client: GristClient, params: UpdateRecordsInput) {
   try {
     // Build BulkUpdateRecord action
-    const action = buildBulkUpdateRecordAction(params.tableId, params.rowIds, params.updates)
+    const action = buildBulkUpdateRecordAction(
+      toTableId(params.tableId),
+      params.rowIds.map(toRowId),
+      params.updates
+    )
 
     // Execute via /apply endpoint (expects array of actions directly)
     await client.post<ApplyResponse>(`/docs/${params.docId}/apply`, [action])
@@ -217,7 +222,10 @@ export type DeleteRecordsInput = z.infer<typeof DeleteRecordsSchema>
 export async function deleteRecords(client: GristClient, params: DeleteRecordsInput) {
   try {
     // Build BulkRemoveRecord action
-    const action = buildBulkRemoveRecordAction(params.tableId, params.rowIds)
+    const action = buildBulkRemoveRecordAction(
+      toTableId(params.tableId),
+      params.rowIds.map(toRowId)
+    )
 
     // Execute via /apply endpoint (expects array of actions directly)
     await client.post<ApplyResponse>(`/docs/${params.docId}/apply`, [action])

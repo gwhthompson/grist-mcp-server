@@ -9,6 +9,16 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc",
     "clean": "rm -rf dist",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:no-cleanup": "SKIP_CLEANUP=true vitest run",
+    "test:inspect": "SKIP_CLEANUP=true vitest run",
+    "test:integration": "node test-integration-auto.mjs",
+    "test:integration:full": "node test-integration-full.mjs",
+    "test:integration:keep": "node test-integration-auto.mjs --keep-running",
+    "test:integration:verbose": "node test-integration-auto.mjs --verbose",
     "format": "biome format --write .",
     "lint": "biome lint --write .",
     "check": "biome check --write .",
@@ -34,7 +44,9 @@
   "devDependencies": {
     "@biomejs/biome": "2.3.3",
     "@types/node": "^22.10.0",
+    "@vitest/ui": "^4.0.7",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.0.7"
   }
 }

@@ -45,6 +45,9 @@ export type GetWorkspacesInput = z.infer<typeof GetWorkspacesSchema>
 
 export async function getWorkspaces(client: GristClient, params: GetWorkspacesInput) {
   try {
+    // Parse and validate params to apply defaults
+    const validatedParams = GetWorkspacesSchema.parse(params)
+
     // Fetch organizations first
     const orgs = await client.get<Array<{ id: number; name: string; domain: string }>>('/orgs')
 
@@ -58,21 +61,21 @@ export async function getWorkspaces(client: GristClient, params: GetWorkspacesIn
 
     // Apply name filter if provided
     let filteredWorkspaces = allWorkspaces
-    if (params.name_contains) {
-      const searchTerm = params.name_contains.toLowerCase()
+    if (validatedParams.name_contains) {
+      const searchTerm = validatedParams.name_contains.toLowerCase()
       filteredWorkspaces = allWorkspaces.filter((ws) => ws.name.toLowerCase().includes(searchTerm))
     }
 
     const total = filteredWorkspaces.length
 
     // Apply pagination
-    const start = params.offset
-    const end = Math.min(start + params.limit, total)
+    const start = validatedParams.offset
+    const end = Math.min(start + validatedParams.limit, total)
     const paginatedWorkspaces = filteredWorkspaces.slice(start, end)
 
     // Format based on detail level
     const formattedWorkspaces = paginatedWorkspaces.map((ws) => {
-      if (params.detail_level === 'summary') {
+      if (validatedParams.detail_level === 'summary') {
         return {
           id: ws.id,
           name: ws.name,
@@ -97,26 +100,26 @@ export async function getWorkspaces(client: GristClient, params: GetWorkspacesIn
     // Build response data
     const _responseData = {
       total,
-      offset: params.offset,
-      limit: params.limit,
+      offset: validatedParams.offset,
+      limit: validatedParams.limit,
       has_more: end < total,
       next_offset: end < total ? end : null,
-      mode: params.name_contains ? 'search' : 'browse_all',
-      search_term: params.name_contains,
+      mode: validatedParams.name_contains ? 'search' : 'browse_all',
+      search_term: validatedParams.name_contains,
       workspaces: formattedWorkspaces
     }
 
     // Check for truncation
-    const { data } = truncateIfNeeded(formattedWorkspaces, params.response_format, {
+    const { data } = truncateIfNeeded(formattedWorkspaces, validatedParams.response_format, {
       total,
-      offset: params.offset,
-      limit: params.limit,
+      offset: validatedParams.offset,
+      limit: validatedParams.limit,
       has_more: end < total,
       next_offset: end < total ? end : null,
-      detail_level: params.detail_level
+      detail_level: validatedParams.detail_level
     })
 
-    return formatToolResponse(data, params.response_format)
+    return formatToolResponse(data, validatedParams.response_format)
   } catch (error) {
     return formatErrorResponse(error instanceof Error ? error.message : String(error))
   }
@@ -249,60 +252,63 @@ function determineMode(params: GetDocumentsInput): string {
 
 export async function getDocuments(client: GristClient, params: GetDocumentsInput) {
   try {
+    // Parse and validate params to apply defaults
+    const validatedParams = GetDocumentsSchema.parse(params)
+
     const baseUrl = client.getBaseUrl()
 
     // Mode 1: Get by ID (if docId provided)
-    if (params.docId) {
-      const doc = await fetchDocumentById(client, params.docId)
-      const formattedDoc = formatDocument(doc, params.detail_level, baseUrl)
+    if (validatedParams.docId) {
+      const doc = await fetchDocumentById(client, validatedParams.docId)
+      const formattedDoc = formatDocument(doc, validatedParams.detail_level, baseUrl)
 
-      const { data } = truncateIfNeeded([formattedDoc], params.response_format, {
+      const { data } = truncateIfNeeded([formattedDoc], validatedParams.response_format, {
         total: 1,
         offset: 0,
         limit: 1,
         has_more: false,
         mode: 'get_by_id',
-        detail_level: params.detail_level
+        detail_level: validatedParams.detail_level
       })
 
-      return formatToolResponse(data, params.response_format)
+      return formatToolResponse(data, validatedParams.response_format)
     }
 
     // Mode 2-4: List/search/filter documents
-    const documents = params.workspaceId
-      ? await fetchDocumentsByWorkspace(client, params.workspaceId)
+    const documents = validatedParams.workspaceId
+      ? await fetchDocumentsByWorkspace(client, validatedParams.workspaceId)
       : await fetchAllDocuments(client)
 
     // Apply name filter if provided
-    const filtered = applyNameFilter(documents, params.name_contains)
+    const filtered = applyNameFilter(documents, validatedParams.name_contains)
     const total = filtered.length
 
     // Apply pagination
-    const paginatedDocs = applyPagination(filtered, params.offset, params.limit)
+    const paginatedDocs = applyPagination(filtered, validatedParams.offset, validatedParams.limit)
 
     // Format documents
     const formattedDocs = paginatedDocs.map((doc) =>
-      formatDocument(doc, params.detail_level, baseUrl)
+      formatDocument(doc, validatedParams.detail_level, baseUrl)
     )
 
     // Calculate pagination metadata
-    const end = params.offset + paginatedDocs.length
-    const mode = determineMode(params)
+    const end = validatedParams.offset + paginatedDocs.length
+    const mode = determineMode(validatedParams)
 
     // Check for truncation
-    const { data } = truncateIfNeeded(formattedDocs, params.response_format, {
+    const { data } = truncateIfNeeded(formattedDocs, validatedParams.response_format, {
       total,
-      offset: params.offset,
-      limit: params.limit,
+      offset: validatedParams.offset,
+      limit: validatedParams.limit,
       has_more: end < total,
       next_offset: end < total ? end : null,
       mode,
-      search_term: params.name_contains,
-      workspace_id: params.workspaceId,
-      detail_level: params.detail_level
+      search_term: validatedParams.name_contains,
+      workspace_id: validatedParams.workspaceId,
+      detail_level: validatedParams.detail_level
     })
 
-    return formatToolResponse(data, params.response_format)
+    return formatToolResponse(data, validatedParams.response_format)
   } catch (error) {
     return formatErrorResponse(error instanceof Error ? error.message : String(error))
   }
@@ -325,16 +331,19 @@ export type GetTablesInput = z.infer<typeof GetTablesSchema>
 
 export async function getTables(client: GristClient, params: GetTablesInput) {
   try {
+    // Parse and validate params to apply defaults
+    const validatedParams = GetTablesSchema.parse(params)
+
     // Fetch tables from API
-    const response = await client.get<{ tables: any[] }>(`/docs/${params.docId}/tables`)
+    const response = await client.get<{ tables: any[] }>(`/docs/${validatedParams.docId}/tables`)
     let tableList = response.tables || []
 
     // Filter by tableId if specified
-    if (params.tableId) {
-      tableList = tableList.filter((t) => t.id === params.tableId)
+    if (validatedParams.tableId) {
+      tableList = tableList.filter((t) => t.id === validatedParams.tableId)
       if (tableList.length === 0) {
         return formatErrorResponse(
-          `Table '${params.tableId}' not found in document. ` +
+          `Table '${validatedParams.tableId}' not found in document. ` +
             `Use grist_get_tables without tableId to see all available tables.`
         )
       }
@@ -343,21 +352,21 @@ export async function getTables(client: GristClient, params: GetTablesInput) {
     // Format based on detail level
     let formattedTables: any[]
 
-    if (params.detail_level === 'names') {
+    if (validatedParams.detail_level === 'names') {
       // Just table names
       formattedTables = tableList.map((t) => ({
         id: t.id
       }))
-    } else if (params.detail_level === 'columns' || params.detail_level === 'full_schema') {
+    } else if (validatedParams.detail_level === 'columns' || validatedParams.detail_level === 'full_schema') {
       // Need to fetch columns for each table
       formattedTables = await Promise.all(
         tableList.map(async (t) => {
           const columnsResponse = await client.get<{ columns: any[] }>(
-            `/docs/${params.docId}/tables/${t.id}/columns`
+            `/docs/${validatedParams.docId}/tables/${t.id}/columns`
           )
           const columns = columnsResponse.columns || []
 
-          if (params.detail_level === 'columns') {
+          if (validatedParams.detail_level === 'columns') {
             // Just column names
             return {
               id: t.id,
@@ -388,13 +397,14 @@ export async function getTables(client: GristClient, params: GetTablesInput) {
       formattedTables = tableList.map((t) => ({ id: t.id }))
     }
 
+    // Use consistent 'items' structure for all list responses
     const responseData = {
-      document_id: params.docId,
+      document_id: validatedParams.docId,
       table_count: formattedTables.length,
-      tables: formattedTables
+      items: formattedTables
     }
 
-    return formatToolResponse(responseData, params.response_format)
+    return formatToolResponse(responseData, validatedParams.response_format)
   } catch (error) {
     return formatErrorResponse(error instanceof Error ? error.message : String(error))
   }

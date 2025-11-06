@@ -24,3 +24,11 @@ export {
   hasProperty,
   isError
 } from './type-guards.js'
+
+// Export value objects
+export {
+  PaginationParams,
+  FilterCriteria,
+  ColumnSelection,
+  OperationResult
+} from './value-objects.js'

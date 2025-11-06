@@ -10,3 +10,17 @@ export * from '../types.js'
 
 // Export all advanced types
 export * from './advanced.js'
+
+// Export specific type guards from type-guards.ts (avoiding conflicts with advanced.ts)
+export {
+  createTypeGuard,
+  safeParse,
+  isRecord,
+  isString,
+  isNumber,
+  isBoolean,
+  isNullish,
+  isDefined,
+  hasProperty,
+  isError
+} from './type-guards.js'

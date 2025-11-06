@@ -303,6 +303,8 @@ export function truncateIfNeeded<T, D extends Record<string, unknown> = Record<s
 
 /**
  * Binary search to find maximum items that fit within character limit
+ * Optimized with item size estimation to reduce iterations
+ *
  * @template T - The type of items in the array
  */
 function findMaxItemsThatFit<T>(
@@ -310,9 +312,59 @@ function findMaxItemsThatFit<T>(
   format: ResponseFormat,
   additionalData: Record<string, unknown>
 ): number {
-  let left = 1
-  let right = items.length
-  let best = 1
+  if (items.length === 0) {
+    return 0
+  }
+
+  // Optimization: Estimate average item size from a sample
+  // This significantly narrows the binary search range
+  const sampleSize = Math.min(5, items.length)
+  const sampleData = {
+    ...additionalData,
+    items: items.slice(0, sampleSize)
+  }
+  const sampleText =
+    format === 'json' ? JSON.stringify(sampleData, null, 2) : formatAsMarkdown(sampleData)
+
+  // Calculate overhead (everything except items)
+  const emptyData = {
+    ...additionalData,
+    items: []
+  }
+  const emptyText =
+    format === 'json' ? JSON.stringify(emptyData, null, 2) : formatAsMarkdown(emptyData)
+  const overhead = emptyText.length
+
+  // Estimate average item size
+  const itemsSize = sampleText.length - overhead
+  const avgItemSize = Math.ceil(itemsSize / sampleSize)
+
+  // Estimate maximum items that could fit
+  const availableSpace = CHARACTER_LIMIT - overhead
+  const estimatedMax = Math.floor(availableSpace / avgItemSize)
+
+  // Set binary search range based on estimate
+  // Use 80% to 120% of estimate to account for variance
+  const rangeStart = Math.max(1, Math.floor(estimatedMax * 0.8))
+  const rangeEnd = Math.min(items.length, Math.ceil(estimatedMax * 1.2))
+
+  // If estimate suggests all items fit, verify quickly
+  if (rangeEnd >= items.length) {
+    const fullData = {
+      ...additionalData,
+      items: items
+    }
+    const fullText =
+      format === 'json' ? JSON.stringify(fullData, null, 2) : formatAsMarkdown(fullData)
+    if (fullText.length <= CHARACTER_LIMIT) {
+      return items.length
+    }
+  }
+
+  // Binary search in narrowed range
+  let left = rangeStart
+  let right = rangeEnd
+  let best = rangeStart
 
   while (left <= right) {
     const mid = Math.floor((left + right) / 2)

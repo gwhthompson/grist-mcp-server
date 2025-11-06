@@ -9,6 +9,7 @@
 
 import type { BulkColValues, ColumnDefinition, ColumnInfo, UserAction, CellValue } from '../types.js'
 import type { TableId, RowId, ColId } from '../types/advanced.js'
+import { isReferenceType } from './column-resolver.js'
 
 /**
  * Type for Grist record data (column ID to cell value mapping)
@@ -28,8 +29,8 @@ export function buildBulkAddRecordAction(
   records: GristRecordData[]
 ): UserAction {
   // Grist assigns row IDs automatically - null placeholders for new records
-  // Type assertion needed as Grist API expects number[] but accepts null for new records
-  const rowIds = records.map(() => null as unknown as number)
+  // Type system now properly supports null values for new records
+  const rowIds = records.map(() => null)
 
   // Convert row-oriented to column-oriented format
   const colValues: BulkColValues = {}
@@ -90,13 +91,51 @@ export function buildBulkRemoveRecordAction(tableId: TableId, rowIds: RowId[]): 
  * @param colId - Column identifier (branded type)
  * @param colInfo - Column information (type, label, formula, etc.)
  * @returns UserAction for adding a column
+ * @throws {Error} if visibleCol is used incorrectly
  */
 export function buildAddColumnAction(
   tableId: TableId,
   colId: ColId,
   colInfo: ColumnInfo
 ): UserAction {
-  return ['AddColumn', tableId as string, colId as string, colInfo]
+  // Validate visibleCol usage
+  if (colInfo.visibleCol !== undefined) {
+    // Ensure column type is provided
+    if (!colInfo.type) {
+      throw new Error(
+        `Column "${colId}" has visibleCol but no type specified. ` +
+          `When setting visibleCol, you must provide the column type (e.g., "Ref:People" or "RefList:Tags").`
+      )
+    }
+
+    // Ensure it's a reference type
+    if (!isReferenceType(colInfo.type)) {
+      throw new Error(
+        `Column "${colId}" has visibleCol but type "${colInfo.type}" is not a Ref or RefList type. ` +
+          `visibleCol can only be used with Ref:TableName or RefList:TableName types.`
+      )
+    }
+
+    // Ensure visibleCol is a number
+    if (typeof colInfo.visibleCol !== 'number') {
+      throw new Error(
+        `visibleCol for column "${colId}" must be a numeric column reference (colRef). ` +
+          `Use resolveVisibleCol() to convert string column names to numeric IDs. ` +
+          `Received: ${typeof colInfo.visibleCol}`
+      )
+    }
+  }
+
+  // Grist expects widgetOptions as a JSON string, not an object
+  const processedColInfo = {
+    ...colInfo,
+    widgetOptions:
+      colInfo.widgetOptions && typeof colInfo.widgetOptions === 'object'
+        ? JSON.stringify(colInfo.widgetOptions)
+        : colInfo.widgetOptions
+  }
+
+  return ['AddColumn', tableId as string, colId as string, processedColInfo]
 }
 
 /**
@@ -106,13 +145,43 @@ export function buildAddColumnAction(
  * @param colId - Column identifier (branded type)
  * @param updates - Partial column info with fields to update
  * @returns UserAction for modifying a column
+ * @throws {Error} if visibleCol is used incorrectly
  */
 export function buildModifyColumnAction(
   tableId: TableId,
   colId: ColId,
   updates: Partial<ColumnInfo>
 ): UserAction {
-  return ['ModifyColumn', tableId as string, colId as string, updates]
+  // Validate visibleCol usage if being modified
+  if (updates.visibleCol !== undefined) {
+    // If updating visibleCol, the type should also be provided (or already be a Ref type)
+    if (updates.type && !isReferenceType(updates.type)) {
+      throw new Error(
+        `Column "${colId}" is being updated with visibleCol but type "${updates.type}" is not a Ref or RefList type. ` +
+          `visibleCol can only be used with Ref:TableName or RefList:TableName types.`
+      )
+    }
+
+    // Ensure visibleCol is a number
+    if (typeof updates.visibleCol !== 'number') {
+      throw new Error(
+        `visibleCol for column "${colId}" must be a numeric column reference (colRef). ` +
+          `Use resolveVisibleCol() to convert string column names to numeric IDs. ` +
+          `Received: ${typeof updates.visibleCol}`
+      )
+    }
+  }
+
+  // Grist expects widgetOptions as a JSON string, not an object
+  const processedUpdates = {
+    ...updates,
+    widgetOptions:
+      updates.widgetOptions && typeof updates.widgetOptions === 'object'
+        ? JSON.stringify(updates.widgetOptions)
+        : updates.widgetOptions
+  }
+
+  return ['ModifyColumn', tableId as string, colId as string, processedUpdates]
 }
 
 /**

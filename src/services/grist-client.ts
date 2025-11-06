@@ -30,6 +30,10 @@ import type { z } from 'zod'
 import { API_TIMEOUT } from '../constants.js'
 import { validateApiResponse, safeValidate } from '../schemas/api-responses.js'
 import type { ApiPath } from '../types/advanced.js'
+import { RateLimiter, type RateLimiterConfig } from '../utils/rate-limiter.js'
+import { ResponseCache, type ResponseCacheConfig } from '../utils/response-cache.js'
+import { Logger, LogLevel } from '../utils/logger.js'
+import { sanitizeMessage } from '../utils/sanitizer.js'
 
 // ============================================================================
 // Type Definitions
@@ -39,6 +43,20 @@ import type { ApiPath } from '../types/advanced.js'
  * HTTP method types for error handling
  */
 type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
+
+/**
+ * Configuration for retry behavior
+ */
+interface RetryConfig {
+  /** Maximum number of retry attempts (default: 3) */
+  maxRetries: number
+  /** Base delay in milliseconds for exponential backoff (default: 1000) */
+  baseDelayMs: number
+  /** Maximum delay in milliseconds (default: 30000) */
+  maxDelayMs: number
+  /** HTTP status codes that should trigger a retry (default: [429, 502, 503, 504]) */
+  retryableStatuses: number[]
+}
 
 /**
  * Generic constraint for request bodies
@@ -91,15 +109,51 @@ interface ValidatedResponse<TResponse> {
 export class GristClient {
   private client: AxiosInstance
   private baseUrl: string
+  private retryConfig: RetryConfig
+  private rateLimiter: RateLimiter
+  private cache: ResponseCache
+  private cacheEnabled: boolean
+  private logger: Logger
 
   /**
    * Create a new Grist API client
    *
    * @param baseUrl - Base URL of the Grist server (e.g., 'https://docs.getgrist.com')
    * @param apiKey - API key for authentication
+   * @param retryConfig - Optional retry configuration (defaults to 3 retries with exponential backoff)
+   * @param rateLimiterConfig - Optional rate limiter configuration (defaults to 5 concurrent, 200ms min time)
+   * @param cacheConfig - Optional response cache configuration (defaults to 1 minute TTL)
+   * @param enableCache - Enable response caching for GET requests (default: true)
    */
-  constructor(baseUrl: string, apiKey: string) {
+  constructor(
+    baseUrl: string,
+    apiKey: string,
+    retryConfig?: Partial<RetryConfig>,
+    rateLimiterConfig?: Partial<RateLimiterConfig>,
+    cacheConfig?: Partial<ResponseCacheConfig>,
+    enableCache = true
+  ) {
     this.baseUrl = baseUrl
+
+    // Set default retry configuration
+    this.retryConfig = {
+      maxRetries: retryConfig?.maxRetries ?? 3,
+      baseDelayMs: retryConfig?.baseDelayMs ?? 1000,
+      maxDelayMs: retryConfig?.maxDelayMs ?? 30000,
+      retryableStatuses: retryConfig?.retryableStatuses ?? [429, 502, 503, 504]
+    }
+
+    // Initialize rate limiter
+    this.rateLimiter = new RateLimiter(rateLimiterConfig)
+
+    // Initialize response cache
+    this.cache = new ResponseCache(cacheConfig)
+    this.cacheEnabled = enableCache
+
+    // Initialize logger
+    this.logger = new Logger({
+      minLevel: process.env.NODE_ENV === 'development' ? LogLevel.DEBUG : LogLevel.INFO
+    })
 
     this.client = axios.create({
       baseURL: `${baseUrl}/api`,
@@ -142,16 +196,43 @@ export class GristClient {
     params?: Record<string, unknown>,
     options?: RequestOptions<TResponse>
   ): Promise<TResponse> {
-    try {
-      const response = await this.client.get<TResponse>(path, {
-        params,
-        ...options?.config
-      })
+    // Generate cache key from path and params
+    const cacheKey = this.getCacheKey('GET', path, params)
 
-      return this.validateResponse(response.data, options)
-    } catch (error) {
-      throw this.handleError(error, 'GET', path)
+    // Try cache first if enabled
+    if (this.cacheEnabled) {
+      const cached = this.cache.get(cacheKey)
+      if (cached !== undefined) {
+        return cached as TResponse
+      }
     }
+
+    // Fetch from API with rate limiting and retry
+    const result = await this.rateLimiter.schedule(() =>
+      this.retryWithBackoff(async () => {
+        try {
+          const response = await this.client.get<TResponse>(path, {
+            params,
+            ...options?.config
+          })
+
+          return this.validateResponse(response.data, options)
+        } catch (error) {
+          this.logger.error('GET request failed', {
+            path,
+            params
+          }, error instanceof Error ? error : undefined)
+          throw this.handleError(error, 'GET', path)
+        }
+      }, `GET ${path}`)
+    )
+
+    // Cache successful response
+    if (this.cacheEnabled) {
+      this.cache.set(cacheKey, result)
+    }
+
+    return result
   }
 
   /**
@@ -183,17 +264,33 @@ export class GristClient {
     data: TRequest,
     options?: RequestOptions<TResponse>
   ): Promise<TResponse> {
-    try {
-      const response = await this.client.post<TResponse>(
-        path,
-        data,
-        options?.config
-      )
+    // Validate request size
+    this.validateRequestSize(data)
 
-      return this.validateResponse(response.data, options)
-    } catch (error) {
-      throw this.handleError(error, 'POST', path)
-    }
+    const result = await this.rateLimiter.schedule(() =>
+      this.retryWithBackoff(async () => {
+        try {
+          const response = await this.client.post<TResponse>(
+            path,
+            data,
+            options?.config
+          )
+
+          return this.validateResponse(response.data, options)
+        } catch (error) {
+          this.logger.error('POST request failed', {
+            path,
+            dataSize: JSON.stringify(data).length
+          }, error instanceof Error ? error : undefined)
+          throw this.handleError(error, 'POST', path)
+        }
+      }, `POST ${path}`)
+    )
+
+    // Invalidate cache after write operations
+    this.invalidateCacheForPath(path)
+
+    return result
   }
 
   /**
@@ -221,17 +318,33 @@ export class GristClient {
     data: TRequest,
     options?: RequestOptions<TResponse>
   ): Promise<TResponse> {
-    try {
-      const response = await this.client.put<TResponse>(
-        path,
-        data,
-        options?.config
-      )
+    // Validate request size
+    this.validateRequestSize(data)
 
-      return this.validateResponse(response.data, options)
-    } catch (error) {
-      throw this.handleError(error, 'PUT', path)
-    }
+    const result = await this.rateLimiter.schedule(() =>
+      this.retryWithBackoff(async () => {
+        try {
+          const response = await this.client.put<TResponse>(
+            path,
+            data,
+            options?.config
+          )
+
+          return this.validateResponse(response.data, options)
+        } catch (error) {
+          this.logger.error('PUT request failed', {
+            path,
+            dataSize: JSON.stringify(data).length
+          }, error instanceof Error ? error : undefined)
+          throw this.handleError(error, 'PUT', path)
+        }
+      }, `PUT ${path}`)
+    )
+
+    // Invalidate cache after write operations
+    this.invalidateCacheForPath(path)
+
+    return result
   }
 
   /**
@@ -259,17 +372,33 @@ export class GristClient {
     data: TRequest,
     options?: RequestOptions<TResponse>
   ): Promise<TResponse> {
-    try {
-      const response = await this.client.patch<TResponse>(
-        path,
-        data,
-        options?.config
-      )
+    // Validate request size
+    this.validateRequestSize(data)
 
-      return this.validateResponse(response.data, options)
-    } catch (error) {
-      throw this.handleError(error, 'PATCH', path)
-    }
+    const result = await this.rateLimiter.schedule(() =>
+      this.retryWithBackoff(async () => {
+        try {
+          const response = await this.client.patch<TResponse>(
+            path,
+            data,
+            options?.config
+          )
+
+          return this.validateResponse(response.data, options)
+        } catch (error) {
+          this.logger.error('PATCH request failed', {
+            path,
+            dataSize: JSON.stringify(data).length
+          }, error instanceof Error ? error : undefined)
+          throw this.handleError(error, 'PATCH', path)
+        }
+      }, `PATCH ${path}`)
+    )
+
+    // Invalidate cache after write operations
+    this.invalidateCacheForPath(path)
+
+    return result
   }
 
   /**
@@ -296,18 +425,58 @@ export class GristClient {
     path: string | ApiPath,
     options?: RequestOptions<TResponse>
   ): Promise<TResponse> {
-    try {
-      const response = await this.client.delete<TResponse>(path, options?.config)
+    const result = await this.rateLimiter.schedule(() =>
+      this.retryWithBackoff(async () => {
+        try {
+          const response = await this.client.delete<TResponse>(path, options?.config)
 
-      return this.validateResponse(response.data, options)
-    } catch (error) {
-      throw this.handleError(error, 'DELETE', path)
-    }
+          return this.validateResponse(response.data, options)
+        } catch (error) {
+          this.logger.error('DELETE request failed', {
+            path
+          }, error instanceof Error ? error : undefined)
+          throw this.handleError(error, 'DELETE', path)
+        }
+      }, `DELETE ${path}`)
+    )
+
+    // Invalidate cache after write operations
+    this.invalidateCacheForPath(path)
+
+    return result
   }
 
   // ==========================================================================
   // Validation Helpers
   // ==========================================================================
+
+  /**
+   * Validate request size to prevent sending huge payloads
+   *
+   * @private
+   * @param data - Request data to validate
+   * @throws {Error} if payload exceeds maximum size
+   */
+  private validateRequestSize(data: unknown): void {
+    // Maximum payload size: 10MB
+    const MAX_PAYLOAD_SIZE = 10_000_000
+
+    try {
+      const payloadSize = JSON.stringify(data).length
+
+      if (payloadSize > MAX_PAYLOAD_SIZE) {
+        throw new Error(
+          `Request payload too large: ${payloadSize} bytes exceeds maximum of ${MAX_PAYLOAD_SIZE} bytes. ` +
+          `Try reducing the number of records or splitting into multiple requests.`
+        )
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Request payload too large')) {
+        throw error
+      }
+      // If JSON.stringify fails, let it pass (will fail in axios)
+    }
+  }
 
   /**
    * Validate response data against a schema if provided
@@ -363,6 +532,120 @@ export class GristClient {
   }
 
   // ==========================================================================
+  // Retry Logic
+  // ==========================================================================
+
+  /**
+   * Execute a function with exponential backoff retry logic
+   *
+   * Implements resilient retry behavior for transient failures:
+   * - Retries on configurable HTTP status codes (default: 429, 502, 503, 504)
+   * - Exponential backoff: wait = baseDelay * (2 ^ attempt) + jitter
+   * - Jitter prevents thundering herd problem
+   * - Respects max delay cap to prevent excessive waiting
+   *
+   * @private
+   * @template T - Return type of the function
+   * @param fn - Async function to execute with retry logic
+   * @param context - Context string for error messages
+   * @returns Promise resolving to function result
+   * @throws {Error} if all retries are exhausted
+   *
+   * @example
+   * ```typescript
+   * const result = await this.retryWithBackoff(
+   *   () => this.client.get('/api/endpoint'),
+   *   'Fetching data'
+   * )
+   * ```
+   */
+  private async retryWithBackoff<T>(
+    fn: () => Promise<T>,
+    context: string
+  ): Promise<T> {
+    let lastError: Error | undefined
+
+    for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
+      try {
+        return await fn()
+      } catch (error) {
+        // Check if this is a retryable error
+        const isRetryable = this.isRetryableError(error)
+        const isLastAttempt = attempt === this.retryConfig.maxRetries
+
+        if (!isRetryable || isLastAttempt) {
+          // Not retryable or out of retries - throw immediately
+          throw error
+        }
+
+        // Calculate delay with exponential backoff and jitter
+        const exponentialDelay = this.retryConfig.baseDelayMs * Math.pow(2, attempt)
+        const jitter = Math.random() * 0.3 * exponentialDelay // 0-30% jitter
+        const delayMs = Math.min(exponentialDelay + jitter, this.retryConfig.maxDelayMs)
+
+        // Store error for potential final throw
+        lastError = error instanceof Error ? error : new Error(String(error))
+
+        // Log retry attempt with structured logging
+        this.logger.warn('Retrying request after error', {
+          attempt: attempt + 1,
+          maxRetries: this.retryConfig.maxRetries,
+          context,
+          delayMs: Math.round(delayMs),
+          status: this.getErrorStatus(error)
+        })
+
+        // Wait before retrying
+        await this.sleep(delayMs)
+      }
+    }
+
+    // Should never reach here due to throw in loop, but TypeScript needs this
+    throw lastError || new Error(`Retry failed for ${context}`)
+  }
+
+  /**
+   * Check if an error is retryable based on HTTP status code
+   *
+   * @private
+   * @param error - Error to check
+   * @returns True if error should trigger a retry
+   */
+  private isRetryableError(error: unknown): boolean {
+    if (!axios.isAxiosError(error)) {
+      return false
+    }
+
+    const status = error.response?.status
+    return status !== undefined && this.retryConfig.retryableStatuses.includes(status)
+  }
+
+  /**
+   * Extract HTTP status code from error for logging
+   *
+   * @private
+   * @param error - Error to extract status from
+   * @returns Status code or 'unknown'
+   */
+  private getErrorStatus(error: unknown): string {
+    if (axios.isAxiosError(error)) {
+      return error.response?.status?.toString() ?? 'unknown'
+    }
+    return 'unknown'
+  }
+
+  /**
+   * Sleep for specified milliseconds
+   *
+   * @private
+   * @param ms - Milliseconds to sleep
+   * @returns Promise that resolves after delay
+   */
+  private sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms))
+  }
+
+  // ==========================================================================
   // Error Handling
   // ==========================================================================
 
@@ -391,6 +674,9 @@ export class GristClient {
         axiosError.response?.data?.error?.message ||
         axiosError.response?.data?.message ||
         axiosError.message
+
+      // Sanitize the error message from API
+      const sanitizedMessage = sanitizeMessage(message)
 
       switch (status) {
         case 401:
@@ -433,17 +719,17 @@ export class GristClient {
           }
 
           return new Error(
-            `Request failed: ${message}. ${method} ${path} returned status ${status}.`
+            `Request failed: ${sanitizedMessage}. ${method} ${path} returned status ${status}.`
           )
       }
     }
 
     // Non-Axios errors
     if (error instanceof Error) {
-      return new Error(`Unexpected error: ${error.message}`)
+      return new Error(`Unexpected error: ${sanitizeMessage(error.message)}`)
     }
 
-    return new Error(`Unexpected error: ${String(error)}`)
+    return new Error(`Unexpected error: ${sanitizeMessage(String(error))}`)
   }
 
   /**
@@ -570,6 +856,94 @@ export class GristClient {
    */
   getAxiosInstance(): AxiosInstance {
     return this.client
+  }
+
+  // ==========================================================================
+  // Cache Management
+  // ==========================================================================
+
+  /**
+   * Generate cache key from request parameters
+   *
+   * @private
+   * @param method - HTTP method
+   * @param path - API path
+   * @param params - Query parameters
+   * @returns Cache key string
+   */
+  private getCacheKey(
+    method: HttpMethod,
+    path: string,
+    params?: Record<string, unknown>
+  ): string {
+    const paramStr = params ? JSON.stringify(params) : ''
+    return `${method}:${path}${paramStr ? `:${paramStr}` : ''}`
+  }
+
+  /**
+   * Clear all cached responses
+   *
+   * Useful when data has been mutated and cache should be invalidated.
+   */
+  clearCache(): void {
+    this.cache.clear()
+  }
+
+  /**
+   * Invalidate cache entries matching a pattern
+   *
+   * @param pattern - RegExp pattern to match cache keys
+   * @returns Number of entries invalidated
+   *
+   * @example
+   * ```typescript
+   * // Invalidate all workspace-related cache entries
+   * client.invalidateCache(/\/workspaces/)
+   * ```
+   */
+  invalidateCache(pattern: RegExp): number {
+    return this.cache.invalidatePattern(pattern)
+  }
+
+  /**
+   * Invalidate cache for a specific path after write operations
+   *
+   * Intelligently invalidates related cache entries when data is modified.
+   * For example, modifying /docs/{docId}/tables should invalidate:
+   * - GET /docs/{docId}/tables
+   * - GET /docs/{docId}/tables/{tableId}/records
+   *
+   * @private
+   * @param path - API path that was modified
+   */
+  private invalidateCacheForPath(path: string): void {
+    if (!this.cacheEnabled) {
+      return
+    }
+
+    // Extract document ID from path
+    const docMatch = path.match(/\/docs\/([^/]+)/)
+    if (!docMatch) {
+      // Can't determine scope, clear all cache to be safe
+      this.cache.clear()
+      return
+    }
+
+    const docId = docMatch[1]
+
+    // Invalidate all cache entries for this document
+    // This includes tables, records, SQL queries, etc.
+    const docPattern = new RegExp(`/docs/${docId.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)
+    this.cache.invalidatePattern(docPattern)
+  }
+
+  /**
+   * Get cache statistics
+   *
+   * @returns Cache statistics
+   */
+  getCacheStats() {
+    return this.cache.getStats()
   }
 }
 

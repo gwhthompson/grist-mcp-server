@@ -1,7 +1,7 @@
 {
   "name": "grist-mcp-server",
-  "version": "1.0.0",
-  "description": "MCP server for Grist API integration - enables AI assistants to interact with Grist documents, tables, and records",
+  "version": "1.1.0",
+  "description": "Production-grade MCP server for Grist API integration with retry logic, rate limiting, caching, and comprehensive error handling",
   "type": "module",
   "main": "dist/index.js",
   "scripts": {

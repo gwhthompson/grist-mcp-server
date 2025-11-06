@@ -61,6 +61,17 @@ Tags: ["L", 1, 2, 3]      // ✅ Data (List encoding)
 Tags: null                // ✅ Empty RefList
 \`\`\`
 
+### visibleCol for Reference Columns
+Controls which foreign table column displays for references (show "Alice" vs "1")
+\`\`\`typescript
+widgetOptions: { visibleCol: "Name" }  // String: auto-resolves to numeric ID
+widgetOptions: { visibleCol: 456 }     // Number: uses directly
+
+// Example
+{ action: 'add', colId: 'Manager', type: 'Ref:People', widgetOptions: { visibleCol: 'Name' } }
+\`\`\`
+**Notes**: Case-sensitive. Type required when modifying. Ref/RefList only. Grist creates a hidden displayCol with the display value.
+
 ### DateTime Encoding
 - **Writing**: Both formats work (primitive or encoded)
 - **Reading**: Always returns primitive timestamp

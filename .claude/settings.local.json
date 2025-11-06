@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Skill(example-skills:mcp-builder)"
+      "Skill(example-skills:mcp-builder)",
+      "Bash(npm run build:*)",
+      "Bash(npx tsc:*)",
+      "Skill(mcp-builder)",
+      "Bash(npm test:*)",
+      "Skill(javascript-typescript:typescript-advanced-types)"
     ],
     "deny": [],
     "ask": []

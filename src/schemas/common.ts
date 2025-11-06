@@ -98,6 +98,175 @@ export const ColumnTypeSchema = z
   .describe('Column data type in Grist')
 
 // ============================================================================
+// Widget Options Schemas
+// ============================================================================
+
+/**
+ * Widget options for Reference and RefList columns
+ */
+export const RefWidgetOptionsSchema = z
+  .object({
+    visibleCol: z
+      .union([z.string(), z.number()])
+      .optional()
+      .describe(
+        'Which column from foreign table to display for references. ' +
+          'String (e.g., "Name") auto-resolves to numeric ID. Number (e.g., 456) used directly.'
+      ),
+    showColumn: z
+      .union([z.string(), z.boolean()])
+      .optional()
+      .describe('UI visibility control (hide/show in views). Different from visibleCol.')
+  })
+  .strict()
+
+/**
+ * Widget options for Choice and ChoiceList columns
+ */
+export const ChoiceWidgetOptionsSchema = z
+  .object({
+    choices: z.array(z.string()).optional().describe('Array of valid choices for the column'),
+    choiceColors: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe('Color mapping for choices. Keys are choice values, values are hex colors')
+  })
+  .strict()
+
+/**
+ * Widget options for Numeric and Int columns
+ */
+export const NumericWidgetOptionsSchema = z
+  .object({
+    numMode: z
+      .enum(['currency', 'decimal', 'percent', 'scientific'])
+      .optional()
+      .describe('Number display mode'),
+    numSign: z.enum(['parens']).optional().describe('Use parentheses for negative numbers'),
+    decimals: z
+      .number()
+      .int()
+      .min(0)
+      .max(20)
+      .optional()
+      .describe('Number of decimal places to display'),
+    maxDecimals: z
+      .number()
+      .int()
+      .min(0)
+      .max(20)
+      .optional()
+      .describe('Maximum number of decimal places'),
+    currency: z
+      .string()
+      .length(3)
+      .optional()
+      .describe('ISO 4217 currency code (e.g., "USD", "EUR", "GBP")')
+  })
+  .strict()
+
+/**
+ * Widget options for Date and DateTime columns
+ */
+export const DateWidgetOptionsSchema = z
+  .object({
+    dateFormat: z.string().optional().describe('Date format string (e.g., "YYYY-MM-DD")'),
+    isCustomDateFormat: z.boolean().optional().describe('Whether using custom date format'),
+    timeFormat: z.string().optional().describe('Time format string (e.g., "h:mma")'),
+    isCustomTimeFormat: z.boolean().optional().describe('Whether using custom time format')
+  })
+  .strict()
+
+/**
+ * Widget options for Text columns
+ */
+export const TextWidgetOptionsSchema = z
+  .object({
+    alignment: z.enum(['left', 'center', 'right']).optional().describe('Text alignment'),
+    wrap: z.boolean().optional().describe('Enable text wrapping'),
+    fontBold: z.boolean().optional().describe('Bold text'),
+    fontItalic: z.boolean().optional().describe('Italic text'),
+    fontUnderline: z.boolean().optional().describe('Underline text'),
+    fontStrikethrough: z.boolean().optional().describe('Strikethrough text')
+  })
+  .strict()
+
+/**
+ * Widget options for Bool columns
+ */
+export const BoolWidgetOptionsSchema = z
+  .object({
+    widget: z.enum(['TextBox', 'CheckBox']).optional().describe('Widget type for boolean display')
+  })
+  .strict()
+
+/**
+ * Widget options for Attachments columns
+ */
+export const AttachmentsWidgetOptionsSchema = z
+  .object({
+    height: z.number().int().positive().optional().describe('Height of attachment preview in pixels')
+  })
+  .strict()
+
+/**
+ * Empty widget options for columns with no special options
+ */
+export const EmptyWidgetOptionsSchema = z.object({}).strict()
+
+/**
+ * Union of all widget options schemas
+ * Provides complete type safety for all column types
+ */
+export const WidgetOptionsSchema = z.union([
+  RefWidgetOptionsSchema,
+  ChoiceWidgetOptionsSchema,
+  NumericWidgetOptionsSchema,
+  DateWidgetOptionsSchema,
+  TextWidgetOptionsSchema,
+  BoolWidgetOptionsSchema,
+  AttachmentsWidgetOptionsSchema,
+  EmptyWidgetOptionsSchema
+])
+
+/**
+ * Factory function to create the appropriate widget options schema based on column type
+ * Enables type-safe widget options validation
+ */
+export function createWidgetOptionsSchema(columnType: string): z.ZodTypeAny {
+  // Reference columns
+  if (columnType === 'Ref' || columnType === 'RefList') {
+    return RefWidgetOptionsSchema
+  }
+  // Choice columns
+  if (columnType === 'Choice' || columnType === 'ChoiceList') {
+    return ChoiceWidgetOptionsSchema
+  }
+  // Numeric columns
+  if (columnType === 'Numeric' || columnType === 'Int') {
+    return NumericWidgetOptionsSchema
+  }
+  // Date/DateTime columns
+  if (columnType === 'Date' || columnType === 'DateTime') {
+    return DateWidgetOptionsSchema
+  }
+  // Text columns
+  if (columnType === 'Text') {
+    return TextWidgetOptionsSchema
+  }
+  // Boolean columns
+  if (columnType === 'Bool') {
+    return BoolWidgetOptionsSchema
+  }
+  // Attachments columns
+  if (columnType === 'Attachments') {
+    return AttachmentsWidgetOptionsSchema
+  }
+  // Default: empty options
+  return EmptyWidgetOptionsSchema
+}
+
+// ============================================================================
 // Column Definition Schema (for table creation)
 // ============================================================================
 
@@ -121,12 +290,12 @@ export const ColumnDefinitionSchema = z
       .optional()
       .describe('Formula code (Python) if isFormula is true. Example: "$Price * $Quantity"'),
 
-    widgetOptions: z
-      .any()
-      .optional()
-      .describe(
-        'Widget-specific options (JSON object). Example: {"choices": ["Red", "Blue", "Green"]} for Choice columns'
-      )
+    widgetOptions: WidgetOptionsSchema.optional().describe(
+      'Widget-specific options:\n' +
+        '- Ref/RefList: {"visibleCol": "Name"} - Display specific column from foreign table\n' +
+        '- Choice/ChoiceList: {"choices": ["Red", "Blue", "Green"]} - Valid options\n' +
+        'Example: {"visibleCol": "Name"} for a Ref:People column to show names instead of IDs'
+    )
   })
   .strict()
 
@@ -146,8 +315,21 @@ export const RowIdsSchema = z
 // Filter Schema (for record queries)
 // ============================================================================
 
+/**
+ * Filter value can be:
+ * - A simple value (string, number, boolean, null) for equality check
+ * - An array of values for OR logic / IN operator
+ */
+const FilterValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+])
+
 export const FilterSchema = z
-  .record(z.string(), z.any())
+  .record(z.string(), FilterValueSchema)
   .optional()
   .describe(
     'Filters to apply (automatically converted to Grist format). ' +

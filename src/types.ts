@@ -68,7 +68,7 @@ export type BulkColValues = { [colId: string]: CellValue[] }
  */
 export type UserAction =
   // Record operations
-  | ['BulkAddRecord', string, number[], BulkColValues]
+  | ['BulkAddRecord', string, (number | null)[], BulkColValues] // null for new records
   | ['BulkUpdateRecord', string, number[], BulkColValues]
   | ['BulkRemoveRecord', string, number[]]
   // Table operations
@@ -80,6 +80,8 @@ export type UserAction =
   | ['ModifyColumn', string, string, Partial<ColumnInfo>]
   | ['RemoveColumn', string, string]
   | ['RenameColumn', string, string, string]
+  // Display formula operations
+  | ['SetDisplayFormula', string, string | null, number | null, string]
 
 /**
  * Column type definitions
@@ -99,25 +101,95 @@ export type ColumnType =
 
 /**
  * Column information structure
+ *
+ * Based on Grist's _grist_Tables_column schema where widgetOptions and visibleCol
+ * are stored in separate database columns.
+ *
+ * Reference: ./docs/reference/grist-database-schema.md lines 122-143
  */
 export interface ColumnInfo {
+  /** Column type (e.g., "Text", "Numeric", "Ref:People", "RefList:Tags") */
   type: string
+
+  /** Human-readable label for the column */
   label?: string
+
+  /** Whether this is a formula column */
   isFormula?: boolean
+
+  /** Python formula expression (if isFormula is true) */
   formula?: string
-  widgetOptions?: any
+
+  /**
+   * Widget display options as JSON string or object.
+   *
+   * The MCP server accepts objects for convenience and stringifies them before
+   * sending to Grist. The Grist API requires a JSON string.
+   *
+   * Examples:
+   * - Numeric: { "numMode": "currency", "currency": "USD" }
+   * - Choice: { "choices": ["Red", "Blue", "Green"] }
+   * - Text: { "alignment": "right", "wrap": true }
+   *
+   * IMPORTANT: Do NOT put visibleCol in widgetOptions - it's a separate field.
+   * The server extracts visibleCol from widgetOptions if provided there for
+   * convenience, but it's stored separately in Grist's database.
+   *
+   * Reference: ./docs/reference/grist-database-schema.md line 130
+   */
+  widgetOptions?: string | { [key: string]: unknown }
+
+  /**
+   * For Ref/RefList columns: specifies which column to display from referenced table.
+   *
+   * This is stored in a SEPARATE database column from widgetOptions
+   * (_grist_Tables_column.visibleCol, not inside widgetOptions JSON).
+   *
+   * Value must be a numeric column reference (colRef).
+   * The MCP server auto-resolves string column names to numeric IDs.
+   *
+   * Example: 456 (displays column with colRef=456 from the foreign table)
+   *
+   * Note: Users may provide this in widgetOptions.visibleCol for convenience.
+   * The server extracts it and places it here as a top-level field.
+   *
+   * Reference: ./docs/reference/grist-database-schema.md line 138
+   */
+  visibleCol?: number
 }
 
 /**
  * Column definition for table creation
+ *
+ * Identical to ColumnInfo but includes colId (required for table creation).
  */
 export interface ColumnDefinition {
+  /** Column identifier (e.g., "Email", "Phone_Number") */
   colId: string
+
+  /** Column type (e.g., "Text", "Numeric", "Ref:People") */
   type: string
+
+  /** Human-readable label for the column */
   label?: string
+
+  /** Whether this is a formula column */
   isFormula?: boolean
+
+  /** Python formula expression (if isFormula is true) */
   formula?: string
-  widgetOptions?: any
+
+  /**
+   * Widget display options as JSON string or object.
+   * See ColumnInfo.widgetOptions for details.
+   */
+  widgetOptions?: string | { [key: string]: unknown }
+
+  /**
+   * For Ref/RefList columns: specifies which column to display from referenced table.
+   * See ColumnInfo.visibleCol for details.
+   */
+  visibleCol?: number
 }
 
 /**
@@ -169,6 +241,13 @@ export interface TableInfo {
     formula?: string
     widgetOptions?: any
   }[]
+}
+
+/**
+ * API response for GET /docs/{docId}/tables
+ */
+export interface TablesApiResponse {
+  tables: TableInfo[]
 }
 
 /**

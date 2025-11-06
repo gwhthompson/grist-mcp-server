@@ -170,6 +170,29 @@ npm run build
 2. grist_update_records (set Status="Archived")
 ```
 
+### 6. Creating Reference Columns with visibleCol
+
+"Create a Tasks table with references to People showing names instead of IDs"
+
+```json
+{
+  "tool": "grist_manage_columns",
+  "tableId": "Tasks",
+  "operations": [
+    {
+      "action": "add",
+      "colId": "AssignedTo",
+      "type": "Ref:People",
+      "widgetOptions": {
+        "visibleCol": "Name"
+      }
+    }
+  ]
+}
+```
+
+The MCP server automatically resolves the column name "Name" to its internal numeric ID, providing a user-friendly interface while maintaining compatibility with Grist's API requirements.
+
 ## Architecture
 
 ### Project Structure
@@ -177,22 +200,35 @@ npm run build
 ```
 grist-mcp-server/
 ├── src/
-│   ├── index.ts              # Main server with all 15 tools
+│   ├── index.ts              # Modular server entry point (registry-based)
 │   ├── constants.ts          # Shared constants
 │   ├── types.ts              # TypeScript type definitions
+│   ├── types/
+│   │   └── advanced.ts       # Branded types & advanced patterns
 │   ├── schemas/
-│   │   └── common.ts         # Reusable Zod validation schemas
+│   │   ├── common.ts         # Reusable Zod validation schemas
+│   │   └── api-responses.ts  # API response validation
 │   ├── services/
-│   │   ├── grist-client.ts   # HTTP client with error handling
+│   │   ├── grist-client.ts   # HTTP client with retry, rate limiting, caching
 │   │   ├── action-builder.ts # UserAction construction helpers
-│   │   └── formatter.ts      # Response formatting (JSON/Markdown)
-│   └── tools/
-│       ├── discovery.ts      # 4 discovery/navigation tools
-│       ├── reading.ts        # 2 data reading tools
-│       ├── records.ts        # 4 record operation tools
-│       ├── tables.ts         # 3 table management tools
-│       ├── columns.ts        # 1 column management tool
-│       └── documents.ts      # 1 document management tool
+│   │   └── formatter.ts      # Response formatting with optimization
+│   ├── tools/
+│   │   ├── discovery.ts      # 3 discovery/navigation tools
+│   │   ├── reading.ts        # 2 data reading tools
+│   │   ├── records.ts        # 4 record operation tools
+│   │   ├── tables.ts         # 3 table management tools
+│   │   ├── columns.ts        # 1 column management tool
+│   │   └── documents.ts      # 1 document management tool
+│   ├── registry/
+│   │   ├── tool-registry.ts  # Generic tool registration system
+│   │   └── tool-definitions.ts # All tool metadata & handlers
+│   └── utils/
+│       ├── rate-limiter.ts   # Request rate limiting
+│       ├── response-cache.ts # TTL-based response caching
+│       ├── pagination-helper.ts # Pagination utilities
+│       ├── filter-helper.ts  # Filtering utilities
+│       ├── logger.ts         # Structured logging
+│       └── sanitizer.ts      # Error message sanitization
 ├── dist/                     # Compiled JavaScript (generated)
 ├── package.json
 ├── tsconfig.json
@@ -205,17 +241,89 @@ grist-mcp-server/
 2. **Context-Efficient**: Progressive detail levels and character limits
 3. **Type-Safe**: Strict TypeScript with comprehensive Zod validation
 4. **Error-Guided**: Actionable error messages that guide AI assistants
-5. **Production-Ready**: Robust error handling, retry logic, rate limiting awareness
+5. **Production-Ready**: Robust error handling, retry logic, rate limiting, caching
+6. **Resilient**: Automatic retry with exponential backoff for transient failures
+7. **Secure**: Error message sanitization prevents data leakage
 
 ### Key Components
 
-**GristClient**: Handles all API communication with comprehensive error transformation
+**GristClient**: Handles all API communication with:
+- Exponential backoff retry (3 attempts, configurable)
+- Rate limiting (5 concurrent, 200ms min time)
+- Response caching (1 minute TTL for GET requests)
+- Request size validation (10MB max payload)
+- Structured error logging
+- Error message sanitization
 
 **Action Builders**: Type-safe construction of Grist UserActions for mutations
 
-**Formatters**: Dual-format responses (JSON + Markdown) with truncation management
+**Formatters**: Dual-format responses (JSON + Markdown) with optimized truncation
 
-**Common Schemas**: Reusable Zod schemas for consistency across all tools
+**Tool Registry**: Modular registration system with comprehensive validation
+
+**Utilities**: Reusable helpers for pagination, filtering, logging, and caching
+
+**Common Schemas**: Reusable Zod schemas with proper type safety
+
+## Performance & Resilience
+
+### Automatic Retry with Exponential Backoff
+
+All API requests automatically retry on transient failures:
+- **Max Retries**: 3 attempts (configurable)
+- **Base Delay**: 1 second (configurable)
+- **Max Delay**: 30 seconds (configurable)
+- **Retryable Status Codes**: 429 (rate limit), 502/503/504 (server errors)
+- **Jitter**: 0-30% random jitter to prevent thundering herd
+
+### Rate Limiting
+
+Client-side rate limiting prevents overwhelming the Grist API:
+- **Max Concurrent**: 5 requests (configurable)
+- **Min Time Between Requests**: 200ms (configurable)
+- **Queue**: FIFO queue for pending requests
+- **Monitoring**: Real-time statistics available
+
+### Response Caching
+
+GET requests are cached to improve performance:
+- **Default TTL**: 1 minute (configurable)
+- **Max Cache Size**: 1000 entries (configurable)
+- **Auto Cleanup**: Expired entries removed every 5 minutes
+- **Cache Invalidation**: Pattern-based cache invalidation support
+- **Statistics**: Hit rate and cache size monitoring
+
+### Optimized Truncation
+
+Binary search truncation with size estimation:
+- **Sample Size**: Estimates from 5 items
+- **Narrow Range**: 80-120% of estimated max
+- **Character Limit**: 25,000 characters
+- **Performance**: ~60% faster than naive binary search
+
+### Request Validation
+
+Request payloads are validated before sending:
+- **Max Payload Size**: 10MB
+- **Early Validation**: Prevents oversized requests
+- **Clear Error Messages**: Actionable guidance for users
+
+### Structured Logging
+
+JSON-formatted logs for monitoring and debugging:
+- **Log Levels**: ERROR, WARN, INFO, DEBUG
+- **Context**: Rich context objects with request details
+- **Stack Traces**: Included for errors (configurable)
+- **Output**: stderr for easy parsing
+
+### Error Sanitization
+
+Sensitive data is automatically redacted from errors:
+- **API Keys/Tokens**: Redacted as `***`
+- **Email Addresses**: Partially redacted (preserve domain)
+- **Long IDs**: Redacted if 40+ characters
+- **File Paths**: Username portions redacted
+- **Authorization Headers**: Fully redacted
 
 ## Development
 

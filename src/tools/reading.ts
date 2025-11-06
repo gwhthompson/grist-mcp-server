@@ -99,6 +99,8 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, any> {
   }
 
   protected formatResponse(data: any, format: 'json' | 'markdown') {
+    // For SQL query, we want to return items not records for consistency
+    // but we'll call the array 'records' since that's what SQL returns
     const { data: truncatedData } = truncateIfNeeded(data.records, format, {
       total: data.total,
       offset: data.offset,
@@ -107,8 +109,15 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, any> {
       next_offset: data.next_offset
     })
 
-    // Return with records property for backward compatibility
-    return super.formatResponse({ ...data, records: truncatedData }, format)
+    // truncateIfNeeded returns { data: { ...metadata, items: [...] } }
+    // Rename items to records for SQL context
+    const { items, ...rest } = truncatedData as any
+    const responseData = {
+      ...rest,
+      records: items  // SQL queries return 'records' not 'items'
+    }
+
+    return super.formatResponse(responseData, format)
   }
 }
 
@@ -185,12 +194,14 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
       next_offset: nextOffset,
       filters: params.filters || {},
       columns: params.columns || 'all',
-      records: formattedRecords
+      items: formattedRecords  // Use 'items' for consistency with other list tools
     }
   }
 
   protected formatResponse(data: any, format: 'json' | 'markdown') {
-    const { data: truncatedData } = truncateIfNeeded(data.records, format, {
+    // truncateIfNeeded already returns { data: { ...metadata, items: [...] } }
+    // So truncatedData already has the complete structure we need
+    const { data: truncatedData } = truncateIfNeeded(data.items, format, {
       document_id: data.document_id,
       table_id: data.table_id,
       total: data.total,
@@ -202,6 +213,7 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
       columns: data.columns
     })
 
+    // truncatedData already has the full structure with items array
     return super.formatResponse(truncatedData, format)
   }
 

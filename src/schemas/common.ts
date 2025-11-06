@@ -81,21 +81,29 @@ export const WorkspaceIdSchema = z
 // Column Type Schema
 // ============================================================================
 
+// Base column types (simple types)
+const BaseColumnTypeSchema = z.enum([
+  'Text',
+  'Numeric',
+  'Int',
+  'Bool',
+  'Date',
+  'DateTime',
+  'Choice',
+  'ChoiceList',
+  'Attachments'
+])
+
+// Reference column types (with table name)
+// Format: "Ref:TableName" or "RefList:TableName"
+const RefColumnTypeSchema = z.string().regex(/^Ref(List)?:[A-Za-z_][A-Za-z0-9_]*$/, {
+  message: 'Reference type must be in format "Ref:TableName" or "RefList:TableName"'
+})
+
+// Union of all column types
 export const ColumnTypeSchema = z
-  .enum([
-    'Text',
-    'Numeric',
-    'Int',
-    'Bool',
-    'Date',
-    'DateTime',
-    'Choice',
-    'ChoiceList',
-    'Ref',
-    'RefList',
-    'Attachments'
-  ])
-  .describe('Column data type in Grist')
+  .union([BaseColumnTypeSchema, RefColumnTypeSchema])
+  .describe('Column data type in Grist. Use "Ref:TableName" or "RefList:TableName" for references.')
 
 // ============================================================================
 // Widget Options Schemas

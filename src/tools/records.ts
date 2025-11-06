@@ -79,16 +79,12 @@ export const UpdateRecordsSchema = z
   .object({
     docId: DocIdSchema,
     tableId: TableIdSchema,
-    records: z
-      .array(
-        z.object({
-          id: z.number().int().positive().describe('Row ID of the record to update'),
-          fields: z.record(z.string(), z.any()).describe('Fields to update')
-        })
-      )
-      .min(1)
-      .max(MAX_RECORDS_PER_BATCH)
-      .describe(`Array of records with id and fields to update (max ${MAX_RECORDS_PER_BATCH})`),
+    rowIds: RowIdsSchema,
+    updates: z
+      .record(z.string(), z.any())
+      .describe(
+        'Object mapping column IDs to new values. Example: {"Status": "Complete", "UpdatedDate": "2024-01-15"}'
+      ),
     response_format: ResponseFormatSchema
   })
   .strict()
@@ -101,19 +97,20 @@ export class UpdateRecordsTool extends GristTool<typeof UpdateRecordsSchema, any
   }
 
   protected async executeInternal(params: UpdateRecordsInput) {
-    const rowIds = params.records.map(r => toRowId(r.id))
-    const records = params.records.map(r => r.fields as any)
+    const action = buildBulkUpdateRecordAction(
+      toTableId(params.tableId),
+      params.rowIds.map(toRowId),
+      params.updates
+    )
 
-    const action = buildBulkUpdateRecordAction(toTableId(params.tableId), rowIds, records as any)
     await this.client.post<ApplyResponse>(`/docs/${params.docId}/apply`, [action])
 
     return {
       success: true,
       document_id: params.docId,
       table_id: params.tableId,
-      records_updated: params.records.length,
-      record_ids: params.records.map(r => r.id),
-      message: `Successfully updated ${params.records.length} record(s) in ${params.tableId}`
+      records_updated: params.rowIds.length,
+      message: `Successfully updated ${params.rowIds.length} record(s) in ${params.tableId}`
     }
   }
 }

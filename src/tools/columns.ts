@@ -14,6 +14,7 @@ import {
   ResponseFormatSchema,
   TableIdSchema
 } from '../schemas/common.js'
+import { WidgetOptionsUnionSchema } from '../schemas/widget-options.js'
 import {
   buildAddColumnAction,
   buildModifyColumnAction,
@@ -52,16 +53,23 @@ const AddColumnOperationSchema = z
       .optional()
       .describe('Formula code (Python) if this is a formula column. Example: "$Price * $Quantity"'),
     isFormula: z.boolean().optional().describe('Set to true if this is a formula column'),
-    widgetOptions: z
-      .any()
+    widgetOptions: WidgetOptionsUnionSchema
       .optional()
       .describe(
-        'Widget options: {"visibleCol": "Name"} for Ref/RefList, {"choices": ["Red", "Blue"]} for Choice'
+        'Widget options object validated by column type. Examples: ' +
+        '{"numMode": "currency", "currency": "USD"} for Numeric, ' +
+        '{"choices": ["Red", "Blue"]} for Choice, ' +
+        '{"dateFormat": "YYYY-MM-DD"} for Date. ' +
+        'Must match the column type - validation enforced.'
       ),
     visibleCol: z
-      .number()
+      .union([z.string(), z.number()])
       .optional()
-      .describe('Numeric column reference (colRef) to display for Ref/RefList columns')
+      .describe(
+        'Which column from referenced table to display (Ref/RefList only). ' +
+        'String column name (e.g., "Email") auto-resolves to numeric ID. ' +
+        'Numeric ID (e.g., 456) used directly.'
+      )
   })
   .strict()
 
@@ -73,14 +81,22 @@ const ModifyColumnOperationSchema = z
     label: z.string().optional(),
     formula: z.string().optional(),
     isFormula: z.boolean().optional(),
-    widgetOptions: z
-      .any()
+    widgetOptions: WidgetOptionsUnionSchema
       .optional()
-      .describe('Widget options: {"visibleCol": "Name"} for Ref/RefList, {"choices": ["Red", "Blue"]} for Choice'),
+      .describe(
+        'Widget options object validated by column type. ' +
+        'IMPORTANT: When updating widgetOptions, you MUST also include the "type" field ' +
+        'to enable proper validation. Example: {action: "modify", colId: "Price", ' +
+        'type: "Numeric", widgetOptions: {"numMode": "currency", "currency": "USD"}}'
+      ),
     visibleCol: z
-      .number()
+      .union([z.string(), z.number()])
       .optional()
-      .describe('Numeric column reference (colRef) to display for Ref/RefList columns')
+      .describe(
+        'Which column from referenced table to display (Ref/RefList only). ' +
+        'String column name (e.g., "Email") auto-resolves to numeric ID. ' +
+        'Numeric ID (e.g., 456) used directly.'
+      )
   })
   .strict()
 
@@ -143,8 +159,13 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
       params.operations.map((op) => this.resolveVisibleColInOperation(params.docId, op))
     )
 
+    // Enrich modify operations with column type if widgetOptions present but type missing
+    const enrichedOperations = await Promise.all(
+      resolvedOperations.map((op) => this.enrichModifyOperation(params.docId, params.tableId, op))
+    )
+
     // Execute operations
-    for (const op of resolvedOperations) {
+    for (const op of enrichedOperations) {
       const action = this.buildActionForOperation(op, params.tableId)
 
       // Execute the action
@@ -156,6 +177,11 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
       }
     }
 
+    // Check if any operations set widgetOptions
+    const hasWidgetOptions = params.operations.some(op =>
+      (op.action === 'add' || op.action === 'modify') && 'widgetOptions' in op
+    )
+
     // Build success response
     return {
       success: true,
@@ -164,12 +190,57 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
       operations_completed: params.operations.length,
       summary: this.calculateOperationSummary(params.operations),
       message: `Successfully completed ${params.operations.length} column operation(s) on ${params.tableId}`,
-      details: params.operations.map(this.formatOperationMessage)
+      details: params.operations.map(this.formatOperationMessage),
+      ...(hasWidgetOptions ? {
+        hint: `To verify widgetOptions were set correctly, use: grist_get_tables({docId: "${params.docId}", tableId: "${params.tableId}", detail_level: "full_schema"})`
+      } : {})
     }
   }
 
   /**
+   * Enrich modify operation with column type if widgetOptions present but type missing
+   */
+  private async enrichModifyOperation(
+    docId: string,
+    tableId: string,
+    op: ColumnOperation
+  ): Promise<ColumnOperation> {
+    // Only enrich modify operations
+    if (op.action !== 'modify') {
+      return op
+    }
+
+    // Check if widgetOptions is present but type is not
+    if (op.widgetOptions !== undefined && !op.type) {
+      // Fetch the column metadata from Grist to get the type
+      const columns = await this.client.get<{ columns: Array<{ id: string; fields: { type: string } }> }>(
+        `/docs/${docId}/tables/${tableId}/columns`
+      )
+
+      const column = columns.columns.find(col => col.id === op.colId)
+      if (!column) {
+        throw new Error(
+          `Cannot fetch type for column "${op.colId}" in table "${tableId}". ` +
+          `Column not found. When updating widgetOptions, either provide the type explicitly ` +
+          `or ensure the column exists.`
+        )
+      }
+
+      // Add the fetched type to the operation
+      return {
+        ...op,
+        type: column.fields.type
+      }
+    }
+
+    return op
+  }
+
+  /**
    * Resolve visibleCol in an operation if needed
+   *
+   * Validates and resolves string column names to numeric IDs.
+   * visibleCol should ONLY be set at operation top-level (not in widgetOptions).
    */
   private async resolveVisibleColInOperation(
     docId: string,
@@ -179,19 +250,15 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
       return op
     }
 
-    let visibleCol: string | number | undefined
-    let cleanedWidgetOptions = op.widgetOptions
+    // visibleCol should be at top-level only
+    const visibleCol: string | number | undefined = op.visibleCol
 
-    if (op.widgetOptions && typeof op.widgetOptions === 'object' && 'visibleCol' in op.widgetOptions) {
-      visibleCol = op.widgetOptions.visibleCol as string | number
-      const { visibleCol: _, ...rest } = op.widgetOptions
-      cleanedWidgetOptions = Object.keys(rest).length > 0 ? rest : undefined
-    }
-
+    // If no visibleCol, return operation unchanged
     if (visibleCol === undefined) {
       return op
     }
 
+    // Validate column type is provided when using visibleCol
     const columnType = op.type
     if (!columnType) {
       throw new Error(
@@ -200,12 +267,14 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
       )
     }
 
+    // Validate column type is a reference type
     if (!isReferenceType(columnType)) {
       throw new Error(
         `Column "${op.colId}" has visibleCol but type "${columnType}" is not a Ref or RefList type`
       )
     }
 
+    // Resolve string column names to numeric IDs
     let resolvedVisibleCol: number
     if (typeof visibleCol === 'number') {
       resolvedVisibleCol = visibleCol
@@ -222,9 +291,9 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
       throw new Error(`visibleCol must be a string (column name) or number (column ID)`)
     }
 
+    // Return operation with resolved numeric visibleCol
     return {
       ...op,
-      widgetOptions: cleanedWidgetOptions,
       visibleCol: resolvedVisibleCol
     }
   }
@@ -243,6 +312,12 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
 
     const foreignTable = extractForeignTable(op.type)
     if (!foreignTable) return
+
+    // At this point, visibleCol has been resolved to a number by resolveVisibleColInOperation
+    // TypeScript doesn't know this, so we assert it
+    if (typeof op.visibleCol !== 'number') {
+      throw new Error(`Internal error: visibleCol should be numeric at this point, got ${typeof op.visibleCol}`)
+    }
 
     const foreignColName = await getColumnNameFromId(
       this.client,

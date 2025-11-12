@@ -96,14 +96,39 @@ export async function waitForGrist(config: DockerConfig = DEFAULT_DOCKER_CONFIG)
 
 /**
  * Ensure Docker Compose is running and Grist is ready
+ * Automatically detects if Docker is accessible and handles lifecycle
  */
 export async function ensureGristReady(config: DockerConfig = DEFAULT_DOCKER_CONFIG): Promise<void> {
-  if (!(await isDockerAvailable())) {
-    throw new Error('Docker is not installed or not running');
+  // Try to check if Grist is already accessible
+  try {
+    const response = await fetch(`${config.url}/api/orgs`, {
+      headers: { Authorization: `Bearer ${config.apiKey}` }
+    });
+
+    if (response.ok) {
+      console.log('✓ Grist is already accessible, skipping Docker management');
+      return;
+    }
+  } catch {
+    // Grist not accessible yet, need to start it
   }
 
+  // Check if Docker is accessible
+  const dockerAvailable = await isDockerAvailable();
+
+  if (!dockerAvailable) {
+    throw new Error(
+      'Docker is not accessible and Grist is not running.\n' +
+      'Please ensure Docker is running or start Grist manually:\n' +
+      '  docker compose up -d && sleep 12'
+    );
+  }
+
+  // Docker is accessible, check if compose is running
   if (!(await isComposeRunning(config))) {
     await startCompose(config);
+    // Wait for Grist post_start initialization
+    await sleep(12000);
   }
 
   await waitForGrist(config);

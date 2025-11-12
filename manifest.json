@@ -1,0 +1,134 @@
+{
+  "manifest_version": "0.3",
+  "name": "grist-mcp-server",
+  "version": "1.2.2",
+  "display_name": "Grist Database Integration",
+  "description": "Production-grade MCP server for Grist API integration with retry logic, rate limiting, and comprehensive error handling",
+  "long_description": "A Model Context Protocol (MCP) server that enables AI assistants to interact with Grist documents, tables, and records. Features 15 workflow-oriented tools with dual response formats (JSON/Markdown), progressive detail levels, smart context management with 25K character limits, and comprehensive error handling. Supports both Grist Cloud and self-hosted instances.",
+  "author": {
+    "name": "Grist MCP Server Contributors"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "grist",
+    "database",
+    "spreadsheet",
+    "ai",
+    "llm",
+    "api",
+    "automation",
+    "productivity"
+  ],
+  "homepage": "https://github.com/yourusername/grist-mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/grist-mcp-server.git"
+  },
+  "documentation": "https://github.com/yourusername/grist-mcp-server#readme",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/index.js"
+      ],
+      "env": {
+        "GRIST_API_KEY": "${user_config.grist_api_key}",
+        "GRIST_BASE_URL": "${user_config.grist_base_url}"
+      }
+    }
+  },
+  "user_config": {
+    "grist_api_key": {
+      "type": "string",
+      "title": "Grist API Key",
+      "description": "Your Grist API key. Visit https://docs.getgrist.com/settings/keys to create one.",
+      "required": true,
+      "sensitive": true
+    },
+    "grist_base_url": {
+      "type": "string",
+      "title": "Grist Base URL",
+      "description": "Base URL for your Grist instance. Use https://docs.getgrist.com for Grist Cloud or your self-hosted URL.",
+      "required": false,
+      "default": "https://docs.getgrist.com"
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+  "tools": [
+    {
+      "name": "grist_list_workspaces",
+      "description": "Discover workspaces where documents can be created"
+    },
+    {
+      "name": "grist_list_documents",
+      "description": "Browse and search for documents across workspaces"
+    },
+    {
+      "name": "grist_get_document",
+      "description": "Get document metadata and properties"
+    },
+    {
+      "name": "grist_get_tables",
+      "description": "Understand data structure within a document, including tables and columns"
+    },
+    {
+      "name": "grist_query_sql",
+      "description": "Execute SQL queries for complex analytics and data retrieval"
+    },
+    {
+      "name": "grist_get_records",
+      "description": "Simple record fetching without SQL, with filtering and sorting support"
+    },
+    {
+      "name": "grist_add_records",
+      "description": "Insert new records into a table"
+    },
+    {
+      "name": "grist_update_records",
+      "description": "Modify existing records by row ID"
+    },
+    {
+      "name": "grist_upsert_records",
+      "description": "Add or update records if they exist (critical for sync workflows)"
+    },
+    {
+      "name": "grist_delete_records",
+      "description": "Remove records permanently from a table"
+    },
+    {
+      "name": "grist_create_table",
+      "description": "Create new table with initial columns and structure"
+    },
+    {
+      "name": "grist_rename_table",
+      "description": "Rename existing table in a document"
+    },
+    {
+      "name": "grist_delete_table",
+      "description": "Remove table permanently (WARNING: data loss)"
+    },
+    {
+      "name": "grist_manage_columns",
+      "description": "Add, modify, delete, and rename columns (atomic operations)"
+    },
+    {
+      "name": "grist_create_document",
+      "description": "Create new document or fork from existing document"
+    }
+  ],
+  "tools_generated": false
+}

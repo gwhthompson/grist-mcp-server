@@ -78,6 +78,9 @@ export type OrgId = Brand<number, 'OrgId'>
  * Use this when receiving data from external APIs
  */
 export function toDocId(raw: string): DocId {
+  if (!raw || raw.trim().length === 0) {
+    throw new TypeError('DocId cannot be empty')
+  }
   return raw as DocId
 }
 
@@ -85,7 +88,38 @@ export function toDocId(raw: string): DocId {
  * Convert a raw string to a TableId
  */
 export function toTableId(raw: string): TableId {
+  if (!raw || raw.trim().length === 0) {
+    throw new TypeError('TableId cannot be empty')
+  }
+  // Validate format: must start with letter/underscore and contain only alphanumeric/underscore
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(raw)) {
+    throw new TypeError(
+      `Invalid TableId format: "${raw}". Must start with letter/underscore and contain only alphanumeric/underscore characters`
+    )
+  }
   return raw as TableId
+}
+
+/**
+ * Safe conversion to DocId (returns null on invalid input)
+ */
+export function safeToDocId(raw: string): DocId | null {
+  try {
+    return toDocId(raw)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Safe conversion to TableId (returns null on invalid input)
+ */
+export function safeToTableId(raw: string): TableId | null {
+  try {
+    return toTableId(raw)
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -358,20 +392,29 @@ export function isCellValue(value: unknown): value is CellValue {
 }
 
 /**
+ * Helper for property checking with better inference
+ * Eliminates the need for unsafe 'as any' casts in type guards
+ */
+function hasProperty<K extends PropertyKey>(
+  obj: unknown,
+  key: K
+): obj is { [P in K]: unknown } {
+  return typeof obj === 'object' && obj !== null && key in obj
+}
+
+/**
  * Type guard to check if a value is a WorkspaceInfo object
  */
 export function isWorkspaceInfo(value: unknown): value is WorkspaceInfo {
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    'id' in value &&
-    typeof (value as any).id === 'number' &&
-    'name' in value &&
-    typeof (value as any).name === 'string' &&
-    'org' in value &&
-    typeof (value as any).org === 'string' &&
-    'access' in value &&
-    typeof (value as any).access === 'string'
+    hasProperty(value, 'id') &&
+    typeof value.id === 'number' &&
+    hasProperty(value, 'name') &&
+    typeof value.name === 'string' &&
+    hasProperty(value, 'org') &&
+    typeof value.org === 'string' &&
+    hasProperty(value, 'access') &&
+    typeof value.access === 'string'
   )
 }
 
@@ -380,14 +423,12 @@ export function isWorkspaceInfo(value: unknown): value is WorkspaceInfo {
  */
 export function isDocumentInfo(value: unknown): value is DocumentInfo {
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    'id' in value &&
-    typeof (value as any).id === 'string' &&
-    'name' in value &&
-    typeof (value as any).name === 'string' &&
-    'access' in value &&
-    typeof (value as any).access === 'string'
+    hasProperty(value, 'id') &&
+    typeof value.id === 'string' &&
+    hasProperty(value, 'name') &&
+    typeof value.name === 'string' &&
+    hasProperty(value, 'access') &&
+    typeof value.access === 'string'
   )
 }
 
@@ -396,12 +437,10 @@ export function isDocumentInfo(value: unknown): value is DocumentInfo {
  */
 export function isTableInfo(value: unknown): value is TableInfo {
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    'id' in value &&
-    typeof (value as any).id === 'string' &&
-    'fields' in value &&
-    Array.isArray((value as any).fields)
+    hasProperty(value, 'id') &&
+    typeof value.id === 'string' &&
+    hasProperty(value, 'fields') &&
+    Array.isArray(value.fields)
   )
 }
 
@@ -410,12 +449,10 @@ export function isTableInfo(value: unknown): value is TableInfo {
  */
 export function isGristRecord(value: unknown): value is GristRecord {
   return (
-    typeof value === 'object' &&
-    value !== null &&
-    'id' in value &&
-    typeof (value as any).id === 'number' &&
-    'fields' in value &&
-    typeof (value as any).fields === 'object'
+    hasProperty(value, 'id') &&
+    typeof value.id === 'number' &&
+    hasProperty(value, 'fields') &&
+    typeof value.fields === 'object'
   )
 }
 
@@ -426,13 +463,13 @@ export function isGristRecord(value: unknown): value is GristRecord {
  * @example
  * const isWorkspaceArray = isArrayOf(isWorkspaceInfo)
  * if (isWorkspaceArray(data)) {
- *   // data is WorkspaceInfo[]
+ *   // data is readonly WorkspaceInfo[]
  * }
  */
-export function isArrayOf<T>(
+export function isArrayOf<const T>(
   guard: (value: unknown) => value is T
-): (value: unknown) => value is T[] {
-  return (value: unknown): value is T[] => {
+): (value: unknown) => value is readonly T[] {
+  return (value: unknown): value is readonly T[] => {
     return Array.isArray(value) && value.every(guard)
   }
 }
@@ -508,3 +545,75 @@ export type AssertExtends<T, U> = T extends U ? true : false
  * Assert that T does not extend U
  */
 export type AssertNotExtends<T, U> = T extends U ? false : true
+
+// ============================================================================
+// Array Utility Types
+// ============================================================================
+
+/**
+ * Non-empty array type
+ * Guarantees at least one element at compile-time
+ *
+ * @example
+ * ```typescript
+ * function processIds(ids: NonEmptyArray<number>) {
+ *   const first = ids[0]  // Always safe - guaranteed to exist
+ *   // ...
+ * }
+ *
+ * processIds([1, 2, 3])  // ✅ OK
+ * processIds([])         // ❌ Type error
+ * ```
+ */
+export type NonEmptyArray<T> = [T, ...T[]]
+
+// ============================================================================
+// Exhaustiveness Checking
+// ============================================================================
+
+/**
+ * Exhaustiveness check for switch/if-else statements
+ * Ensures all cases in a discriminated union are handled
+ *
+ * @param value - Should be `never` if all cases are handled
+ * @throws Error if called (indicates missing case)
+ *
+ * @example
+ * ```typescript
+ * type Shape = { kind: 'circle' } | { kind: 'square' } | { kind: 'triangle' }
+ *
+ * function getArea(shape: Shape): number {
+ *   switch (shape.kind) {
+ *     case 'circle': return Math.PI * radius ** 2
+ *     case 'square': return side ** 2
+ *     // If we forget 'triangle', TypeScript will error on the default case
+ *     default: return assertNever(shape)  // Type error if any case is missing
+ *   }
+ * }
+ * ```
+ */
+export function assertNever(value: never): never {
+  throw new Error(`Unexpected value: ${JSON.stringify(value)}. This should never happen.`)
+}
+
+/**
+ * Type-level exhaustiveness check without runtime overhead
+ * Use in switch statements to ensure all cases are handled at compile-time
+ *
+ * @example
+ * ```typescript
+ * function handleOperation(op: ColumnOperation) {
+ *   switch (op.action) {
+ *     case 'add': return handleAdd(op)
+ *     case 'modify': return handleModify(op)
+ *     case 'delete': return handleDelete(op)
+ *     case 'rename': return handleRename(op)
+ *     default: {
+ *       const _exhaustive: AssertExhaustive<typeof op> = op
+ *       return assertNever(op)
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export type AssertExhaustive<T extends never> = T

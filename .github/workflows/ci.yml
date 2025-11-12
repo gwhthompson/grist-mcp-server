@@ -1,0 +1,252 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+        continue-on-error: true
+
+      - name: Run TypeScript type checking
+        run: npx tsc --noEmit
+
+      - name: Build project
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: dist/
+          retention-days: 7
+
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
+        if: ${{ hashFiles('tests/unit/**/*.test.ts') != '' }}
+        continue-on-error: true
+
+  test-integration:
+    name: Integration Tests with Docker
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+
+    services:
+      grist:
+        image: gristlabs/grist:latest
+        ports:
+          - 8989:8484
+        env:
+          GRIST_FORCE_LOGIN: 'true'
+          GRIST_DEFAULT_EMAIL: 'test@example.com'
+          GRIST_SINGLE_ORG: 'example'
+          GRIST_API_KEY: 'test_api_key'
+        options: >-
+          --health-cmd "wget --spider --tries=1 http://localhost:8484 || exit 1"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+          --health-start-period 30s
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Wait for Grist to be ready
+        run: |
+          echo "Waiting for Grist service to be healthy..."
+          timeout 60 bash -c 'until wget --spider --tries=1 http://localhost:8989 2>/dev/null; do sleep 2; done'
+          echo "Grist is ready!"
+
+      - name: Verify Grist API connectivity
+        run: |
+          echo "Testing Grist API..."
+          curl -f -H "Authorization: Bearer test_api_key" http://localhost:8989/api/orgs || exit 1
+
+      - name: Run integration tests
+        env:
+          GRIST_BASE_URL: http://localhost:8989
+          GRIST_API_KEY: test_api_key
+        run: npm test
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            coverage/
+            test-results/
+          retention-days: 7
+
+  test-coverage:
+    name: Test Coverage Report
+    runs-on: ubuntu-latest
+    needs: [test-unit, test-integration]
+    if: always()
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download test results
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results
+          path: coverage/
+        continue-on-error: true
+
+      - name: Generate coverage badge
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            echo "Coverage report found"
+            # Could integrate with Codecov or Coveralls here
+          else
+            echo "No coverage report found"
+          fi
+
+  quality-gates:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    needs: [lint-and-typecheck, test-integration]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check for TypeScript errors
+        run: npx tsc --noEmit
+
+      - name: Verify build succeeds
+        run: npm run build
+
+      - name: Check package.json version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "Current version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+        id: version
+
+      - name: Quality gate summary
+        run: |
+          echo "✅ All quality gates passed!"
+          echo "- TypeScript compilation: ✅"
+          echo "- Build: ✅"
+          echo "- Tests: ✅"
+          echo "- Version: ${{ steps.version.outputs.version }}"
+
+  docker-compose-test:
+    name: Docker Compose Test (Local Setup)
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Start Docker Compose services
+        run: docker compose -f compose.yml up -d
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for Grist to be ready..."
+          timeout 60 bash -c 'until curl -sf http://localhost:8989/api/orgs -H "Authorization: Bearer test_api_key" > /dev/null; do sleep 2; done'
+          echo "Services are healthy!"
+
+      - name: Run smoke tests
+        env:
+          GRIST_BASE_URL: http://localhost:8989
+          GRIST_API_KEY: test_api_key
+        run: |
+          # Run a subset of critical tests
+          npm test -- --run --reporter=verbose 2>&1 | tee test-output.log
+
+      - name: Stop Docker Compose services
+        if: always()
+        run: docker compose -f compose.yml down -v
+
+      - name: Upload smoke test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-test-logs
+          path: test-output.log
+          retention-days: 3

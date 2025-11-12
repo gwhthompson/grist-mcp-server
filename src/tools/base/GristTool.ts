@@ -129,8 +129,15 @@ export abstract class GristTool<
    * @returns Response format (defaults to 'markdown')
    */
   protected getResponseFormat(params: z.infer<TInput>): ResponseFormat {
-    const format = (params as any).response_format
-    return format === 'json' || format === 'markdown' ? format : 'markdown'
+    // Type-safe extraction of response_format
+    if (typeof params === 'object' && params !== null && 'response_format' in params) {
+      const record = params as Record<string, unknown>
+      const format = record.response_format
+      if (format === 'json' || format === 'markdown') {
+        return format
+      }
+    }
+    return 'markdown'
   }
 
   /**

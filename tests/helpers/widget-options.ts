@@ -311,12 +311,20 @@ export function validateWidgetOptions(widgetOptionsStr: string): boolean {
 
 /**
  * Parse widgetOptions JSON string
+ * Supports both valid JSON and Python-style dict strings with single quotes
  */
 export function parseWidgetOptions(widgetOptionsStr: string): Partial<WidgetOptions> | null {
   try {
+    // First, try parsing as valid JSON
     return JSON.parse(widgetOptionsStr);
   } catch {
-    return null;
+    // If that fails, try converting Python-style dict to JSON
+    try {
+      const jsonString = widgetOptionsStr.replace(/'/g, '"');
+      return JSON.parse(jsonString);
+    } catch {
+      return null;
+    }
   }
 }
 

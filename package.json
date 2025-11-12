@@ -1,6 +1,6 @@
 {
   "name": "grist-mcp-server",
-  "version": "1.1.0",
+  "version": "1.2.2",
   "description": "Production-grade MCP server for Grist API integration with retry logic, rate limiting, caching, and comprehensive error handling",
   "type": "module",
   "main": "dist/index.js",
@@ -22,7 +22,11 @@
     "format": "biome format --write .",
     "lint": "biome lint --write .",
     "check": "biome check --write .",
-    "ci": "biome ci ."
+    "ci": "biome ci .",
+    "bundle:prepare": "npm run clean && npm run build && npm ci --omit=dev",
+    "bundle:pack": "mcpb pack",
+    "bundle:full": "npm run bundle:prepare && npm run bundle:pack",
+    "bundle:verify": "node -e \"console.log('Verifying bundle structure...'); const fs = require('fs'); const manifest = JSON.parse(fs.readFileSync('manifest.json')); console.log('✓ Manifest version:', manifest.version); console.log('✓ Tools count:', manifest.tools.length); console.log('✓ Entry point:', manifest.server.entry_point); if (!fs.existsSync('dist/index.js')) throw new Error('dist/index.js not found!'); console.log('✓ Entry point exists'); console.log('Bundle verification passed!');\""
   },
   "keywords": [
     "mcp",
@@ -37,7 +41,7 @@
     "node": ">=18"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.6.1",
+    "@modelcontextprotocol/sdk": "^1.21.1",
     "axios": "^1.7.9",
     "zod": "^3.23.8"
   },

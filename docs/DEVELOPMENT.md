@@ -64,13 +64,13 @@ Tags: null                // ✅ Empty RefList
 ### visibleCol for Reference Columns
 Controls which foreign table column displays for references (show "Alice" vs "1")
 \`\`\`typescript
-widgetOptions: { visibleCol: "Name" }  // String: auto-resolves to numeric ID
-widgetOptions: { visibleCol: 456 }     // Number: uses directly
+visibleCol: "Name"  // String: auto-resolves to numeric ID (RECOMMENDED)
+visibleCol: 456     // Number: uses directly (advanced)
 
-// Example
-{ action: 'add', colId: 'Manager', type: 'Ref:People', widgetOptions: { visibleCol: 'Name' } }
+// Example (set at operation top-level, NOT in widgetOptions)
+{ action: 'add', colId: 'Manager', type: 'Ref:People', visibleCol: 'Name' }
 \`\`\`
-**Notes**: Case-sensitive. Type required when modifying. Ref/RefList only. Grist creates a hidden displayCol with the display value.
+**Notes**: Set at top-level (NOT in widgetOptions). Case-sensitive. Type required. Ref/RefList only. Grist auto-creates hidden gristHelper_Display column with formula.
 
 ### DateTime Encoding
 - **Writing**: Both formats work (primitive or encoded)

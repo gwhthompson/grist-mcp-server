@@ -16,8 +16,22 @@ import {
 } from '../schemas/common.js'
 import { truncateIfNeeded } from '../services/formatter.js'
 import type { GristClient } from '../services/grist-client.js'
-import type { RecordsResponse, SQLQueryResponse } from '../types.js'
+import type { RecordsResponse, SQLQueryResponse, CellValue } from '../types.js'
 import { GristTool } from './base/GristTool.js'
+
+// Type for Grist record structure
+interface GristRecord {
+  id: number
+  fields: Record<string, CellValue>
+  errors?: Record<string, string> // Formula errors
+}
+
+// Type for flattened record
+interface FlattenedRecord {
+  id: number
+  _errors?: Record<string, string> // Formula errors if present
+  [key: string]: CellValue | Record<string, string> | undefined // Field values
+}
 
 // ============================================================================
 // 1. GRIST_QUERY_SQL (Refactored)
@@ -36,11 +50,11 @@ export const QuerySQLSchema = z
       .array(z.any())
       .optional()
       .describe(
-        'Optional parameterized query values. Use $1, $2, etc. in SQL. Example: ["Active", 100]'
+        'Optional parameterized query values. Use ? placeholders in SQL (SQLite style). Example SQL: "WHERE Status = ? AND Priority > ?" with parameters: ["Active", 1]'
       ),
     response_format: ResponseFormatSchema,
-    ...PaginationSchema.shape
   })
+  .merge(PaginationSchema)
   .strict()
 
 export type QuerySQLInput = z.infer<typeof QuerySQLSchema>
@@ -71,12 +85,15 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, any> {
     }
 
     // Execute SQL query
-    const response = await this.client.post<SQLQueryResponse>(`/docs/${params.docId}/sql`, {
-      sql,
-      args: params.parameters || []
-    })
+    // Note: Parameterized queries (using 'args') may not be supported in all Grist versions
+    // If parameters are provided and fail with 400, we provide helpful error message
+    try {
+      const response = await this.client.post<SQLQueryResponse>(`/docs/${params.docId}/sql`, {
+        sql,
+        args: params.parameters || []
+      })
 
-    const records = response.records || []
+      const records = response.records || []
 
     // Get total count estimate
     let total = records.length
@@ -88,13 +105,31 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, any> {
 
     const hasMore = records.length === params.limit
 
-    return {
-      total,
-      offset: params.offset,
-      limit: params.limit,
-      has_more: hasMore,
-      next_offset: hasMore ? params.offset + params.limit : null,
-      records
+      return {
+        total,
+        offset: params.offset,
+        limit: params.limit,
+        has_more: hasMore,
+        next_offset: hasMore ? params.offset + params.limit : null,
+        records
+      }
+    } catch (error) {
+      // Check if this might be a parameterized query issue
+      if (params.parameters && params.parameters.length > 0) {
+        const errorMsg = error instanceof Error ? error.message : String(error)
+        if (errorMsg.includes('400') || errorMsg.toLowerCase().includes('bad request')) {
+          throw new Error(
+            `SQL query failed - Parameterized queries may not be supported.\n\n` +
+            `Your query uses parameters: ${JSON.stringify(params.parameters)}\n\n` +
+            `Parameterized queries require Grist v1.1.0+. If you're using an older version:\n` +
+            `1. Remove the "parameters" field\n` +
+            `2. Embed values directly in SQL (use proper escaping!)\n` +
+            `3. Example: Instead of "WHERE Status = $1", use "WHERE Status = 'VIP'"\n\n` +
+            `Original error: ${errorMsg}`
+          )
+        }
+      }
+      throw error
     }
   }
 
@@ -140,8 +175,8 @@ export const GetRecordsSchema = z
     filters: FilterSchema,
     columns: ColumnSelectionSchema,
     response_format: ResponseFormatSchema,
-    ...PaginationSchema.shape
   })
+  .merge(PaginationSchema)
   .strict()
 
 export type GetRecordsInput = z.infer<typeof GetRecordsSchema>
@@ -184,6 +219,15 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
     const hasMore = records.length === params.limit
     const nextOffset = hasMore ? params.offset + params.limit : null
 
+    // Count formula errors
+    const recordsWithErrors = records.filter(r => r.errors && Object.keys(r.errors).length > 0)
+    const errorColumns = new Set<string>()
+    records.forEach(r => {
+      if (r.errors) {
+        Object.keys(r.errors).forEach(col => errorColumns.add(col))
+      }
+    })
+
     return {
       document_id: params.docId,
       table_id: params.tableId,
@@ -194,7 +238,13 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
       next_offset: nextOffset,
       filters: params.filters || {},
       columns: params.columns || 'all',
-      items: formattedRecords  // Use 'items' for consistency with other list tools
+      items: formattedRecords,  // Use 'items' for consistency with other list tools
+      ...(recordsWithErrors.length > 0 ? {
+        formula_errors: {
+          records_with_errors: recordsWithErrors.length,
+          affected_columns: Array.from(errorColumns)
+        }
+      } : {})
     }
   }
 
@@ -220,21 +270,32 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
   /**
    * Convert simple filters to Grist filter format
    */
-  private convertToGristFilters(filters?: Record<string, any>): Record<string, any[]> {
+  private convertToGristFilters(filters?: Record<string, CellValue | CellValue[]>): Record<string, CellValue[]> {
     if (!filters || Object.keys(filters).length === 0) {
       return {}
     }
 
-    const gristFilters: Record<string, any[]> = {}
+    const gristFilters: Record<string, CellValue[]> = {}
 
     for (const [key, value] of Object.entries(filters)) {
-      // If value is already an array, use as-is
-      if (Array.isArray(value)) {
-        gristFilters[key] = value
-      } else {
-        // Convert single value to array format
-        gristFilters[key] = [value]
-      }
+      // Distinguish between:
+      //   - CellValue[] (array of cell values for filtering multiple options like ['Alice', 'Bob'])
+      //   - CellValue (single value, which could be an encoded array like ['L', 1, 2, 3])
+
+      // Grist encoding markers for special CellValue types
+      const GRIST_MARKERS = ['L', 'D', 'E', 'P', 'C', 'S', 'Reference', 'ReferenceList']
+
+      const arrayValue: CellValue[] =
+        Array.isArray(value) &&
+        value.length > 0 &&
+        typeof value[0] === 'string' &&
+        GRIST_MARKERS.includes(value[0])
+          ? [value as CellValue]       // Single encoded CellValue like ['L', 1, 2]
+          : Array.isArray(value)
+            ? (value as CellValue[])   // Array of simple values like ['Alice', 'Bob']
+            : [value as CellValue]     // Single simple value
+
+      gristFilters[key] = arrayValue
     }
 
     return gristFilters
@@ -243,7 +304,7 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
   /**
    * Select specific columns from records
    */
-  private selectColumns(records: any[], columns?: string[]): any[] {
+  private selectColumns(records: GristRecord[], columns?: string[]): GristRecord[] {
     if (!columns || columns.length === 0) {
       return records
     }
@@ -258,11 +319,15 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
 
   /**
    * Flatten records (merge id and fields)
+   * Preserves formula errors if present
    */
-  private flattenRecords(records: any[]): any[] {
+  private flattenRecords(records: GristRecord[]): FlattenedRecord[] {
     return records.map((record) => ({
       id: record.id,
-      ...record.fields
+      ...record.fields,
+      ...(record.errors && Object.keys(record.errors).length > 0
+        ? { _errors: record.errors }
+        : {})
     }))
   }
 

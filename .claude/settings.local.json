@@ -6,9 +6,42 @@
       "Bash(npx tsc:*)",
       "Skill(mcp-builder)",
       "Bash(npm test:*)",
-      "Skill(javascript-typescript:typescript-advanced-types)"
+      "Skill(javascript-typescript:typescript-advanced-types)",
+      "Bash(tree:*)",
+      "Bash(find:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(npm ls:*)",
+      "WebFetch(domain:github.com)",
+      "mcp__context7__resolve-library-id",
+      "mcp__context7__get-library-docs",
+      "WebFetch(domain:code.claude.com)",
+      "Bash(docker compose:*)",
+      "Bash(echo:*)",
+      "Bash(timeout 180 npm test:*)",
+      "Bash(cat:*)",
+      "Bash(npm run bundle:full:*)",
+      "Skill(typescript-advanced-types)",
+      "WebFetch(domain:registry.npmjs.org)",
+      "Bash(npx tsx:*)",
+      "Bash(npm install:*)",
+      "WebFetch(domain:v3.zod.dev)",
+      "Bash(node ./node_modules/typescript/bin/tsc:*)",
+      "WebFetch(domain:www.npmjs.com)"
     ],
     "deny": [],
     "ask": []
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "context7"
+  ],
+  "sandbox": {
+    "excludedCommands": [
+      "docker",
+      "docker-compose",
+      "npm"
+    ],
+    "autoAllowBashIfSandboxed": true,
+    "enabled": true
   }
 }

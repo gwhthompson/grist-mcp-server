@@ -1,8 +1,5 @@
 /**
- * Document Management Tool (Refactored with Base Class)
- *
- * REFACTORED VERSION using GristTool base class
- * Reduces code from ~81 lines to ~65 lines (-20% reduction)
+ * Document Management Tool
  */
 
 import { z } from 'zod'
@@ -39,24 +36,33 @@ export class CreateDocumentTool extends GristTool<typeof CreateDocumentSchema, a
   }
 
   protected async executeInternal(params: CreateDocumentInput) {
-    // Build request body
-    const requestBody: any = {
-      name: params.name
-    }
+    let docId: string
 
-    // If forking, include source document ID
+    // Two different APIs depending on whether forking or creating blank
     if (params.forkFromDocId) {
-      requestBody.sourceDocumentId = params.forkFromDocId
+      // Fork/copy existing document via POST /docs/{docId}/copy
+      // API: { workspaceId: number, documentName: string, asTemplate?: boolean }
+      const response = await this.client.post<string>(
+        `/docs/${params.forkFromDocId}/copy`,
+        {
+          workspaceId: params.workspaceId,  // Already validated as number by WorkspaceIdSchema
+          documentName: params.name,
+          asTemplate: false  // Keep all data and history
+        }
+      )
+      docId = typeof response === 'string' ? response : (response as any).id
+    } else {
+      // Create blank document via POST /workspaces/{workspaceId}/docs
+      // API: { name: string, isPinned?: boolean }
+      const response = await this.client.post<string>(
+        `/workspaces/${params.workspaceId}/docs`,
+        {
+          name: params.name
+        }
+      )
+      docId = typeof response === 'string' ? response : (response as any).id
     }
 
-    // Create document via POST /workspaces/{workspaceId}/docs
-    const response = await this.client.post<string>(
-      `/workspaces/${params.workspaceId}/docs`,
-      requestBody
-    )
-
-    // Response is just the document ID as a string
-    const docId = typeof response === 'string' ? response : (response as any).id
     const docUrl = `${this.client.getBaseUrl()}/doc/${docId}`
 
     return {

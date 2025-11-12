@@ -51,6 +51,7 @@ export function formatErrorResponse(errorMessage: string): MCPToolResponse {
         text: errorMessage
       }
     ],
+    structuredContent: { success: false, error: errorMessage }, // ALWAYS include per CLAUDE.md
     isError: true
   }
 }

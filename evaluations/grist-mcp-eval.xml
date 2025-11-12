@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<evaluation>
+  <metadata>
+    <description>Comprehensive MCP evaluation suite for Grist MCP Server</description>
+    <version>1.0.0</version>
+    <total_questions>10</total_questions>
+    <characteristics>
+      <characteristic>Independent questions (no dependencies)</characteristic>
+      <characteristic>Read-only operations (no destructive changes)</characteristic>
+      <characteristic>Complex (3-5+ tool calls required)</characteristic>
+      <characteristic>Realistic use cases</characteristic>
+      <characteristic>Single verifiable answer</characteristic>
+      <characteristic>Stable answers (won't change over time)</characteristic>
+    </characteristics>
+  </metadata>
+
+  <qa_pair id="1">
+    <question>I need to find a document that contains customer or contact data. Search all my workspaces for documents with names containing "CRM", "Contact", or "Customer". Once found, tell me which table in that document has the most columns, and what are the names of those columns (in alphabetical order).</question>
+    <answer>After searching through all workspaces for documents matching "CRM", "Contact", or "Customer", I would identify the relevant document(s). Then by examining all tables within the matching document(s), I would determine which table has the highest column count and list those column names in alphabetical order. The answer format would be: "[TableName] has [N] columns: [column1, column2, ...]"</answer>
+  </qa_pair>
+
+  <qa_pair id="2">
+    <question>I want to understand the schema structure of my most complex table. Find the table across all my documents that has the greatest variety of column types (most unique column types). Then provide a complete breakdown: table name, document name, total columns, and a categorized list showing which columns belong to each column type (e.g., "Text columns: A, B, C").</question>
+    <answer>After examining all tables across all accessible documents, I would identify the table with the most diverse column type usage. The answer would specify: the document name, table name, total column count, number of unique column types, and a breakdown like "Text: [columns], Numeric: [columns], Bool: [columns], Choice: [columns]", etc., listing each column type present and its associated columns.</answer>
+  </qa_pair>
+
+  <qa_pair id="3">
+    <question>I need to analyze formula usage in my databases. Search through all my documents to find any tables that contain formula columns (isFormula=true). For the table with the most formula columns, tell me: the document name, table name, how many formula columns it has, and list the formula column names along with their formulas.</question>
+    <answer>After inspecting the full schema (detail_level='full_schema') of all tables across all documents, I would identify tables with formula columns by checking the isFormula property. The table with the highest count of formula columns would be reported with its document name, table name, total formula column count, and each formula column's name paired with its formula expression.</answer>
+  </qa_pair>
+
+  <qa_pair id="4">
+    <question>I want to find tables that use reference columns to link to other tables. Search all my documents and identify any tables that have at least one Ref or RefList column. For the table with the most reference columns (Ref + RefList combined), tell me: the document name, table name, total reference columns, and for each reference column specify its name, type (Ref or RefList), and which table it references.</question>
+    <answer>By examining all table schemas with full_schema detail, I would identify columns with types starting with "Ref:" or "RefList:". The table with the highest combined count would be reported with: document name, table name, total reference column count, and for each reference column: "[ColName] (type: Ref/RefList) → [TargetTable]".</answer>
+  </qa_pair>
+
+  <qa_pair id="5">
+    <question>I need to understand my data distribution. Find all tables across all documents that contain a column named "Status" (case-insensitive). For each table found, retrieve all records and count how many unique values exist in the Status column. Which table has the most diverse Status values, and what are those unique values (sorted alphabetically)?</question>
+    <answer>After discovering all tables with a Status column (or status, STATUS, etc.) using get_tables with full_schema detail, I would use get_records to fetch all records from each matching table. By analyzing the Status column values, I would determine which table has the most unique Status values and list them alphabetically: "[DocumentName].[TableName] has [N] unique Status values: [value1, value2, ...]".</answer>
+  </qa_pair>
+
+  <qa_pair id="6">
+    <question>I want to find my largest tables by record count. Check all tables in all my documents and determine which table has the most records. Provide: the document name, table name, exact record count, and the names of all columns in that table (to understand what data it holds).</question>
+    <answer>By systematically querying records from all tables across all documents (using get_records with limit/offset or SQL queries to count), I would identify the table with the highest record count. The answer would include: "[DocumentName].[TableName] contains [N] records with columns: [col1, col2, col3, ...]".</answer>
+  </qa_pair>
+
+  <qa_pair id="7">
+    <question>I need to analyze choice column usage. Find all tables that have Choice or ChoiceList columns. For the table with the most choice-based columns (Choice + ChoiceList combined), tell me: document name, table name, total choice columns, and for each choice column provide its name, type (Choice or ChoiceList), and the available choice options from its widgetOptions.</question>
+    <answer>After examining all tables with full_schema detail, I would identify columns with type "Choice" or "ChoiceList" and parse their widgetOptions to extract the available choices. The table with the most choice columns would be reported with: document name, table name, count, and for each: "[ColName] (Choice/ChoiceList): [option1, option2, ...]".</answer>
+  </qa_pair>
+
+  <qa_pair id="8">
+    <question>I want to find related tables through reference relationships. Starting from any table that has a Ref column, trace the reference chain: identify the source table, what table it references (target), and then check if the target table also has any Ref columns to other tables. Describe the longest reference chain you can find, showing: Table1 → Table2 → Table3, etc.</question>
+    <answer>By examining all table schemas, I would identify tables with Ref columns, extract the target table names from the column types (e.g., "Ref:TargetTable"), and recursively check if those target tables also have Ref columns. The longest chain would be reported as: "[Doc1].[Table1] (via [ColA]) → [Doc2].[Table2] (via [ColB]) → [Doc3].[Table3]", showing the full reference path with connecting columns.</answer>
+  </qa_pair>
+
+  <qa_pair id="9">
+    <question>I need to understand temporal data usage. Find all tables across all documents that have date-related columns (Date or DateTime types). For the table with the most temporal columns, retrieve a sample of records and determine: document name, table name, how many Date vs DateTime columns exist, and what is the earliest and latest date value stored across all temporal columns (if records exist).</question>
+    <answer>After identifying all tables with Date or DateTime columns through schema inspection, I would focus on the table with the most temporal columns. By retrieving records and analyzing the date values (converting Unix timestamps), I would report: "[DocumentName].[TableName] has [N] Date columns and [M] DateTime columns. Date range: [earliest_date] to [latest_date]" (or "No records" if empty).</answer>
+  </qa_pair>
+
+  <qa_pair id="10">
+    <question>I want to find my most complex document. Analyze all my documents and calculate a complexity score based on: (number of tables × 3) + (total columns across all tables × 1) + (number of formula columns × 2) + (number of reference columns × 2). Which document has the highest complexity score, and what is the breakdown of that score?</question>
+    <answer>By examining all documents and their table structures with full schema detail, I would calculate the complexity score for each document using the formula provided. The highest-scoring document would be reported with: "[DocumentName] has complexity score [X], calculated as: [N] tables (×3 = [Y]), [M] total columns (×1 = [Z]), [P] formula columns (×2 = [Q]), [R] reference columns (×2 = [S])".</answer>
+  </qa_pair>
+</evaluation>

@@ -3,6 +3,50 @@
  *
  * Tests ALL WidgetOptions properties from grist-types.d.ts
  * Validates every option works correctly with live Grist
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * TESTING LIMITATION - Widget Options Rendering
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * WHAT THESE TESTS VERIFY:
+ * ✅ Grist API accepts all widget option properties
+ * ✅ All widget options are correctly stored in column metadata
+ * ✅ Complex widget configurations (styling, formatting) persist correctly
+ * ✅ Widget option schemas match Grist type definitions
+ *
+ * WHAT THESE TESTS DO NOT VERIFY:
+ * ❌ That Grist UI renders colors, fonts, and styling as specified
+ * ❌ That currency symbols ($, €, £) appear in formatted display
+ * ❌ That percent mode shows values with % symbol
+ * ❌ That choice colors and styles are applied to tags
+ * ❌ That date/time formatting affects displayed values
+ *
+ * FALSE POSITIVE RISK:
+ * These tests verify the API contract (storage and retrieval) but NOT the
+ * visual presentation. If Grist's rendering engine stops respecting widget
+ * options, these tests would continue to pass.
+ *
+ * This is an ACCEPTABLE LIMITATION for an MCP server because:
+ * 1. MCP servers wrap APIs, not UIs - our concern is data accuracy
+ * 2. Grist's API returns raw values (42.5) not formatted strings ("$42.50")
+ * 3. UI verification requires expensive Playwright/Selenium infrastructure
+ * 4. Grist is mature software with reliable widget options implementation
+ * 5. Agent-facing bugs will be caught by MCP evaluation suite
+ *
+ * VERIFICATION APPROACH:
+ * Tests follow this pattern for every widget option property:
+ * 1. Create column with specific widget option
+ * 2. Read back column configuration via API
+ * 3. Parse widgetOptions JSON string
+ * 4. Assert exact match for every property (colors, modes, decimals, etc.)
+ * 5. Some tests insert data and verify raw values (not formatted display)
+ *
+ * This provides confidence that:
+ * - The MCP server correctly passes options to Grist ✅
+ * - Grist stores options correctly ✅
+ * - Options can be retrieved for inspection ✅
+ * - But UI rendering is trusted, not verified ⚠️
+ * ═══════════════════════════════════════════════════════════════════════════
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';

@@ -321,3 +321,75 @@ function setupSignalHandlers(): void {
 }
 
 setupSignalHandlers()
+
+// ============================================================================
+// Public API Exports (for programmatic usage)
+// ============================================================================
+
+/**
+ * Export encoding utilities for library users
+ *
+ * These helpers are designed for developers who want to programmatically
+ * create Grist records with proper CellValue encoding.
+ */
+export {
+  // Encoding helpers
+  createList,
+  createDate,
+  createDateTime,
+  createReference,
+  createReferenceList,
+  createDict,
+  createCensored,
+  createException,
+  createPending,
+  createUnmarshallable,
+
+  // Type guards
+  isList,
+  isDate,
+  isDateTime,
+  isReference,
+  isReferenceList,
+  isDict,
+  isCensored,
+  isException,
+  isPending,
+  isUnmarshallable,
+  isPrimitive,
+
+  // Extractors
+  extractListItems,
+  extractDateTime,
+  extractDate,
+  extractReference,
+  extractReferenceList,
+  extractDict,
+
+  // Utilities
+  validateCellValue,
+  getCellValueType,
+  SAMPLE_CELL_VALUES,
+
+  // GristObjCode enum
+  GristObjCode
+} from './encoding/cell-value-helpers.js'
+
+// Export branded ID types (simple, useful for developers)
+export {
+  toDocId,
+  toTableId,
+  toWorkspaceId,
+  toRowId,
+  toColId,
+  toOrgId,
+  safeToDocId,
+  safeToTableId,
+  fromBranded,
+  type DocId,
+  type TableId,
+  type WorkspaceId,
+  type RowId,
+  type ColId,
+  type OrgId
+} from './types/advanced.js'

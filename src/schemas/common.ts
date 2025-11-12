@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod'
+import { WidgetOptionsUnionSchema } from './widget-options.js'
 
 // ============================================================================
 // Response Format Schema
@@ -73,9 +74,10 @@ export const TableIdSchema = z
   .describe('Table ID from grist_get_tables. Example: "Contacts", "Sales_Data", "Projects"')
 
 export const WorkspaceIdSchema = z
-  .string()
-  .min(1)
-  .describe('Workspace ID from grist_list_workspaces. Example: "123" or "456"')
+  .coerce.number()
+  .int()
+  .positive()
+  .describe('Workspace ID from grist_list_workspaces. Example: 123 or 456 (numeric)')
 
 // ============================================================================
 // Column Type Schema
@@ -111,20 +113,19 @@ export const ColumnTypeSchema = z
 
 /**
  * Widget options for Reference and RefList columns
+ *
+ * NOTE: visibleCol is NOT set in widgetOptions!
+ * visibleCol is a top-level column property, not a widget option.
+ * Set it at the operation level: {"action": "add", "colId": "Manager", "visibleCol": "Email"}
+ *
+ * See grist_manage_columns documentation for visibleCol usage.
  */
 export const RefWidgetOptionsSchema = z
   .object({
-    visibleCol: z
-      .union([z.string(), z.number()])
-      .optional()
-      .describe(
-        'Which column from foreign table to display for references. ' +
-          'String (e.g., "Name") auto-resolves to numeric ID. Number (e.g., 456) used directly.'
-      ),
     showColumn: z
       .union([z.string(), z.boolean()])
       .optional()
-      .describe('UI visibility control (hide/show in views). Different from visibleCol.')
+      .describe('UI visibility control (hide/show in views).')
   })
   .strict()
 
@@ -298,11 +299,16 @@ export const ColumnDefinitionSchema = z
       .optional()
       .describe('Formula code (Python) if isFormula is true. Example: "$Price * $Quantity"'),
 
-    widgetOptions: WidgetOptionsSchema.optional().describe(
-      'Widget-specific options:\n' +
-        '- Ref/RefList: {"visibleCol": "Name"} - Display specific column from foreign table\n' +
-        '- Choice/ChoiceList: {"choices": ["Red", "Blue", "Green"]} - Valid options\n' +
-        'Example: {"visibleCol": "Name"} for a Ref:People column to show names instead of IDs'
+    widgetOptions: z.union([
+      z.string(), // JSON string (will be parsed and validated by action builder)
+      WidgetOptionsUnionSchema // Strict validation of widget options object
+    ]).optional().describe(
+      'Widget options validated by column type. Examples:\n' +
+        '- Numeric: {"numMode": "currency", "currency": "USD", "decimals": 2}\n' +
+        '- Choice: {"choices": ["Red", "Blue", "Green"]}\n' +
+        '- Date: {"dateFormat": "YYYY-MM-DD"}\n' +
+        '- Ref/RefList: Widget options for references (alignment, styles)\n' +
+        'Validation is enforced based on column type - unknown properties are rejected.'
     )
   })
   .strict()
@@ -371,6 +377,4 @@ export const StandardToolParams = z.object({
 /**
  * Standard parameters for list-based tools
  */
-export const ListToolParams = StandardToolParams.extend({
-  ...PaginationSchema.shape
-})
+export const ListToolParams = StandardToolParams.merge(PaginationSchema)

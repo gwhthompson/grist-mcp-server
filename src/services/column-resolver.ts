@@ -7,6 +7,7 @@
  */
 
 import type { GristClient } from './grist-client.js'
+import type { AnyWidgetOptions } from '../schemas/widget-options.js'
 
 /**
  * Column information from Grist API
@@ -19,7 +20,7 @@ interface ColumnInfo {
     label?: string
     isFormula?: boolean
     formula?: string
-    widgetOptions?: any
+    widgetOptions?: string // Widget options as JSON string
   }
 }
 

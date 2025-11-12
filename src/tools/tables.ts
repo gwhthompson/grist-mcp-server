@@ -1,8 +1,5 @@
 /**
- * Table Management Tools (Refactored with Base Classes)
- *
- * REFACTORED VERSION using GristTool base class
- * Reduces code from ~169 lines to ~110 lines (-35% reduction)
+ * Table Management Tools
  */
 
 import { z } from 'zod'

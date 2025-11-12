@@ -10,34 +10,34 @@
 /**
  * Maximum response size (~6,000 tokens at 4 chars/token)
  */
-export const CHARACTER_LIMIT = 25000 as const
+export const CHARACTER_LIMIT = 25000 satisfies number
 
 /**
  * Warn when approaching limit
  */
-export const TRUNCATION_WARNING_THRESHOLD = 20000 as const
+export const TRUNCATION_WARNING_THRESHOLD = 20000 satisfies number
 
 // ============================================================================
-// Pagination Defaults (with const assertions)
+// Pagination Defaults (using satisfies for type safety)
 // ============================================================================
 
-export const DEFAULT_LIMIT = 100 as const
-export const DEFAULT_OFFSET = 0 as const
-export const MAX_LIMIT = 1000 as const
+export const DEFAULT_LIMIT = 100 satisfies number
+export const DEFAULT_OFFSET = 0 satisfies number
+export const MAX_LIMIT = 1000 satisfies number
 
 // ============================================================================
-// Batch Operation Limits (with const assertions)
+// Batch Operation Limits (using satisfies for type safety)
 // ============================================================================
 
-export const MAX_RECORDS_PER_BATCH = 500 as const
-export const MAX_COLUMN_OPERATIONS = 50 as const
+export const MAX_RECORDS_PER_BATCH = 500 satisfies number
+export const MAX_COLUMN_OPERATIONS = 50 satisfies number
 
 // ============================================================================
-// API Defaults (with const assertions)
+// API Defaults (using satisfies for type safety)
 // ============================================================================
 
-export const DEFAULT_BASE_URL = 'https://docs.getgrist.com' as const
-export const API_TIMEOUT = 30000 as const // 30 seconds
+export const DEFAULT_BASE_URL = 'https://docs.getgrist.com' satisfies string
+export const API_TIMEOUT = 30000 satisfies number // 30 seconds
 
 // ============================================================================
 // HTTP Status Codes (as const object with readonly properties)
@@ -71,7 +71,7 @@ export type HttpStatusCode = (typeof HTTP_STATUS)[keyof typeof HTTP_STATUS]
 /**
  * API version prefix
  */
-export const API_VERSION = 'api' as const
+export const API_VERSION = 'api' satisfies string
 
 /**
  * Template literal types for type-safe API paths

@@ -1,8 +1,5 @@
 /**
- * Record Operation Tools (Refactored with Base Classes)
- *
- * REFACTORED VERSION using GristTool base class
- * Reduces code from ~246 lines to ~160 lines (-35% reduction)
+ * Record Operation Tools
  */
 
 import { z } from 'zod'
@@ -13,6 +10,7 @@ import {
   RowIdsSchema,
   TableIdSchema
 } from '../schemas/common.js'
+import { CellValueSchema } from '../schemas/api-responses.js'
 import {
   buildBulkAddRecordAction,
   buildBulkRemoveRecordAction,
@@ -32,7 +30,7 @@ export const AddRecordsSchema = z
     docId: DocIdSchema,
     tableId: TableIdSchema,
     records: z
-      .array(z.record(z.string(), z.any()))
+      .array(z.record(z.string(), CellValueSchema))
       .min(1)
       .max(MAX_RECORDS_PER_BATCH)
       .describe(
@@ -81,7 +79,7 @@ export const UpdateRecordsSchema = z
     tableId: TableIdSchema,
     rowIds: RowIdsSchema,
     updates: z
-      .record(z.string(), z.any())
+      .record(z.string(), CellValueSchema)
       .describe(
         'Object mapping column IDs to new values. Example: {"Status": "Complete", "UpdatedDate": "2024-01-15"}'
       ),
@@ -124,15 +122,25 @@ export async function updateRecords(client: GristClient, params: UpdateRecordsIn
 // 3. GRIST_UPSERT_RECORDS (Refactored)
 // ============================================================================
 
+/**
+ * Upsert record format with require and fields
+ * - require: Fields to match existing records
+ * - fields: Fields to update or set in new records
+ */
+const UpsertRecordSchema = z.object({
+  require: z.record(z.string(), CellValueSchema).optional(),
+  fields: z.record(z.string(), CellValueSchema).optional()
+})
+
 export const UpsertRecordsSchema = z
   .object({
     docId: DocIdSchema,
     tableId: TableIdSchema,
     records: z
-      .array(z.record(z.string(), z.any()))
+      .array(UpsertRecordSchema)
       .min(1)
       .max(MAX_RECORDS_PER_BATCH)
-      .describe(`Array of record objects to upsert (max ${MAX_RECORDS_PER_BATCH})`),
+      .describe(`Array of record objects to upsert (max ${MAX_RECORDS_PER_BATCH}). Each record has 'require' (fields to match) and 'fields' (fields to update/add).`),
     onMany: z
       .enum(['first', 'none', 'all'])
       .default('first')

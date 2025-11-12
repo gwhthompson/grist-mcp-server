@@ -7,6 +7,7 @@
 
 import { DEFAULT_LIMIT, DEFAULT_OFFSET, MAX_LIMIT } from '../constants.js'
 import { ValidationError } from '../errors/index.js'
+import type { CellValue } from '../types.js'
 
 /**
  * Pagination parameters value object
@@ -46,10 +47,14 @@ export class PaginationParams {
   /**
    * Create from plain object (convenience method)
    */
-  static fromObject(obj: any): PaginationParams {
+  static fromObject(obj: unknown): PaginationParams {
+    if (typeof obj !== 'object' || obj === null) {
+      throw new ValidationError('obj', obj, 'Must be an object')
+    }
+    const record = obj as Record<string, unknown>
     return PaginationParams.create({
-      offset: obj?.offset,
-      limit: obj?.limit
+      offset: typeof record.offset === 'number' ? record.offset : undefined,
+      limit: typeof record.limit === 'number' ? record.limit : undefined
     })
   }
 
@@ -99,18 +104,18 @@ export class PaginationParams {
  */
 export class FilterCriteria {
   private constructor(
-    public readonly filters: ReadonlyMap<string, readonly any[]>
+    public readonly filters: ReadonlyMap<string, readonly CellValue[]>
   ) {}
 
   /**
    * Create filter criteria with validation
    */
-  static create(filters?: Record<string, any>): FilterCriteria {
+  static create(filters?: Record<string, CellValue | CellValue[]>): FilterCriteria {
     if (!filters || Object.keys(filters).length === 0) {
       return new FilterCriteria(new Map())
     }
 
-    const filterMap = new Map<string, readonly any[]>()
+    const filterMap = new Map<string, readonly CellValue[]>()
 
     for (const [key, value] of Object.entries(filters)) {
       if (!key || key.trim() === '') {
@@ -118,7 +123,15 @@ export class FilterCriteria {
       }
 
       // Convert single value to array
-      const arrayValue = Array.isArray(value) ? value : [value]
+      // Note: CellValue can itself be an array ([string, ...unknown[]]), so we need explicit handling
+      // We distinguish between:
+      //   - CellValue[] (array of cell values for filtering)
+      //   - CellValue (single value, which could itself be an encoded array like ['L', ...])
+      const arrayValue: CellValue[] =
+        Array.isArray(value) && value.length > 0 && typeof value[0] !== 'string'
+          ? (value as CellValue[])  // Array of CellValues
+          : [value as CellValue]    // Single CellValue wrapped in array
+
       filterMap.set(key, Object.freeze(arrayValue))
     }
 
@@ -128,8 +141,8 @@ export class FilterCriteria {
   /**
    * Convert to Grist filter format
    */
-  toGristFormat(): Record<string, any[]> {
-    const result: Record<string, any[]> = {}
+  toGristFormat(): Record<string, CellValue[]> {
+    const result: Record<string, CellValue[]> = {}
     for (const [key, value] of this.filters.entries()) {
       result[key] = [...value]  // Copy array
     }
@@ -146,14 +159,14 @@ export class FilterCriteria {
   /**
    * Get filter for specific column
    */
-  getFilter(columnId: string): readonly any[] | undefined {
+  getFilter(columnId: string): readonly CellValue[] | undefined {
     return this.filters.get(columnId)
   }
 
   /**
    * Convert to JSON
    */
-  toJSON(): Record<string, any[]> {
+  toJSON(): Record<string, CellValue[]> {
     return this.toGristFormat()
   }
 }

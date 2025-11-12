@@ -292,6 +292,10 @@ Parameters:
     - 'names': Just table IDs
     - 'columns': Table IDs + column names (default)
     - 'full_schema': + types, formulas, widget options (most verbose)
+
+    ⚠️ IMPORTANT: widgetOptions are ONLY returned with detail_level='full_schema'
+    To verify widget options after setting them, use detail_level='full_schema'
+
   - response_format ('json' | 'markdown'): Output format (default: 'markdown')
 
 Returns (JSON format):
@@ -391,10 +395,10 @@ EXAMPLES:
    sql: "SELECT * FROM Tasks WHERE Status='Open' AND (Priority=1 OR AssignedTo='John')"
    → Returns high-priority or John's open tasks
 
-4. Parameterized (safer):
-   sql: "SELECT * FROM Contacts WHERE Region = $1"
+4. Parameterized (safer - SQLite style):
+   sql: "SELECT * FROM Contacts WHERE Region = ?"
    parameters: ["West"]
-   → Prevents SQL injection
+   → Prevents SQL injection. Use ? placeholders (not $1, $2)
 
 ERRORS:
 - "SQL syntax error": Check query syntax → Verify table/column names with grist_get_tables
@@ -536,6 +540,51 @@ Parameters:
   - docId, tableId, response_format
   - records (array): Max 500 per request
 
+📝 CELLVALUE ENCODING (CRITICAL!)
+
+Grist uses special encoding for complex data types. Using wrong encoding causes 500 errors!
+
+1. **Text, Number, Boolean**: Use values directly
+   ✅ {"Name": "John", "Age": 30, "IsActive": true}
+
+2. **ChoiceList** (multiple selection): Add "L" prefix
+   ❌ WRONG: {"Tags": ["VIP", "Active"]}
+   ✅ RIGHT: {"Tags": ["L", "VIP", "Active"]}
+
+3. **Date**: Use ["d", timestamp_milliseconds]
+   ❌ WRONG: {"JoinDate": "2024-01-15"}
+   ❌ WRONG: {"JoinDate": 1705276800}
+   ✅ RIGHT: {"JoinDate": ["d", 1705276800000]}
+   💡 Get timestamp: Date.parse("2024-01-15") → 1705276800000
+
+4. **DateTime**: Use ["D", timestamp, timezone]
+   ❌ WRONG: {"CreatedAt": 1705276800000}
+   ✅ RIGHT: {"CreatedAt": ["D", 1705276800000, "UTC"]}
+   ✅ RIGHT: {"CreatedAt": ["D", 1705276800000, "America/New_York"]}
+
+5. **Reference** (Ref column): Use ["R", row_id]
+   ✅ {"Manager": ["R", 456]}
+
+6. **ReferenceList** (RefList column): Use ["r", [row_ids]]
+   ✅ {"TeamMembers": ["r", [10, 11, 12]]}
+
+⚠️  Most Common Mistake: Forgetting type prefixes ("L", "d", "D") causes 500 errors!
+
+COMPLETE ENCODING EXAMPLE:
+{
+  "records": [{
+    "Name": "John Smith",                       // Text - use directly
+    "Age": 30,                                   // Int - use directly
+    "Salary": 75000.50,                          // Numeric - use directly
+    "IsActive": true,                            // Bool - use directly
+    "Tags": ["L", "VIP", "Manager", "Remote"],  // ChoiceList - "L" prefix!
+    "HireDate": ["d", 1705276800000],           // Date - "d" + timestamp
+    "LastLogin": ["D", 1705276800000, "UTC"],   // DateTime - "D" + timestamp + tz
+    "Manager": ["R", 456],                       // Ref - "R" + row_id
+    "DirectReports": ["r", [10, 11, 12]]        // RefList - "r" + array of row_ids
+  }]
+}
+
 EXAMPLES:
 
 1. Add new contacts (first time):
@@ -582,9 +631,14 @@ Parameters:
   - updates (object): Column values to set. Format: {"Column": value}
   - response_format ('json' | 'markdown'): Output format (default: 'markdown')
 
+📝 CELLVALUE ENCODING - Same as grist_add_records!
+
+Use encoded formats for: ChoiceList ["L", ...], Date ["d", timestamp], DateTime ["D", timestamp, tz], Reference ["R", id], RefList ["r", [ids]].
+See grist_add_records description for complete encoding guide.
+
 Example:
   rowIds: [1, 2, 3]
-  updates: {"Status": "Complete", "CompletedDate": "2024-01-15"}
+  updates: {"Status": "Complete", "CompletedDate": ["d", 1705276800000]}
 
 Returns (JSON format):
   {
@@ -657,6 +711,11 @@ Parameters:
   - onMany: 'first' | 'none' | 'all' (default: 'first')
   - add: true to insert if not found (default: true)
   - update: true to modify if found (default: true)
+
+📝 CELLVALUE ENCODING - Same as grist_add_records!
+
+Use encoded formats for: ChoiceList ["L", ...], Date ["d", timestamp], DateTime ["D", timestamp, tz], Reference ["R", id], RefList ["r", [ids]].
+See grist_add_records description for complete encoding guide.
 
 EXAMPLES:
 
@@ -916,6 +975,80 @@ Parameters:
       - newColId (string): New column ID
 
   - response_format ('json' | 'markdown'): Output format (default: 'markdown')
+
+📝 WIDGET OPTIONS BY COLUMN TYPE
+
+Widget options control how columns are displayed and formatted. Here are the valid options for each type:
+
+**Numeric/Int columns:**
+- numMode: "currency" | "decimal" | "percent" | "scientific" (display format)
+- currency: ISO 4217 code - REQUIRED if numMode="currency" (e.g., "USD", "EUR", "GBP")
+- decimals: 0-20 (minimum decimal places to show)
+- maxDecimals: 0-20 (maximum decimal places)
+- numSign: "parens" (show negative numbers in parentheses)
+Example: {"numMode": "currency", "currency": "USD", "decimals": 2}
+
+**Date columns:**
+- dateFormat: Moment.js format string (e.g., "YYYY-MM-DD", "MM/DD/YYYY", "MMM D, YYYY")
+- isCustomDateFormat: true if using custom format
+Example: {"dateFormat": "MMM D, YYYY"}
+
+**DateTime columns:**
+- dateFormat: Date part format (e.g., "YYYY-MM-DD")
+- timeFormat: Time part format (e.g., "HH:mm:ss", "h:mm A")
+- isCustomDateFormat, isCustomTimeFormat: Booleans
+Example: {"dateFormat": "YYYY-MM-DD", "timeFormat": "HH:mm:ss"}
+
+**Choice/ChoiceList columns:**
+- choices: Array of available options (max 1000 items, each 1-255 chars)
+- choiceOptions: Per-choice styling - {"Option": {"fillColor": "#RRGGBB", "textColor": "#RRGGBB"}}
+Example: {"choices": ["Todo", "Done"], "choiceOptions": {"Done": {"fillColor": "#10B981"}}}
+
+**Reference (Ref/RefList) columns:**
+- visibleCol: Which column from the referenced table to display
+  ⚠️ Set at TOP-LEVEL of operation (NOT in widgetOptions!)
+
+  **HOW IT WORKS:**
+
+  1. You provide visibleCol at operation level:
+     • String column name: "Email", "Name", "FirstName" (RECOMMENDED - auto-resolved)
+     • Numeric column ID: 456, 789 (advanced - pass-through)
+
+  2. MCP server resolves string names to numeric IDs (via API call to foreign table)
+
+  3. Grist receives numeric visibleCol and automatically:
+     • Creates hidden gristHelper_Display column
+     • Sets up display formula ($RefColumn.VisibleColumn)
+     • Manages the display logic
+
+  **Example:**
+  {
+    "action": "add",
+    "colId": "Manager",
+    "type": "Ref:People",
+    "visibleCol": "Email"  // ← Top-level, NOT in widgetOptions!
+  }
+
+  **Why top-level?** visibleCol is a column property (like type, formula), not a display widget option.
+  Grist stores it separately in the _grist_Tables_column table's visibleCol field.
+
+**All column types (visual styling):**
+- fillColor: Background color as hex "#RRGGBB" (e.g., "#FF0000") - NO CSS names, NO shorthand
+- textColor: Text color as hex "#RRGGBB"
+- fontBold: Boolean (bold text)
+- fontItalic: Boolean (italic text)
+- fontUnderline: Boolean (underlined text)
+- fontStrikethrough: Boolean (strikethrough text)
+- alignment: "left" | "center" | "right"
+- wrap: Boolean (text wrapping enabled)
+
+**Validation notes:**
+- Unknown options are rejected (schema uses .strict())
+- Color values must be hex format (CSS color names not accepted)
+- Currency codes validated against ISO 4217 list (165 codes)
+- Column/table IDs cannot use Python keywords (for, class, if, def, etc.)
+
+📖 See docs/VALIDATION_RULES.md for complete validation constraints.
 
 Example operations:
   [

@@ -3,6 +3,48 @@
  *
  * TDD approach: Validate widgetOptions against live Grist for all 11 column types
  * Tests both the structure and actual behavior when applied to columns
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ * TESTING LIMITATION - Widget Options Rendering
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * WHAT THESE TESTS VERIFY:
+ * ✅ Grist API accepts widget options without errors
+ * ✅ Widget options are correctly stored in column metadata
+ * ✅ Stored values can be retrieved and match exactly what was set
+ * ✅ Widget options structure conforms to expected schema
+ *
+ * WHAT THESE TESTS DO NOT VERIFY:
+ * ❌ That Grist UI actually renders these options (colors, fonts, alignment)
+ * ❌ That formatted values appear correctly in the interface
+ * ❌ That styling is applied to cells as expected
+ * ❌ That display modes (currency, percent, etc.) affect visual output
+ *
+ * FALSE POSITIVE RISK:
+ * If Grist stops respecting widgetOptions for display rendering, these tests
+ * would still pass. This is an ACCEPTABLE LIMITATION because:
+ *
+ * 1. Grist API returns raw values, not formatted display strings
+ * 2. UI testing requires Selenium/Playwright (high maintenance overhead)
+ * 3. Grist is a mature project with reliable widget options implementation
+ * 4. MCP evaluation suite (Phase 2) will detect agent-visible UX regressions
+ * 5. End-to-end usage testing will catch rendering issues
+ *
+ * MITIGATION STRATEGY:
+ * - Run MCP evaluation suite regularly to catch functional regressions
+ * - Manual UI spot-checks for critical styling features
+ * - Trust Grist's well-tested widget options rendering
+ * - Monitor for Grist API changes that might affect behavior
+ *
+ * VERIFICATION APPROACH:
+ * These tests use a "write → read back → assert exact match" pattern:
+ * 1. Create column with specific widget options
+ * 2. Retrieve column metadata via API
+ * 3. Parse widgetOptions and verify all properties match expected values
+ *
+ * This verifies API contract and data persistence, which is appropriate for
+ * an MCP server that wraps the Grist API.
+ * ═══════════════════════════════════════════════════════════════════════════
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
@@ -378,6 +420,73 @@ describe('WidgetOptions - All 11 Column Types', () => {
       const parsed = parseWidgetOptions(complex);
       expect(parsed?.choices).toHaveLength(3);
       expect(parsed?.choiceOptions?.['a']).toMatchObject({ fillColor: '#FF0000' });
+    });
+  });
+
+  describe('Python-style Dict Conversion', () => {
+    it('should convert Python-style dict with single quotes to valid JSON', () => {
+      const pythonDict = "{'widget':'TextBox','alignment':'center','headerFillColor':'#E8D62F'}";
+      const parsed = parseWidgetOptions(pythonDict);
+
+      expect(parsed).toBeDefined();
+      expect(parsed?.widget).toBe('TextBox');
+      expect(parsed?.alignment).toBe('center');
+      expect(parsed?.headerFillColor).toBe('#E8D62F');
+    });
+
+    it('should handle Python-style dict with boolean values', () => {
+      const pythonDict = "{'widget':'TextBox','headerFontBold':true,'headerFontUnderline':false}";
+      const parsed = parseWidgetOptions(pythonDict);
+
+      expect(parsed).toBeDefined();
+      expect(parsed?.widget).toBe('TextBox');
+      expect(parsed?.headerFontBold).toBe(true);
+      expect(parsed?.headerFontUnderline).toBe(false);
+    });
+
+    it('should handle Python-style dict with array values', () => {
+      const pythonDict = "{'choices':['New','In Progress','Complete'],'choiceOptions':{}}";
+      const parsed = parseWidgetOptions(pythonDict);
+
+      expect(parsed).toBeDefined();
+      expect(parsed?.choices).toEqual(['New', 'In Progress', 'Complete']);
+    });
+
+    it('should handle Python-style dict with nested objects', () => {
+      const pythonDict = "{'widget':'TextBox','choiceOptions':{'New':{'fillColor':'#FF0000'}}}";
+      const parsed = parseWidgetOptions(pythonDict);
+
+      expect(parsed).toBeDefined();
+      expect(parsed?.widget).toBe('TextBox');
+      expect(parsed?.choiceOptions).toBeDefined();
+      expect(parsed?.choiceOptions?.['New']).toMatchObject({ fillColor: '#FF0000' });
+    });
+
+    it('should prefer valid JSON over Python-style conversion', () => {
+      // Valid JSON should parse correctly without conversion
+      const validJson = '{"widget":"TextBox","alignment":"center"}';
+      const parsed = parseWidgetOptions(validJson);
+
+      expect(parsed).toBeDefined();
+      expect(parsed?.widget).toBe('TextBox');
+      expect(parsed?.alignment).toBe('center');
+    });
+
+    it('should return null for unparseable strings', () => {
+      const invalid = "{'unclosed': 'bracket'";
+      const parsed = parseWidgetOptions(invalid);
+
+      expect(parsed).toBeNull();
+    });
+
+    it('should handle mixed quote scenarios that convert successfully', () => {
+      // After conversion, this becomes valid JSON
+      const pythonDict = "{'widget':'Choice','choices':['Option A','Option B']}";
+      const parsed = parseWidgetOptions(pythonDict);
+
+      expect(parsed).toBeDefined();
+      expect(parsed?.widget).toBe('Choice');
+      expect(parsed?.choices).toEqual(['Option A', 'Option B']);
     });
   });
 });

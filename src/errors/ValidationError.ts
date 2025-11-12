@@ -1,4 +1,5 @@
 import { GristError } from './GristError.js'
+import type { z } from 'zod'
 
 /**
  * Input validation error
@@ -36,15 +37,16 @@ export class ValidationError extends GristError {
   /**
    * Create from Zod error
    */
-  static fromZodError(error: any, field: string = 'unknown'): ValidationError {
+  static fromZodError(error: z.ZodError, field: string = 'unknown'): ValidationError {
     const issues = error.issues || []
     const firstIssue = issues[0]
 
     if (firstIssue) {
       const path = firstIssue.path.join('.')
+      const received = 'received' in firstIssue ? firstIssue.received : undefined
       return new ValidationError(
         path || field,
-        firstIssue.received,
+        received,
         firstIssue.message,
         { zodIssues: issues }
       )

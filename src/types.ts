@@ -145,17 +145,16 @@ export interface ColumnInfo {
    * This is stored in a SEPARATE database column from widgetOptions
    * (_grist_Tables_column.visibleCol, not inside widgetOptions JSON).
    *
-   * Value must be a numeric column reference (colRef).
-   * The MCP server auto-resolves string column names to numeric IDs.
+   * Can be specified as:
+   * - String column name (e.g., "Email") - MCP server auto-resolves to numeric ID
+   * - Numeric column reference (e.g., 456) - used directly
    *
-   * Example: 456 (displays column with colRef=456 from the foreign table)
-   *
-   * Note: Users may provide this in widgetOptions.visibleCol for convenience.
-   * The server extracts it and places it here as a top-level field.
+   * The MCP server resolves string names before sending to Grist API,
+   * so Grist always receives a numeric column reference.
    *
    * Reference: ./docs/reference/grist-database-schema.md line 138
    */
-  visibleCol?: number
+  visibleCol?: string | number
 }
 
 /**
@@ -187,9 +186,9 @@ export interface ColumnDefinition {
 
   /**
    * For Ref/RefList columns: specifies which column to display from referenced table.
-   * See ColumnInfo.visibleCol for details.
+   * String column name or numeric column ID. See ColumnInfo.visibleCol for details.
    */
-  visibleCol?: number
+  visibleCol?: string | number
 }
 
 /**
@@ -256,6 +255,7 @@ export interface TablesApiResponse {
 export interface Record {
   id: number
   fields: { [colId: string]: CellValue }
+  errors?: { [colId: string]: string } // Formula evaluation errors
 }
 
 /**

@@ -125,12 +125,15 @@ export async function registerTool<TSchema extends z.ZodTypeAny>(
   const startTime = Date.now()
 
   try {
-    // Convert Zod schema to JSON Schema for MCP compatibility
-    // MCP SDK requires `any` type, but we maintain type safety internally
+    // Extract Zod shape for MCP SDK
+    // The MCP SDK expects ZodRawShape (object of Zod validators) not JSON Schema
+    // The SDK handles JSON Schema conversion internally when responding to clients
+    // TypeScript doesn't know TSchema has .shape, but all our schemas are ZodObject
+    const schema = definition.inputSchema as any
     const mcpOptions: McpToolOptions = {
       title: definition.title,
       description: definition.description,
-      inputSchema: definition.inputSchema as any,
+      inputSchema: schema.shape,
       annotations: definition.annotations
     }
 
@@ -138,6 +141,22 @@ export async function registerTool<TSchema extends z.ZodTypeAny>(
     // The outer function signature matches MCP's expectations (params: any)
     // The inner call maintains full type safety via Zod inference
     const wrappedHandler = async (params: any) => {
+      // Optional debug logging for MCP parameters
+      if (process.env.DEBUG_MCP_PARAMS === 'true') {
+        console.warn(`[MCP] Tool called: ${definition.name}`)
+        console.warn('[MCP] Raw parameters:', JSON.stringify(params, null, 2))
+
+        // Special logging for widgetOptions if present
+        if (params?.widgetOptions !== undefined) {
+          console.warn('[MCP] widgetOptions detected:', {
+            type: typeof params.widgetOptions,
+            value: params.widgetOptions,
+            isString: typeof params.widgetOptions === 'string',
+            isObject: typeof params.widgetOptions === 'object'
+          })
+        }
+      }
+
       // Zod validation happens inside the tool handler
       // This maintains separation of concerns
       return definition.handler(client, params)

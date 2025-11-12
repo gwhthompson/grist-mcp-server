@@ -666,17 +666,26 @@ export class GristClient {
   ): Error {
     if (axios.isAxiosError(error)) {
       const axiosError = error as AxiosError<{
-        error?: { message?: string }
+        error?: string | { message?: string }
         message?: string
+        details?: { userError?: string }
       }>
       const status = axiosError.response?.status
+      const errorData = axiosError.response?.data
+
+      // Extract error message - Grist returns { error: string, details: { userError: string } }
       const message =
-        axiosError.response?.data?.error?.message ||
-        axiosError.response?.data?.message ||
+        (typeof errorData?.error === 'string'
+          ? errorData.error
+          : errorData?.error?.message) ||
+        errorData?.message ||
         axiosError.message
 
+      // Extract userError if available (more detailed/user-friendly)
+      const userError = errorData?.details?.userError
+
       // Sanitize the error message from API
-      const sanitizedMessage = sanitizeMessage(message)
+      const sanitizedMessage = sanitizeMessage(userError || message)
 
       switch (status) {
         case 401:
@@ -702,6 +711,87 @@ export class GristClient {
           )
 
         case 500:
+          // Detect CellValue encoding errors (most common cause of 500 on /apply endpoint)
+          if (path.includes('/apply')) {
+            const errorText = String(sanitizedMessage).toLowerCase()
+
+            // Check for common encoding error indicators
+            if (errorText.includes('invalid') || errorText.includes('type') || errorText.includes('expected')) {
+              return new Error(
+                `Grist server error (500) - Likely CellValue encoding issue!\n\n` +
+                `Most common encoding mistakes:\n` +
+                `1. ChoiceList: Missing "L" prefix\n` +
+                `   ❌ Wrong: ["option1", "option2"]\n` +
+                `   ✅ Right: ["L", "option1", "option2"]\n\n` +
+                `2. Date: Using string instead of encoded format\n` +
+                `   ❌ Wrong: "2024-01-15"\n` +
+                `   ✅ Right: ["d", 1705276800000]\n` +
+                `   💡 Use: Date.parse("2024-01-15")\n\n` +
+                `3. DateTime: Missing timezone\n` +
+                `   ❌ Wrong: 1705276800000\n` +
+                `   ✅ Right: ["D", 1705276800000, "UTC"]\n\n` +
+                `4. Reference: Using row number directly\n` +
+                `   ❌ Wrong: 123\n` +
+                `   ✅ Right: ["R", 123]\n\n` +
+                `📖 See grist_add_records tool description for complete encoding guide.\n` +
+                `📖 See docs/reference/grist-types.d.ts for all GristObjCode types.\n\n` +
+                `Original error: ${sanitizedMessage}`
+              )
+            }
+          }
+
+          return new Error(
+            `Grist server error (${status}). This is a temporary server issue. ` +
+              `Try again in a few moments. If problem persists, check https://status.getgrist.com`
+          )
+        case 400:
+          // Bad Request - Detect specific error types for better guidance
+          const errorLower = String(sanitizedMessage).toLowerCase()
+
+          // SQL syntax errors
+          if (path.includes('/sql')) {
+            return new Error(
+              `SQL syntax error: ${sanitizedMessage}\n\n` +
+              `Common SQL mistakes:\n` +
+              `1. Table names are case-sensitive - check exact spelling\n` +
+              `   💡 Use grist_get_tables to see all available tables\n\n` +
+              `2. Column names must match exactly\n` +
+              `   💡 Use grist_get_tables with detail_level="full_schema"\n\n` +
+              `3. String values need single quotes: WHERE Status = 'Active'\n\n` +
+              `4. Check JOIN syntax: LEFT JOIN TableName ON condition\n\n` +
+              `5. Parameterized queries ($1, $2) require Grist v1.1.0+\n` +
+              `   If not supported, embed values directly in SQL\n\n` +
+              `📖 See grist_query_sql tool description for SQL examples.`
+            )
+          }
+
+          // Validation errors (invalid data, missing required fields)
+          if (errorLower.includes('invalid') || errorLower.includes('required') || errorLower.includes('expected')) {
+            return new Error(
+              `Validation error: ${sanitizedMessage}\n\n` +
+              `Common causes:\n` +
+              `1. Missing required fields in request\n` +
+              `2. Invalid data type (string where number expected)\n` +
+              `3. Wrong CellValue encoding format\n` +
+              `   💡 See grist_add_records for complete encoding guide\n\n` +
+              `4. Invalid widget options\n` +
+              `   💡 See grist_manage_columns for widget options by type\n\n` +
+              `5. Invalid column or table ID\n` +
+              `   💡 Use grist_get_tables to see schema\n\n` +
+              `📖 Check tool description for parameter requirements.`
+            )
+          }
+
+          // Generic 400 error
+          return new Error(
+            `Bad request (400): ${sanitizedMessage}\n\n` +
+            `The request was rejected by Grist. Common issues:\n` +
+            `- Invalid parameter format\n` +
+            `- Missing required fields\n` +
+            `- Malformed data structure\n\n` +
+            `Check the tool description for correct parameter formats.`
+          )
+
         case 502:
         case 503:
         case 504:

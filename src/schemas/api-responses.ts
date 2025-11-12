@@ -8,21 +8,80 @@
 
 import { z } from 'zod'
 import { ColumnTypeSchema } from './common.js'
+import { WidgetOptionsSchema, WidgetOptionsStringSchema } from './widget-options.js'
 
 // ============================================================================
-// Cell Value Schema
+// Cell Value Schema (LLM-Optimized with Encoding Validation)
 // ============================================================================
 
 /**
- * Schema for Grist cell values
- * Cells can contain primitives or encoded values (arrays starting with type string)
+ * Schema for Grist cell values with encoding validation
+ *
+ * Validates both primitive values and encoded complex types.
+ * Encoded types use Grist's array format: [code, ...data]
+ *
+ * IMPORTANT: The .describe() on each variant becomes visible to LLMs
+ * in the JSON Schema, providing inline documentation for correct encoding.
+ *
+ * @see docs/reference/grist-types.d.ts for complete GristObjCode specification
  */
 export const CellValueSchema = z.union([
-  z.null(),
-  z.string(),
-  z.number(),
-  z.boolean(),
-  z.tuple([z.string()]).rest(z.unknown()) // Encoded values like references
+  // Primitive values (used directly, no encoding needed)
+  z.null().describe('Null value (empty cell)'),
+  z.string().describe('Text value'),
+  z.number().describe('Numeric or Int value'),
+  z.boolean().describe('Boolean value (true/false)'),
+
+  // ChoiceList: ["L", item1, item2, ...]
+  z.tuple([z.literal('L')]).rest(z.union([z.string(), z.number(), z.boolean()]))
+    .describe(
+      'ChoiceList encoding: ["L", item1, item2, ...]. ' +
+      'Example: ["L", "VIP", "Active", "Premium"]. ' +
+      'Common mistake: Missing "L" prefix causes 500 error!'
+    ),
+
+  // Date: ["d", timestamp]
+  z.tuple([z.literal('d'), z.number()])
+    .describe(
+      'Date encoding: ["d", timestamp_milliseconds]. ' +
+      'Example: ["d", 1705276800000]. ' +
+      'Get timestamp: Date.parse("2024-01-15") or Date.now()'
+    ),
+
+  // DateTime: ["D", timestamp, timezone]
+  z.tuple([z.literal('D'), z.number(), z.string()])
+    .describe(
+      'DateTime encoding: ["D", timestamp_ms, "timezone"]. ' +
+      'Example: ["D", 1705276800000, "UTC"] or ["D", 1705276800000, "America/New_York"]. ' +
+      'Timezone must be IANA timezone string'
+    ),
+
+  // Reference: ["R", row_id] (single reference)
+  z.tuple([z.literal('R'), z.number()])
+    .describe(
+      'Reference encoding: ["R", row_id]. ' +
+      'Example: ["R", 123] references row 123 in the linked table'
+    ),
+
+  // ReferenceList: ["r", [row_ids]] (multiple references)
+  z.tuple([z.literal('r'), z.array(z.number())])
+    .describe(
+      'ReferenceList encoding: ["r", [row_id1, row_id2, ...]]. ' +
+      'Example: ["r", [1, 2, 3]] references rows 1, 2, and 3'
+    ),
+
+  // Dict: ["O", {key: value}] (object storage)
+  z.tuple([z.literal('O'), z.record(z.unknown())])
+    .describe(
+      'Dict encoding: ["O", {key: value, ...}]. ' +
+      'Example: ["O", {"name": "John", "age": 30}]'
+    ),
+
+  // Other GristObjCode types (less common)
+  // Only accept valid GristObjCode characters, not random strings
+  // E=Exception, P=Pending, U=Unmarshallable, C=Censored, S=Skip, V=Versions, l=LookUp
+  z.tuple([z.enum(['E', 'P', 'U', 'C', 'S', 'V', 'l'])]).rest(z.unknown())
+    .describe('Other encoded values: Exception ["E", ...], Pending ["P"], Unmarshallable ["U"], Censored ["C"], Skip ["S"], LookUp ["l", ...]')
 ])
 
 // ============================================================================
@@ -104,7 +163,7 @@ export const TableFieldSchema = z.object({
   type: z.string(),
   isFormula: z.boolean(),
   formula: z.string().optional(),
-  widgetOptions: z.any().optional() // TODO: Create discriminated union for widget options
+  widgetOptions: WidgetOptionsStringSchema
 })
 
 /**
@@ -126,10 +185,14 @@ export const TableArraySchema = z.array(TableInfoSchema)
 
 /**
  * Single Grist record with ID and fields
+ * May include formula errors when formulas fail to evaluate
  */
 export const RecordSchema = z.object({
   id: z.number(),
-  fields: z.record(z.string(), CellValueSchema)
+  fields: z.record(z.string(), CellValueSchema),
+  errors: z.record(z.string(), z.string()).optional().describe(
+    'Formula evaluation errors by column ID. Example: {"TotalCost": "NameError"}'
+  )
 })
 
 /**
@@ -171,7 +234,7 @@ export const ColumnInfoSchema = z.object({
   label: z.string().optional(),
   isFormula: z.boolean().optional(),
   formula: z.string().optional(),
-  widgetOptions: z.any().optional()
+  widgetOptions: WidgetOptionsSchema.optional()
 })
 
 /**
@@ -183,7 +246,7 @@ export const ColumnDefinitionSchema = z.object({
   label: z.string().optional(),
   isFormula: z.boolean().optional(),
   formula: z.string().optional(),
-  widgetOptions: z.any().optional()
+  widgetOptions: WidgetOptionsSchema.optional()
 })
 
 // ============================================================================
@@ -230,10 +293,12 @@ export const ApplyRequestSchema = z.object({
 
 /**
  * Apply response schema
+ * retValues contains action-specific return values (e.g., array of record IDs for BulkAddRecord)
+ * Type varies by action, so z.any() is appropriate here
  */
 export const ApplyResponseSchema = z.object({
   actionNum: z.number(),
-  retValues: z.array(z.any())
+  retValues: z.array(z.any()) // Type varies by action (record IDs, counts, etc.)
 })
 
 // ============================================================================
@@ -283,10 +348,11 @@ export function createPaginatedSchema<T extends z.ZodTypeAny>(itemsSchema: T) {
 
 /**
  * Error response from Grist API
+ * details can contain any structured error information from the server
  */
 export const GristErrorSchema = z.object({
   error: z.string(),
-  details: z.any().optional()
+  details: z.any().optional() // Error details vary by error type
 })
 
 // ============================================================================

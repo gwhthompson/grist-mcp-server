@@ -38,8 +38,8 @@ export const GetWorkspacesSchema = z
       ),
     detail_level: DetailLevelWorkspaceSchema,
     response_format: ResponseFormatSchema,
-    ...PaginationSchema.shape
   })
+  .merge(PaginationSchema)
   .strict()
 
 export type GetWorkspacesInput = z.infer<typeof GetWorkspacesSchema>
@@ -177,8 +177,8 @@ export const GetDocumentsSchema = z
           '- detailed: + permissions, timestamps, urls (comprehensive)'
       ),
     response_format: ResponseFormatSchema,
-    ...PaginationSchema.shape
   })
+  .merge(PaginationSchema)
   .strict()
 
 export type GetDocumentsInput = z.infer<typeof GetDocumentsSchema>

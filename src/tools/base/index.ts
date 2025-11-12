@@ -8,7 +8,7 @@
 export { GristTool, type ToolInput, type ToolOutput } from './GristTool.js'
 export {
   PaginatedGristTool,
-  type PaginationMetadata,
   type PaginatedResponse,
-  type PaginatedToolItem
+  type PaginatedToolItem,
+  type PaginationMetadata
 } from './PaginatedGristTool.js'

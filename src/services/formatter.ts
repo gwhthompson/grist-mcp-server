@@ -9,7 +9,6 @@
 
 import { CHARACTER_LIMIT } from '../constants.js'
 import type { MCPToolResponse, ResponseFormat, TruncationInfo } from '../types.js'
-import type { ToolResponse } from '../types/advanced.js'
 
 /**
  * Format tool response with both text and structured content
@@ -136,66 +135,111 @@ function formatObjectAsMarkdown<T extends Record<string, unknown>>(obj: T): stri
 }
 
 /**
+ * Structured pagination data extracted from response
+ */
+interface PaginationData {
+  items?: unknown
+  total?: number
+  hasMore: boolean
+  nextOffset?: unknown
+  truncated: boolean
+  truncationReason?: string
+  suggestions?: unknown
+}
+
+/**
+ * Extracts pagination-related fields from response data
+ */
+function extractPaginationData(data: Record<string, unknown>): PaginationData {
+  return {
+    items: 'items' in data ? data.items : undefined,
+    total: 'total' in data && typeof data.total === 'number' ? data.total : undefined,
+    hasMore: 'has_more' in data ? Boolean(data.has_more) : false,
+    nextOffset: 'next_offset' in data ? data.next_offset : undefined,
+    truncated: 'truncated' in data ? Boolean(data.truncated) : false,
+    truncationReason:
+      'truncation_reason' in data && typeof data.truncation_reason === 'string'
+        ? data.truncation_reason
+        : undefined,
+    suggestions: 'suggestions' in data ? data.suggestions : undefined
+  }
+}
+
+/**
+ * Formats header line with item count
+ */
+function formatHeader(items: unknown, total: number | undefined): string {
+  const itemsLength = Array.isArray(items) ? items.length : 0
+
+  if (total !== undefined) {
+    return `# Results (${itemsLength} of ${total} total)`
+  }
+  return `# Results (${itemsLength} items)`
+}
+
+/**
+ * Formats pagination footer if more results available
+ */
+function formatPaginationFooter(hasMore: boolean, nextOffset: unknown): string[] {
+  if (!hasMore) {
+    return []
+  }
+
+  return ['', '---', '', `**More results available**. Use \`offset=${nextOffset}\` to continue.`]
+}
+
+/**
+ * Formats truncation warning with suggestions
+ */
+function formatTruncationWarning(
+  truncationReason: string | undefined,
+  suggestions: unknown
+): string[] {
+  const lines: string[] = [
+    '',
+    '---',
+    '',
+    '⚠️ **Response Truncated**',
+    '',
+    truncationReason || 'Response exceeded character limit'
+  ]
+
+  if (Array.isArray(suggestions) && suggestions.length > 0) {
+    lines.push('', '**Suggestions:**')
+    suggestions.forEach((suggestion) => {
+      if (typeof suggestion === 'string') {
+        lines.push(`- ${suggestion}`)
+      }
+    })
+  }
+
+  return lines
+}
+
+/**
  * Format paginated response with metadata
  * @template T - The type of paginated response data
  */
 function formatPaginatedResponse<T extends Record<string, unknown>>(data: T): string {
+  const pd = extractPaginationData(data)
   const lines: string[] = []
 
-  // Type-safe access with proper checking
-  const items = 'items' in data ? data.items : undefined
-  const total = 'total' in data ? data.total : undefined
-  const hasMore = 'has_more' in data ? data.has_more : false
-  const nextOffset = 'next_offset' in data ? data.next_offset : undefined
-  const truncated = 'truncated' in data ? data.truncated : false
-  const truncationReason = 'truncation_reason' in data ? data.truncation_reason : undefined
-  const suggestions = 'suggestions' in data ? data.suggestions : undefined
-
   // Header with count info
-  if (total !== undefined && typeof total === 'number') {
-    const itemsLength = Array.isArray(items) ? items.length : 0
-    lines.push(`# Results (${itemsLength} of ${total} total)`)
-  } else {
-    const itemsLength = Array.isArray(items) ? items.length : 0
-    lines.push(`# Results (${itemsLength} items)`)
-  }
-
-  lines.push('')
+  lines.push(formatHeader(pd.items, pd.total), '')
 
   // Items
-  if (Array.isArray(items) && items.length > 0) {
-    lines.push(formatArrayAsMarkdown(items))
+  if (Array.isArray(pd.items) && pd.items.length > 0) {
+    lines.push(formatArrayAsMarkdown(pd.items))
   } else {
     lines.push('No items found')
   }
 
-  // Pagination info
-  if (hasMore) {
-    lines.push('')
-    lines.push('---')
-    lines.push('')
-    lines.push(`**More results available**. Use \`offset=${nextOffset}\` to continue.`)
-  }
+  // Pagination footer
+  lines.push(...formatPaginationFooter(pd.hasMore, pd.nextOffset))
 
   // Truncation warning
-  if (truncated) {
-    lines.push('')
-    lines.push('---')
-    lines.push('')
-    lines.push('⚠️ **Response Truncated**')
-    lines.push('')
-    lines.push(
-      typeof truncationReason === 'string' ? truncationReason : 'Response exceeded character limit'
-    )
-    if (Array.isArray(suggestions) && suggestions.length > 0) {
-      lines.push('')
-      lines.push('**Suggestions:**')
-      suggestions.forEach((suggestion) => {
-        if (typeof suggestion === 'string') {
-          lines.push(`- ${suggestion}`)
-        }
-      })
-    }
+  if (pd.truncated) {
+    lines.push(...formatTruncationWarning(pd.truncationReason, pd.suggestions))
   }
 
   return lines.join('\n')

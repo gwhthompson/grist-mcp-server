@@ -7,7 +7,6 @@
  */
 
 import { z } from 'zod'
-import { ColumnTypeSchema } from './common.js'
 import { WidgetOptionsSchema, WidgetOptionsStringSchema } from './widget-options.js'
 
 // ============================================================================
@@ -27,61 +26,73 @@ import { WidgetOptionsSchema, WidgetOptionsStringSchema } from './widget-options
  */
 export const CellValueSchema = z.union([
   // Primitive values (used directly, no encoding needed)
-  z.null().describe('Null value (empty cell)'),
+  z
+    .null()
+    .describe('Null value (empty cell)'),
   z.string().describe('Text value'),
   z.number().describe('Numeric or Int value'),
   z.boolean().describe('Boolean value (true/false)'),
 
   // ChoiceList: ["L", item1, item2, ...]
-  z.tuple([z.literal('L')]).rest(z.union([z.string(), z.number(), z.boolean()]))
+  z
+    .tuple([z.literal('L')])
+    .rest(z.union([z.string(), z.number(), z.boolean()]))
     .describe(
       'ChoiceList encoding: ["L", item1, item2, ...]. ' +
-      'Example: ["L", "VIP", "Active", "Premium"]. ' +
-      'Common mistake: Missing "L" prefix causes 500 error!'
+        'Example: ["L", "VIP", "Active", "Premium"]. ' +
+        'Common mistake: Missing "L" prefix causes 500 error!'
     ),
 
   // Date: ["d", timestamp]
-  z.tuple([z.literal('d'), z.number()])
+  z
+    .tuple([z.literal('d'), z.number()])
     .describe(
       'Date encoding: ["d", timestamp_milliseconds]. ' +
-      'Example: ["d", 1705276800000]. ' +
-      'Get timestamp: Date.parse("2024-01-15") or Date.now()'
+        'Example: ["d", 1705276800000]. ' +
+        'Get timestamp: Date.parse("2024-01-15") or Date.now()'
     ),
 
   // DateTime: ["D", timestamp, timezone]
-  z.tuple([z.literal('D'), z.number(), z.string()])
+  z
+    .tuple([z.literal('D'), z.number(), z.string()])
     .describe(
       'DateTime encoding: ["D", timestamp_ms, "timezone"]. ' +
-      'Example: ["D", 1705276800000, "UTC"] or ["D", 1705276800000, "America/New_York"]. ' +
-      'Timezone must be IANA timezone string'
+        'Example: ["D", 1705276800000, "UTC"] or ["D", 1705276800000, "America/New_York"]. ' +
+        'Timezone must be IANA timezone string'
     ),
 
   // Reference: ["R", row_id] (single reference)
-  z.tuple([z.literal('R'), z.number()])
+  z
+    .tuple([z.literal('R'), z.number()])
     .describe(
       'Reference encoding: ["R", row_id]. ' +
-      'Example: ["R", 123] references row 123 in the linked table'
+        'Example: ["R", 123] references row 123 in the linked table'
     ),
 
   // ReferenceList: ["r", [row_ids]] (multiple references)
-  z.tuple([z.literal('r'), z.array(z.number())])
+  z
+    .tuple([z.literal('r'), z.array(z.number())])
     .describe(
       'ReferenceList encoding: ["r", [row_id1, row_id2, ...]]. ' +
-      'Example: ["r", [1, 2, 3]] references rows 1, 2, and 3'
+        'Example: ["r", [1, 2, 3]] references rows 1, 2, and 3'
     ),
 
   // Dict: ["O", {key: value}] (object storage)
-  z.tuple([z.literal('O'), z.record(z.unknown())])
+  z
+    .tuple([z.literal('O'), z.record(z.unknown())])
     .describe(
-      'Dict encoding: ["O", {key: value, ...}]. ' +
-      'Example: ["O", {"name": "John", "age": 30}]'
+      'Dict encoding: ["O", {key: value, ...}]. ' + 'Example: ["O", {"name": "John", "age": 30}]'
     ),
 
   // Other GristObjCode types (less common)
   // Only accept valid GristObjCode characters, not random strings
   // E=Exception, P=Pending, U=Unmarshallable, C=Censored, S=Skip, V=Versions, l=LookUp
-  z.tuple([z.enum(['E', 'P', 'U', 'C', 'S', 'V', 'l'])]).rest(z.unknown())
-    .describe('Other encoded values: Exception ["E", ...], Pending ["P"], Unmarshallable ["U"], Censored ["C"], Skip ["S"], LookUp ["l", ...]')
+  z
+    .tuple([z.enum(['E', 'P', 'U', 'C', 'S', 'V', 'l'])])
+    .rest(z.unknown())
+    .describe(
+      'Other encoded values: Exception ["E", ...], Pending ["P"], Unmarshallable ["U"], Censored ["C"], Skip ["S"], LookUp ["l", ...]'
+    )
 ])
 
 // ============================================================================
@@ -190,9 +201,10 @@ export const TableArraySchema = z.array(TableInfoSchema)
 export const RecordSchema = z.object({
   id: z.number(),
   fields: z.record(z.string(), CellValueSchema),
-  errors: z.record(z.string(), z.string()).optional().describe(
-    'Formula evaluation errors by column ID. Example: {"TotalCost": "NameError"}'
-  )
+  errors: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe('Formula evaluation errors by column ID. Example: {"TotalCost": "NameError"}')
 })
 
 /**
@@ -393,9 +405,7 @@ export function validateApiResponse<T extends z.ZodTypeAny>(
 export function safeValidate<T extends z.ZodTypeAny>(
   schema: T,
   data: unknown
-):
-  | { success: true; data: z.infer<T> }
-  | { success: false; error: z.ZodError } {
+): { success: true; data: z.infer<T> } | { success: false; error: z.ZodError } {
   const result = schema.safeParse(data)
 
   if (result.success) {

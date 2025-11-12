@@ -10,18 +10,17 @@
  * These tests run against a live Docker Grist instance to ensure 100% tool coverage.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach } from 'vitest'
-import {
-  createTestClient,
-  createFullTestContext,
-  cleanupTestContext,
-  addTestRecords
-} from './helpers/grist-api.js'
-import { ensureGristReady } from './helpers/docker.js'
-import * as tables from '../src/tools/tables.js'
-import * as documents from '../src/tools/documents.js'
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 import * as discovery from '../src/tools/discovery.js'
-import type { GristClient } from '../src/services/grist-client.js'
+import * as documents from '../src/tools/documents.js'
+import * as tables from '../src/tools/tables.js'
+import { ensureGristReady } from './helpers/docker.js'
+import {
+  addTestRecords,
+  cleanupTestContext,
+  createFullTestContext,
+  createTestClient
+} from './helpers/grist-api.js'
 
 describe('Remaining Tools - Complete Integration Tests', () => {
   const client = createTestClient()
@@ -76,7 +75,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
         response_format: 'json'
       })
 
-      const tableIds = tablesResult.structuredContent.items.map((t: any) => t.id)
+      const tableIds = tablesResult.structuredContent.items.map((t: { id: string }) => t.id)
       expect(tableIds).toContain('NewTestTable')
     })
 
@@ -169,7 +168,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
         response_format: 'json'
       })
 
-      const tableIds = tablesResult.structuredContent.items.map((t: any) => t.id)
+      const tableIds = tablesResult.structuredContent.items.map((t: { id: string }) => t.id)
       expect(tableIds).toContain(newName)
       expect(tableIds).not.toContain(testTableId) // Old name should not exist
     })
@@ -210,7 +209,9 @@ describe('Remaining Tools - Complete Integration Tests', () => {
       })
 
       expect(result.isError).toBe(true)
-      expect(result.content[0].text).toMatch(/Invalid TableId format|Invalid value for parameter|validation/i)
+      expect(result.content[0].text).toMatch(
+        /Invalid TableId format|Invalid value for parameter|validation/i
+      )
     })
   })
 
@@ -258,7 +259,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
         response_format: 'json'
       })
 
-      const tableIds = tablesResult.structuredContent.items.map((t: any) => t.id)
+      const tableIds = tablesResult.structuredContent.items.map((t: { id: string }) => t.id)
       expect(tableIds).not.toContain(testTableId)
     })
 
@@ -299,7 +300,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
   })
 
   describe('grist_create_document', () => {
-    let createdDocIds: string[] = []
+    const createdDocIds: string[] = []
 
     afterAll(async () => {
       // Clean up all created documents
@@ -318,7 +319,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
 
       const result = await documents.createDocument(client, {
         name: docName,
-        workspaceId: context.workspaceId,  // WorkspaceId is a number (branded type)
+        workspaceId: context.workspaceId, // WorkspaceId is a number (branded type)
         response_format: 'json'
       })
 
@@ -330,7 +331,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
       expect(result.structuredContent.success).toBe(true)
       expect(result.structuredContent.document_id).toBeDefined()
       expect(result.structuredContent.document_name).toBe(docName)
-      expect(result.structuredContent.workspace_id).toBe(context.workspaceId)  // Number, not string
+      expect(result.structuredContent.workspace_id).toBe(context.workspaceId) // Number, not string
       expect(result.structuredContent.forked_from).toBeNull()
       expect(result.structuredContent.message).toContain('Successfully created new document')
       expect(result.structuredContent.url).toContain('/doc/')
@@ -339,12 +340,12 @@ describe('Remaining Tools - Complete Integration Tests', () => {
 
       // Verify the document exists by listing documents
       const docsResult = await discovery.getDocuments(client, {
-        workspaceId: context.workspaceId,  // WorkspaceId is a number
+        workspaceId: context.workspaceId, // WorkspaceId is a number
         detail_level: 'summary',
         response_format: 'json'
       })
 
-      const docIds = docsResult.structuredContent.items.map((d: any) => d.id)
+      const docIds = docsResult.structuredContent.items.map((d: { id: string }) => d.id)
       expect(docIds).toContain(result.structuredContent.document_id)
     })
 
@@ -353,7 +354,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
 
       const result = await documents.createDocument(client, {
         name: forkedDocName,
-        workspaceId: context.workspaceId,  // WorkspaceId is a number (branded type)
+        workspaceId: context.workspaceId, // WorkspaceId is a number (branded type)
         forkFromDocId: context.docId, // Fork from our test document
         response_format: 'json'
       })
@@ -478,7 +479,9 @@ describe('Remaining Tools - Complete Integration Tests', () => {
           response_format: 'json'
         })
 
-        const tableIdsBeforeDelete = tablesBeforeDelete.structuredContent.items.map((t: any) => t.id)
+        const tableIdsBeforeDelete = tablesBeforeDelete.structuredContent.items.map(
+          (t: { id: string }) => t.id
+        )
         expect(tableIdsBeforeDelete).toContain('RenamedTable')
 
         // 5. Delete table
@@ -497,7 +500,9 @@ describe('Remaining Tools - Complete Integration Tests', () => {
           response_format: 'json'
         })
 
-        const tableIdsAfterDelete = tablesAfterDelete.structuredContent.items.map((t: any) => t.id)
+        const tableIdsAfterDelete = tablesAfterDelete.structuredContent.items.map(
+          (t: { id: string }) => t.id
+        )
         expect(tableIdsAfterDelete).not.toContain('RenamedTable')
       } finally {
         // Cleanup: Delete the document

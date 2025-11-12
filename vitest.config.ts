@@ -1,5 +1,5 @@
-import { defineConfig } from 'vitest/config';
-import { resolve } from 'path';
+import { resolve } from 'node:path'
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
@@ -35,10 +35,7 @@ export default defineConfig({
     },
 
     // Test file patterns
-    include: [
-      'tests/**/*.test.ts',
-      'tests/**/*.spec.ts'
-    ],
+    include: ['tests/**/*.test.ts', 'tests/**/*.spec.ts'],
     exclude: [
       'node_modules',
       'dist',
@@ -76,4 +73,4 @@ export default defineConfig({
       '@tests': resolve(__dirname, './tests')
     }
   }
-});
+})

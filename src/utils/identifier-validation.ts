@@ -5,7 +5,11 @@
  * Additionally, Grist has conventions (tables start uppercase) and reserved prefixes.
  */
 
-import { PYTHON_KEYWORDS, GRIST_RESERVED_PREFIXES, getPythonKeywordError } from '../constants/python-keywords.js'
+import {
+  GRIST_RESERVED_PREFIXES,
+  getPythonKeywordError,
+  PYTHON_KEYWORDS
+} from '../constants/python-keywords.js'
 
 /**
  * Validate column identifier
@@ -50,7 +54,7 @@ export const isValidColId = (colId: string, existingColIds?: string[]): boolean 
   // Check case-insensitive uniqueness
   if (existingColIds) {
     const upper = colId.toUpperCase()
-    if (existingColIds.some(id => id.toUpperCase() === upper)) {
+    if (existingColIds.some((id) => id.toUpperCase() === upper)) {
       return false
     }
   }
@@ -92,7 +96,7 @@ export const isValidTableId = (tableId: string, existingTableIds?: string[]): bo
   // Check case-insensitive uniqueness
   if (existingTableIds) {
     const upper = tableId.toUpperCase()
-    if (existingTableIds.some(id => id.toUpperCase() === upper)) {
+    if (existingTableIds.some((id) => id.toUpperCase() === upper)) {
       return false
     }
   }
@@ -140,7 +144,7 @@ export function getColIdError(colId: string, existingColIds?: string[]): string 
   // Check case-insensitive duplicates
   if (existingColIds) {
     const upper = colId.toUpperCase()
-    const duplicate = existingColIds.find(id => id.toUpperCase() === upper && id !== colId)
+    const duplicate = existingColIds.find((id) => id.toUpperCase() === upper && id !== colId)
     if (duplicate) {
       return `Column ID "${colId}" conflicts with existing column "${duplicate}" (case-insensitive match). Column IDs must be unique ignoring case.`
     }
@@ -194,7 +198,7 @@ export function getTableIdError(tableId: string, existingTableIds?: string[]): s
   // Check case-insensitive duplicates
   if (existingTableIds) {
     const upper = tableId.toUpperCase()
-    const duplicate = existingTableIds.find(id => id.toUpperCase() === upper && id !== tableId)
+    const duplicate = existingTableIds.find((id) => id.toUpperCase() === upper && id !== tableId)
     if (duplicate) {
       return `Table ID "${tableId}" conflicts with existing table "${duplicate}" (case-insensitive match). Table IDs must be unique ignoring case.`
     }

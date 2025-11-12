@@ -5,18 +5,18 @@
  * Follows Single Responsibility Principle
  */
 
-import { isGristError } from '../../errors/index.js'
-import { RETRY_CONFIG } from '../../constants.js'
 import axios from 'axios'
+import { RETRY_CONFIG } from '../../constants.js'
+import { isGristError } from '../../errors/index.js'
 
 /**
  * Retry configuration
  */
 export interface RetryConfig {
-  maxRetries: number
-  baseDelayMs: number
-  maxDelayMs: number
-  retryableStatuses: number[]
+  readonly maxRetries: number
+  readonly baseDelayMs: number
+  readonly maxDelayMs: number
+  readonly retryableStatuses: readonly number[]
 }
 
 /**
@@ -37,9 +37,7 @@ export interface RetryService {
  * Exponential backoff retry service implementation
  */
 export class ExponentialBackoffRetryService implements RetryService {
-  constructor(
-    private readonly config: RetryConfig = RETRY_CONFIG as any
-  ) {}
+  constructor(private readonly config: RetryConfig = RETRY_CONFIG) {}
 
   async execute<T>(fn: () => Promise<T>, context: string): Promise<T> {
     for (let attempt = 0; attempt <= this.config.maxRetries; attempt++) {
@@ -62,7 +60,7 @@ export class ExponentialBackoffRetryService implements RetryService {
         // Log retry attempt (stderr for visibility)
         console.error(
           `[RETRY] Attempt ${attempt + 1}/${this.config.maxRetries} failed for ${context}, ` +
-          `retrying in ${delay}ms...`
+            `retrying in ${delay}ms...`
         )
 
         await this.sleep(delay)
@@ -90,10 +88,12 @@ export class ExponentialBackoffRetryService implements RetryService {
     // Network errors are retryable
     if (error instanceof Error) {
       const message = error.message.toLowerCase()
-      return message.includes('network') ||
-             message.includes('timeout') ||
-             message.includes('econnreset') ||
-             message.includes('enotfound')
+      return (
+        message.includes('network') ||
+        message.includes('timeout') ||
+        message.includes('econnreset') ||
+        message.includes('enotfound')
+      )
     }
 
     return false
@@ -103,8 +103,8 @@ export class ExponentialBackoffRetryService implements RetryService {
    * Calculate delay with exponential backoff and jitter
    */
   private calculateDelay(attempt: number): number {
-    const exponential = this.config.baseDelayMs * Math.pow(2, attempt)
-    const jitter = Math.random() * 0.3 * exponential  // Up to 30% jitter
+    const exponential = this.config.baseDelayMs * 2 ** attempt
+    const jitter = Math.random() * 0.3 * exponential // Up to 30% jitter
     const delay = exponential + jitter
     return Math.min(delay, this.config.maxDelayMs)
   }
@@ -113,6 +113,6 @@ export class ExponentialBackoffRetryService implements RetryService {
    * Sleep for specified milliseconds
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 }

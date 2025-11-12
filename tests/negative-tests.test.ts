@@ -19,19 +19,17 @@
  * E. Column Type Conversion (2 tests)
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { manageColumns } from '../src/tools/columns.js'
+import type { DocId, TableId } from '../src/types/advanced.js'
+import { ensureGristReady } from './helpers/docker.js'
 import {
-  createTestClient,
-  createFullTestContext,
-  cleanupTestContext,
   addTestRecords,
+  cleanupTestContext,
+  createFullTestContext,
+  createTestClient,
   createTestTable
 } from './helpers/grist-api.js'
-import { ensureGristReady } from './helpers/docker.js'
-import { manageColumns } from '../src/tools/columns.js'
-import { addRecords, updateRecords } from '../src/tools/records.js'
-import type { DocId, TableId } from '../src/types/advanced.js'
-import type { GristClient } from '../src/services/grist-client.js'
 
 describe('Negative Tests - Validation & Error Detection', () => {
   const client = createTestClient()
@@ -45,9 +43,7 @@ describe('Negative Tests - Validation & Error Detection', () => {
     context = await createFullTestContext(client, {
       docName: 'Negative Test Doc',
       tableName: 'TestTable',
-      columns: [
-        { id: 'TestColumn', fields: { type: 'Text', label: 'Test Column' } }
-      ]
+      columns: [{ id: 'TestColumn', fields: { type: 'Text', label: 'Test Column' } }]
     })
 
     docId = context.docId
@@ -64,19 +60,19 @@ describe('Negative Tests - Validation & Error Detection', () => {
    * Helper to get column information
    */
   async function getColumnInfo(tableId: TableId, colId: string) {
-    const response = await client.get<{ columns: any[] }>(
-      `/docs/${docId}/tables/${tableId}/columns`
-    )
-    return response.columns.find((c: any) => c.id === colId)
+    const response = await client.get<{
+      columns: Array<{ id: string; fields?: Record<string, unknown> }>
+    }>(`/docs/${docId}/tables/${tableId}/columns`)
+    return response.columns.find((c) => c.id === colId)
   }
 
   /**
    * Helper to get all records from a table
    */
   async function getRecords(tableId: TableId) {
-    const response = await client.get<{ records: Array<{ id: number; fields: any }> }>(
-      `/docs/${docId}/tables/${tableId}/records`
-    )
+    const response = await client.get<{
+      records: Array<{ id: number; fields: Record<string, CellValue> }>
+    }>(`/docs/${docId}/tables/${tableId}/records`)
     return response.records
   }
 
@@ -100,7 +96,7 @@ describe('Negative Tests - Validation & Error Detection', () => {
             colId: 'BadNumeric',
             type: 'Numeric',
             widgetOptions: {
-              numMode: 'invalid_mode' as any // Force invalid value
+              numMode: 'invalid_mode' as unknown as string // Force invalid value for testing
             }
           }
         ],
@@ -260,14 +256,9 @@ describe('Negative Tests - Validation & Error Detection', () => {
     let choiceTableId: TableId
 
     beforeAll(async () => {
-      choiceTableId = await createTestTable(
-        client,
-        docId,
-        'ChoiceTest',
-        [
-          { id: 'Name', fields: { type: 'Text', label: 'Name' } }
-        ]
-      )
+      choiceTableId = await createTestTable(client, docId, 'ChoiceTest', [
+        { id: 'Name', fields: { type: 'Text', label: 'Name' } }
+      ])
     })
 
     it('B1. should document behavior when value not in choices list', async () => {
@@ -295,14 +286,14 @@ describe('Negative Tests - Validation & Error Detection', () => {
 
       // Try to insert a value not in choices list
       await addTestRecords(client, docId, choiceTableId, [
-        { fields: { Name: 'Test1', Status: 'A' } },     // Valid
-        { fields: { Name: 'Test2', Status: 'D' } }      // NOT in choices!
+        { fields: { Name: 'Test1', Status: 'A' } }, // Valid
+        { fields: { Name: 'Test2', Status: 'D' } } // NOT in choices!
       ])
 
       // Check what was actually stored
       const records = await getRecords(choiceTableId)
-      const test1 = records.find(r => r.fields.Name === 'Test1')
-      const test2 = records.find(r => r.fields.Name === 'Test2')
+      const test1 = records.find((r) => r.fields.Name === 'Test1')
+      const test2 = records.find((r) => r.fields.Name === 'Test2')
 
       expect(test1?.fields.Status).toBe('A')
 
@@ -339,10 +330,10 @@ describe('Negative Tests - Validation & Error Detection', () => {
               choices: ['Low', 'Medium', 'High'],
               choiceOptions: {
                 // Styling for choices that exist
-                'Low': { fillColor: '#00FF00' },
-                'High': { fillColor: '#FF0000' },
+                Low: { fillColor: '#00FF00' },
+                High: { fillColor: '#FF0000' },
                 // Styling for choice that DOESN'T exist!
-                'Critical': { fillColor: '#FF00FF' }
+                Critical: { fillColor: '#FF00FF' }
               }
             }
           }
@@ -359,11 +350,11 @@ describe('Negative Tests - Validation & Error Detection', () => {
       // Verify structure
       expect(widgetOptions.choices).toEqual(['Low', 'Medium', 'High'])
       expect(widgetOptions.choiceOptions).toBeDefined()
-      expect(widgetOptions.choiceOptions['Critical']).toBeDefined()
+      expect(widgetOptions.choiceOptions.Critical).toBeDefined()
 
       console.log('📝 Grist Choice behavior - choiceOptions for non-existent choice:')
       console.log(`  Choices: ${widgetOptions.choices}`)
-      console.log(`  choiceOptions has 'Critical': ${!!widgetOptions.choiceOptions['Critical']}`)
+      console.log(`  choiceOptions has 'Critical': ${!!widgetOptions.choiceOptions.Critical}`)
       console.log('  ✓ Grist ACCEPTS choiceOptions for non-existent choices (ignored in UI)')
     })
   })
@@ -463,7 +454,7 @@ describe('Negative Tests - Validation & Error Detection', () => {
       const targetId = targetIds[0]
 
       // Add source record referencing target
-      const sourceIds = await addTestRecords(client, docId, sourceTableId, [
+      const _sourceIds = await addTestRecords(client, docId, sourceTableId, [
         { fields: { Title: 'Source', TargetRef: targetId } }
       ])
 
@@ -472,9 +463,7 @@ describe('Negative Tests - Validation & Error Detection', () => {
       expect(records[0].fields.TargetRef).toBe(targetId)
 
       // Delete target record
-      await client.post(`/docs/${docId}/apply`, [
-        ['BulkRemoveRecord', targetTableId, [targetId]]
-      ])
+      await client.post(`/docs/${docId}/apply`, [['BulkRemoveRecord', targetTableId, [targetId]]])
 
       // Check what happens to the reference
       records = await getRecords(sourceTableId)
@@ -553,19 +542,18 @@ describe('Negative Tests - Validation & Error Detection', () => {
         console.log('⚠ Grist allows circular formulas (may show errors in cells)')
 
         // Add a record and check for formula errors
-        await addTestRecords(client, docId, formulaTableId, [
-          { fields: { Value: 10 } }
-        ])
+        await addTestRecords(client, docId, formulaTableId, [{ fields: { Value: 10 } }])
 
         const records = await getRecords(formulaTableId)
         console.log(`  A value: ${records[0]?.fields.A}`)
         console.log(`  B value: ${records[0]?.fields.B}`)
 
         // Circular formulas typically evaluate to error values
-        const hasError = records[0]?.fields.A === null ||
-                        records[0]?.fields.B === null ||
-                        typeof records[0]?.fields.A === 'string' ||
-                        typeof records[0]?.fields.B === 'string'
+        const hasError =
+          records[0]?.fields.A === null ||
+          records[0]?.fields.B === null ||
+          typeof records[0]?.fields.A === 'string' ||
+          typeof records[0]?.fields.B === 'string'
 
         if (hasError) {
           console.log('  ✓ Circular formulas result in error values')
@@ -586,7 +574,7 @@ describe('Negative Tests - Validation & Error Detection', () => {
             action: 'add',
             colId: 'BadSyntax',
             type: 'Numeric',
-            formula: '$Value + +',  // Invalid syntax!
+            formula: '$Value + +', // Invalid syntax!
             isFormula: true
           }
         ],
@@ -601,12 +589,10 @@ describe('Negative Tests - Validation & Error Detection', () => {
         console.log('⚠ Grist accepts invalid syntax (may error at evaluation time)')
 
         // Try to evaluate by adding a record
-        await addTestRecords(client, docId, formulaTableId, [
-          { fields: { Value: 42 } }
-        ])
+        await addTestRecords(client, docId, formulaTableId, [{ fields: { Value: 42 } }])
 
         const records = await getRecords(formulaTableId)
-        const formulaResult = records.find(r => r.fields.Value === 42)?.fields.BadSyntax
+        const formulaResult = records.find((r) => r.fields.Value === 42)?.fields.BadSyntax
 
         console.log(`  Formula result: ${formulaResult}`)
         expect(formulaResult).not.toBe(42) // Should be error or null
@@ -633,8 +619,8 @@ describe('Negative Tests - Validation & Error Detection', () => {
           {
             action: 'add',
             colId: 'MixedTypes',
-            type: 'Any',  // Use Any type since result is unknown
-            formula: '$TextCol + $NumCol',  // Type mismatch!
+            type: 'Any', // Use Any type since result is unknown
+            formula: '$TextCol + $NumCol', // Type mismatch!
             isFormula: true
           }
         ],
@@ -650,7 +636,7 @@ describe('Negative Tests - Validation & Error Detection', () => {
         // Add test data
         await addTestRecords(client, docId, typeTableId, [
           { fields: { TextCol: 'Hello', NumCol: 42 } },
-          { fields: { TextCol: '10', NumCol: 20 } }  // Numeric string
+          { fields: { TextCol: '10', NumCol: 20 } } // Numeric string
         ])
 
         const records = await getRecords(typeTableId)
@@ -663,9 +649,8 @@ describe('Negative Tests - Validation & Error Detection', () => {
 
         // Python may concatenate or error depending on types
         // '10' + 20 might work in Python, 'Hello' + 42 will error
-        const hasError = records.some(r =>
-          r.fields.MixedTypes === null ||
-          typeof r.fields.MixedTypes === 'object'
+        const hasError = records.some(
+          (r) => r.fields.MixedTypes === null || typeof r.fields.MixedTypes === 'object'
         )
 
         if (hasError) {
@@ -695,10 +680,10 @@ describe('Negative Tests - Validation & Error Detection', () => {
 
       // Add records with various text values
       await addTestRecords(client, docId, convTableId, [
-        { fields: { Data: '123' } },      // Numeric string
-        { fields: { Data: 'abc' } },      // Non-numeric
-        { fields: { Data: '45.67' } },    // Decimal string
-        { fields: { Data: '' } }          // Empty
+        { fields: { Data: '123' } }, // Numeric string
+        { fields: { Data: 'abc' } }, // Non-numeric
+        { fields: { Data: '45.67' } }, // Decimal string
+        { fields: { Data: '' } } // Empty
       ])
 
       // Verify initial data
@@ -736,8 +721,8 @@ describe('Negative Tests - Validation & Error Detection', () => {
         console.log(`    '' → ${records[3].fields.Data} (${typeof records[3].fields.Data})`)
 
         // Document conversion behavior
-        expect(records[0].fields.Data).toBe(123)  // Numeric string converts
-        expect(records[2].fields.Data).toBeCloseTo(45.67)  // Decimal converts
+        expect(records[0].fields.Data).toBe(123) // Numeric string converts
+        expect(records[2].fields.Data).toBeCloseTo(45.67) // Decimal converts
 
         // Non-numeric likely becomes 0 or null
         if (records[1].fields.Data === 0) {
@@ -761,7 +746,7 @@ describe('Negative Tests - Validation & Error Detection', () => {
         { id: 'Name', fields: { type: 'Text', label: 'Name' } }
       ])
 
-      const targetB = await createTestTable(client, docId, 'TargetB', [
+      const _targetB = await createTestTable(client, docId, 'TargetB', [
         { id: 'Title', fields: { type: 'Text', label: 'Title' } }
       ])
 
@@ -794,7 +779,7 @@ describe('Negative Tests - Validation & Error Detection', () => {
           {
             action: 'modify',
             colId: 'RefCol',
-            type: 'Ref:TargetB'  // Change reference target!
+            type: 'Ref:TargetB' // Change reference target!
           }
         ],
         response_format: 'json'

@@ -8,7 +8,7 @@
  * 4. Widget options documentation is present
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { CellValueSchema } from '../src/schemas/api-responses.js'
 
 describe('Improvement Validation - CellValueSchema', () => {
@@ -200,31 +200,31 @@ describe('Improvement Validation - Encoding Helpers', () => {
 describe('Improvement Validation - Tool Descriptions', () => {
   it('grist_add_records should include encoding guide', async () => {
     const { ALL_TOOLS } = await import('../src/registry/tool-definitions.js')
-    const addRecordsTool = ALL_TOOLS.find(t => t.name === 'grist_add_records')
+    const addRecordsTool = ALL_TOOLS.find((t) => t.name === 'grist_add_records')
 
     expect(addRecordsTool).toBeDefined()
-    expect(addRecordsTool!.description).toContain('CELLVALUE ENCODING')
-    expect(addRecordsTool!.description).toContain('ChoiceList')
-    expect(addRecordsTool!.description).toContain('["L",')
-    expect(addRecordsTool!.description).toContain('Date')
-    expect(addRecordsTool!.description).toContain('["d",')
-    expect(addRecordsTool!.description).toContain('DateTime')
-    expect(addRecordsTool!.description).toContain('["D",')
-    expect(addRecordsTool!.description).toContain('COMPLETE ENCODING EXAMPLE')
+    expect(addRecordsTool?.description).toContain('CELLVALUE ENCODING')
+    expect(addRecordsTool?.description).toContain('ChoiceList')
+    expect(addRecordsTool?.description).toContain('["L",')
+    expect(addRecordsTool?.description).toContain('Date')
+    expect(addRecordsTool?.description).toContain('["d",')
+    expect(addRecordsTool?.description).toContain('DateTime')
+    expect(addRecordsTool?.description).toContain('["D",')
+    expect(addRecordsTool?.description).toContain('COMPLETE ENCODING EXAMPLE')
   })
 
   it('grist_manage_columns should include widget options guide', async () => {
     const { ALL_TOOLS } = await import('../src/registry/tool-definitions.js')
-    const manageColumnsTool = ALL_TOOLS.find(t => t.name === 'grist_manage_columns')
+    const manageColumnsTool = ALL_TOOLS.find((t) => t.name === 'grist_manage_columns')
 
     expect(manageColumnsTool).toBeDefined()
-    expect(manageColumnsTool!.description).toContain('WIDGET OPTIONS BY COLUMN TYPE')
-    expect(manageColumnsTool!.description).toContain('Numeric/Int columns')
-    expect(manageColumnsTool!.description).toContain('numMode')
-    expect(manageColumnsTool!.description).toContain('currency')
-    expect(manageColumnsTool!.description).toContain('Choice/ChoiceList columns')
-    expect(manageColumnsTool!.description).toContain('choices')
-    expect(manageColumnsTool!.description).toContain('Reference')
-    expect(manageColumnsTool!.description).toContain('visibleCol')
+    expect(manageColumnsTool?.description).toContain('WIDGET OPTIONS BY COLUMN TYPE')
+    expect(manageColumnsTool?.description).toContain('Numeric/Int columns')
+    expect(manageColumnsTool?.description).toContain('numMode')
+    expect(manageColumnsTool?.description).toContain('currency')
+    expect(manageColumnsTool?.description).toContain('Choice/ChoiceList columns')
+    expect(manageColumnsTool?.description).toContain('choices')
+    expect(manageColumnsTool?.description).toContain('Reference')
+    expect(manageColumnsTool?.description).toContain('visibleCol')
   })
 })

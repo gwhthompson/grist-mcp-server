@@ -23,14 +23,14 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { DEFAULT_BASE_URL } from './constants.js'
-import { GristClient } from './services/grist-client.js'
 import { ALL_TOOLS } from './registry/tool-definitions.js'
 import {
-  registerToolsBatch,
   consoleLoggingStrategy,
-  validateToolNames,
-  getToolStatsByCategory
+  getToolStatsByCategory,
+  registerToolsBatch,
+  validateToolNames
 } from './registry/tool-registry.js'
+import { GristClient } from './services/grist-client.js'
 
 // ============================================================================
 // Type Definitions
@@ -67,12 +67,12 @@ function validateEnvironment(env: NodeJS.ProcessEnv): ServerConfig {
   if (!apiKey || apiKey.trim() === '') {
     throw new Error(
       'GRIST_API_KEY environment variable is required.\n\n' +
-      'To get your API key:\n' +
-      '  1. Visit: https://docs.getgrist.com/settings/keys\n' +
-      '  2. Generate a new API key\n' +
-      '  3. Set environment variable: export GRIST_API_KEY="your-key-here"\n\n' +
-      'For self-hosted Grist, also set GRIST_BASE_URL:\n' +
-      '  export GRIST_BASE_URL="https://your-grist-instance.com"'
+        'To get your API key:\n' +
+        '  1. Visit: https://docs.getgrist.com/settings/keys\n' +
+        '  2. Generate a new API key\n' +
+        '  3. Set environment variable: export GRIST_API_KEY="your-key-here"\n\n' +
+        'For self-hosted Grist, also set GRIST_BASE_URL:\n' +
+        '  export GRIST_BASE_URL="https://your-grist-instance.com"'
     )
   }
 
@@ -149,33 +149,25 @@ async function connectServer(server: McpServer): Promise<void> {
  * @returns Promise that resolves when all tools are registered
  * @throws Error if tool validation fails or critical registration errors occur
  */
-async function registerTools(
-  server: McpServer,
-  client: GristClient
-): Promise<void> {
+async function registerTools(server: McpServer, client: GristClient): Promise<void> {
   // Validate tool definitions before registration
   const validation = validateToolNames(ALL_TOOLS)
   if (!validation.valid) {
     throw new Error(
       `Tool registration failed: Duplicate tool names detected:\n` +
-      validation.duplicates.map((name) => `  - ${name}`).join('\n')
+        validation.duplicates.map((name) => `  - ${name}`).join('\n')
     )
   }
 
   // Get statistics for logging
-  const stats = getToolStatsByCategory(ALL_TOOLS)
+  const _stats = getToolStatsByCategory(ALL_TOOLS)
   const totalTools = ALL_TOOLS.length
 
   console.error(`Registering ${totalTools} Grist tools...`)
   console.error('')
 
   // Register all tools with console logging
-  const summary = await registerToolsBatch(
-    server,
-    client,
-    ALL_TOOLS,
-    consoleLoggingStrategy
-  )
+  const summary = await registerToolsBatch(server, client, ALL_TOOLS, consoleLoggingStrategy)
 
   // Check for registration failures
   if (summary.failed > 0) {
@@ -333,63 +325,59 @@ setupSignalHandlers()
  * create Grist records with proper CellValue encoding.
  */
 export {
-  // Encoding helpers
-  createList,
+  createCensored,
   createDate,
   createDateTime,
+  createDict,
+  createException,
+  // Encoding helpers
+  createList,
+  createPending,
   createReference,
   createReferenceList,
-  createDict,
-  createCensored,
-  createException,
-  createPending,
   createUnmarshallable,
-
-  // Type guards
-  isList,
-  isDate,
-  isDateTime,
-  isReference,
-  isReferenceList,
-  isDict,
-  isCensored,
-  isException,
-  isPending,
-  isUnmarshallable,
-  isPrimitive,
-
+  extractDate,
+  extractDateTime,
+  extractDict,
   // Extractors
   extractListItems,
-  extractDateTime,
-  extractDate,
   extractReference,
   extractReferenceList,
-  extractDict,
-
-  // Utilities
-  validateCellValue,
-  getCellValueType,
-  SAMPLE_CELL_VALUES,
-
   // GristObjCode enum
-  GristObjCode
+  GristObjCode,
+  getCellValueType,
+  isCensored,
+  isDate,
+  isDateTime,
+  isDict,
+  isException,
+  // Type guards
+  isList,
+  isPending,
+  isPrimitive,
+  isReference,
+  isReferenceList,
+  isUnmarshallable,
+  SAMPLE_CELL_VALUES,
+  // Utilities
+  validateCellValue
 } from './encoding/cell-value-helpers.js'
 
 // Export branded ID types (simple, useful for developers)
 export {
-  toDocId,
-  toTableId,
-  toWorkspaceId,
-  toRowId,
-  toColId,
-  toOrgId,
+  type ColId,
+  type DocId,
+  fromBranded,
+  type OrgId,
+  type RowId,
   safeToDocId,
   safeToTableId,
-  fromBranded,
-  type DocId,
   type TableId,
-  type WorkspaceId,
-  type RowId,
-  type ColId,
-  type OrgId
+  toColId,
+  toDocId,
+  toOrgId,
+  toRowId,
+  toTableId,
+  toWorkspaceId,
+  type WorkspaceId
 } from './types/advanced.js'

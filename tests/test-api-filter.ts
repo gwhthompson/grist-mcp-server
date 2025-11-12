@@ -20,8 +20,9 @@ async function testDirectAPI() {
       params: { limit: 2 }
     })
     console.log('✅ Success:', r1.data.records.length, 'records\n')
-  } catch (e: any) {
-    console.log('❌ Failed:', e.response?.status, e.message, '\n')
+  } catch (e: unknown) {
+    const error = e as { response?: { status: number }; message: string }
+    console.log('❌ Failed:', error.response?.status, error.message, '\n')
   }
 
   console.log('Test 2: Filter as JSON STRING')
@@ -33,8 +34,9 @@ async function testDirectAPI() {
       }
     })
     console.log('✅ Success:', r2.data.records.length, 'records\n')
-  } catch (e: any) {
-    console.log('❌ Failed:', e.response?.status, e.message, '\n')
+  } catch (e: unknown) {
+    const error = e as { response?: { status: number }; message: string }
+    console.log('❌ Failed:', error.response?.status, error.message, '\n')
   }
 
   console.log('Test 3: Filter as URL-encoded JSON')
@@ -43,8 +45,9 @@ async function testDirectAPI() {
       `/docs/${docId}/tables/Contacts/records?limit=2&filter=${encodeURIComponent(JSON.stringify({ Status: 'Active' }))}`
     )
     console.log('✅ Success:', r3.data.records.length, 'records\n')
-  } catch (e: any) {
-    console.log('❌ Failed:', e.response?.status, e.message, '\n')
+  } catch (e: unknown) {
+    const error = e as { response?: { status: number }; message: string }
+    console.log('❌ Failed:', error.response?.status, error.message, '\n')
   }
 
   console.log('Test 4: Check Grist docs for correct format')

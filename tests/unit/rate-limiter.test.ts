@@ -8,7 +8,7 @@
  * - Error handling
  */
 
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { RateLimiter } from '../../src/utils/rate-limiter.js'
 
 describe('RateLimiter', () => {
@@ -53,7 +53,7 @@ describe('RateLimiter', () => {
       const task = async () => {
         concurrent++
         maxObserved = Math.max(maxObserved, concurrent)
-        await new Promise(resolve => setTimeout(resolve, 50))
+        await new Promise((resolve) => setTimeout(resolve, 50))
         concurrent--
       }
 
@@ -88,7 +88,7 @@ describe('RateLimiter', () => {
       // First task runs immediately but takes time
       const promise1 = limiter.schedule(async () => {
         executionOrder.push(1)
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise((resolve) => setTimeout(resolve, 100))
       })
 
       // Second task should be queued
@@ -117,11 +117,7 @@ describe('RateLimiter', () => {
       }
 
       // Schedule 3 tasks
-      await Promise.all([
-        limiter.schedule(task),
-        limiter.schedule(task),
-        limiter.schedule(task)
-      ])
+      await Promise.all([limiter.schedule(task), limiter.schedule(task), limiter.schedule(task)])
 
       // Check time between starts
       for (let i = 1; i < startTimes.length; i++) {
@@ -163,7 +159,7 @@ describe('RateLimiter', () => {
       // Block with first slow task
       const promise1 = limiter.schedule(async () => {
         executionOrder.push(1)
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise((resolve) => setTimeout(resolve, 100))
       })
 
       // Queue remaining tasks
@@ -184,7 +180,7 @@ describe('RateLimiter', () => {
 
       // Block with first task
       const promise1 = limiter.schedule(async () => {
-        await new Promise(resolve => setTimeout(resolve, 200))
+        await new Promise((resolve) => setTimeout(resolve, 200))
       })
 
       // Queue more tasks
@@ -192,7 +188,7 @@ describe('RateLimiter', () => {
       const promise3 = limiter.schedule(async () => {})
 
       // Check stats while tasks are queued
-      await new Promise(resolve => setTimeout(resolve, 50))
+      await new Promise((resolve) => setTimeout(resolve, 50))
       const stats = limiter.getStats()
 
       expect(stats.activeCount).toBe(1)
@@ -215,7 +211,7 @@ describe('RateLimiter', () => {
 
       // Block with first task
       const promise1 = limiter.schedule(async () => {
-        await new Promise(resolve => setTimeout(resolve, 200))
+        await new Promise((resolve) => setTimeout(resolve, 200))
       })
 
       // Queue tasks that will be cleared
@@ -223,7 +219,7 @@ describe('RateLimiter', () => {
       const promise3 = limiter.schedule(async () => 'task3')
 
       // Clear queue while first task is still running
-      await new Promise(resolve => setTimeout(resolve, 50))
+      await new Promise((resolve) => setTimeout(resolve, 50))
       limiter.clearQueue()
 
       // First task should complete
@@ -350,7 +346,7 @@ describe('RateLimiter', () => {
 
       // Start a task
       const promise = limiter.schedule(async () => {
-        await new Promise(resolve => setTimeout(resolve, 100))
+        await new Promise((resolve) => setTimeout(resolve, 100))
         taskCompleted = true
       })
 
@@ -371,7 +367,7 @@ describe('RateLimiter', () => {
 
       // Start multiple tasks
       limiter.schedule(async () => {
-        await new Promise(resolve => setTimeout(resolve, 50))
+        await new Promise((resolve) => setTimeout(resolve, 50))
         executionOrder.push(1)
       })
       limiter.schedule(async () => {
@@ -405,9 +401,7 @@ describe('RateLimiter', () => {
         minTimeBetweenMs: 0
       })
 
-      const tasks = Array.from({ length: 100 }, (_, i) =>
-        limiter.schedule(async () => i)
-      )
+      const tasks = Array.from({ length: 100 }, (_, i) => limiter.schedule(async () => i))
 
       const results = await Promise.all(tasks)
       expect(results).toHaveLength(100)
@@ -433,7 +427,7 @@ describe('RateLimiter', () => {
       const results = await Promise.all(
         durations.map((duration, i) =>
           limiter.schedule(async () => {
-            await new Promise(resolve => setTimeout(resolve, duration))
+            await new Promise((resolve) => setTimeout(resolve, duration))
             return i
           })
         )
@@ -453,9 +447,7 @@ describe('RateLimiter', () => {
       const startTime = Date.now()
       const count = 1000
 
-      await Promise.all(
-        Array.from({ length: count }, () => limiter.schedule(async () => {}))
-      )
+      await Promise.all(Array.from({ length: count }, () => limiter.schedule(async () => {})))
 
       const elapsed = Date.now() - startTime
       // Should complete 1000 no-op tasks in reasonable time

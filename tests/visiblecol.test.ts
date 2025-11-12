@@ -8,16 +8,44 @@
  * 4. Both Ref and RefList column types
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
-import {
-  createTestClient,
-  createFullTestContext,
-  cleanupTestContext,
-  createTestTable
-} from './helpers/grist-api.js'
-import { ensureGristReady } from './helpers/docker.js'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { manageColumns } from '../src/tools/columns.js'
 import type { DocId, TableId } from '../src/types/advanced.js'
+import { ensureGristReady } from './helpers/docker.js'
+import {
+  cleanupTestContext,
+  createFullTestContext,
+  createTestClient,
+  createTestTable
+} from './helpers/grist-api.js'
+
+// Type for Grist API responses
+interface ColumnMetadata {
+  id: string
+  fields: {
+    widgetOptions?: string
+    type?: string
+    label?: string
+    isFormula?: boolean
+    formula?: string
+    visibleCol?: number
+    colId?: string
+    [key: string]: unknown
+  }
+}
+
+interface ColumnsResponse {
+  columns: ColumnMetadata[]
+}
+
+interface RecordData {
+  id: number
+  fields: Record<string, unknown>
+}
+
+interface RecordsResponse {
+  records: RecordData[]
+}
 
 describe('visibleCol - Column Name Resolution', () => {
   const client = createTestClient()
@@ -65,11 +93,9 @@ describe('visibleCol - Column Name Resolution', () => {
   /**
    * Helper to get column information including widgetOptions
    */
-  async function getColumnInfo(tableId: TableId, colId: string) {
-    const response = await client.get<{ columns: any[] }>(
-      `/docs/${docId}/tables/${tableId}/columns`
-    )
-    const column = response.columns.find((c: any) => c.id === colId)
+  async function getColumnInfo(tableId: TableId, colId: string): Promise<ColumnMetadata> {
+    const response = await client.get<ColumnsResponse>(`/docs/${docId}/tables/${tableId}/columns`)
+    const column = response.columns.find((c) => c.id === colId)
     if (!column) {
       throw new Error(`Column ${colId} not found in table ${tableId}`)
     }
@@ -87,22 +113,23 @@ describe('visibleCol - Column Name Resolution', () => {
   /**
    * Helper to add test records to a table
    */
-  async function addRecords(tableId: TableId, records: Array<{ fields: any }>): Promise<number[]> {
+  async function addRecords(
+    tableId: TableId,
+    records: Array<{ fields: Record<string, unknown> }>
+  ): Promise<number[]> {
     const response = await client.post<{ records: Array<{ id: number }> }>(
       `/docs/${docId}/tables/${tableId}/records`,
       { records }
     )
     // API returns array of objects with id property
-    return response.records.map(r => r.id)
+    return response.records.map((r) => r.id)
   }
 
   /**
    * Helper to get records from a table
    */
-  async function getRecords(tableId: TableId) {
-    const response = await client.get<{ records: Array<{ id: number; fields: any }> }>(
-      `/docs/${docId}/tables/${tableId}/records`
-    )
+  async function getRecords(tableId: TableId): Promise<RecordData[]> {
+    const response = await client.get<RecordsResponse>(`/docs/${docId}/tables/${tableId}/records`)
     return response.records
   }
 
@@ -110,7 +137,7 @@ describe('visibleCol - Column Name Resolution', () => {
    * Helper to get the display column name for a reference column
    * Display columns are auto-generated helper columns with formula like $RefCol.VisibleCol
    */
-  async function getDisplayColumnName(tableId: TableId, refColId: string): Promise<string> {
+  async function getDisplayColumnName(_tableId: TableId, refColId: string): Promise<string> {
     // Query _grist_Tables_column to get the displayCol ID
     const metaResponse = await client.post(`/docs/${docId}/sql`, {
       sql: 'SELECT displayCol FROM _grist_Tables_column WHERE colId = ?',
@@ -139,7 +166,7 @@ describe('visibleCol - Column Name Resolution', () => {
     tableId: TableId,
     refColId: string,
     recordId: number
-  ): Promise<any> {
+  ): Promise<CellValue> {
     const displayColName = await getDisplayColumnName(tableId, refColId)
 
     const response = await client.post(`/docs/${docId}/sql`, {
@@ -389,7 +416,9 @@ describe('visibleCol - Column Name Resolution', () => {
 
       // CRITICAL: displayCol should be created for RefList columns too
       expect(record.displayCol).toBeGreaterThan(0)
-      console.log(`✓ displayCol created: ${record.displayCol} (helper column for Reviewers RefList)`)
+      console.log(
+        `✓ displayCol created: ${record.displayCol} (helper column for Reviewers RefList)`
+      )
     })
   })
 
@@ -444,7 +473,9 @@ describe('visibleCol - Column Name Resolution', () => {
       expect(record.colId).toBe('Lead')
       // CRITICAL: displayCol should still be set after modification
       expect(record.displayCol).toBeGreaterThan(0)
-      console.log(`✓ displayCol updated: ${record.displayCol} (helper column for Lead after modify)`)
+      console.log(
+        `✓ displayCol updated: ${record.displayCol} (helper column for Lead after modify)`
+      )
     })
 
     it('should fail if modifying visibleCol without providing type', async () => {
@@ -564,15 +595,15 @@ describe('visibleCol - Column Name Resolution', () => {
 
       // SQL VALIDATION: Query all three columns and verify database state
       const sqlResponse = await client.post(`/docs/${docId}/sql`, {
-        sql: "SELECT colId, type, visibleCol FROM _grist_Tables_column WHERE colId IN (?, ?, ?) ORDER BY colId",
+        sql: 'SELECT colId, type, visibleCol FROM _grist_Tables_column WHERE colId IN (?, ?, ?) ORDER BY colId',
         args: ['Owner', 'Sponsor', 'TeamMembers']
       })
 
       expect(sqlResponse.records).toHaveLength(3)
 
-      const ownerRecord = sqlResponse.records.find((r: any) => r.fields.colId === 'Owner')
-      const sponsorRecord = sqlResponse.records.find((r: any) => r.fields.colId === 'Sponsor')
-      const teamRecord = sqlResponse.records.find((r: any) => r.fields.colId === 'TeamMembers')
+      const ownerRecord = sqlResponse.records.find((r) => r.fields.colId === 'Owner')
+      const sponsorRecord = sqlResponse.records.find((r) => r.fields.colId === 'Sponsor')
+      const teamRecord = sqlResponse.records.find((r) => r.fields.colId === 'TeamMembers')
 
       expect(ownerRecord.fields.colId).toBe('Owner')
       expect(sponsorRecord.fields.colId).toBe('Sponsor')
@@ -610,7 +641,7 @@ describe('visibleCol - Column Name Resolution', () => {
         .post<{ tables: Array<{ id: string }> }>(`/docs/${docId}/tables`, {
           tables: [{ id: 'DisplayTest1', columns: [{ id: 'Name', fields: { type: 'Text' } }] }]
         })
-        .then(r => r.tables[0].id as TableId)
+        .then((r) => r.tables[0].id as TableId)
 
       // Create Manager reference column with visibleCol: 'FirstName'
       await manageColumns(client, {
@@ -671,10 +702,10 @@ describe('visibleCol - Column Name Resolution', () => {
         .post<{ tables: Array<{ id: string }> }>(`/docs/${docId}/tables`, {
           tables: [{ id: 'DisplayTest2', columns: [{ id: 'Title', fields: { type: 'Text' } }] }]
         })
-        .then(r => r.tables[0].id as TableId)
+        .then((r) => r.tables[0].id as TableId)
 
       const peopleRecords = await getRecords(peopleTableId)
-      const aliceRecord = peopleRecords.find(r => r.fields.FirstName === 'Alice')
+      const aliceRecord = peopleRecords.find((r) => r.fields.FirstName === 'Alice')
       if (!aliceRecord) {
         throw new Error('Alice record not found - prerequisite test may have failed')
       }
@@ -761,11 +792,11 @@ describe('visibleCol - Column Name Resolution', () => {
             }
           ]
         })
-        .then(r => r.tables[0].id as TableId)
+        .then((r) => r.tables[0].id as TableId)
 
       const peopleRecords = await getRecords(peopleTableId)
-      const alice = peopleRecords.find(r => r.fields.FirstName === 'Alice')
-      const bob = peopleRecords.find(r => r.fields.FirstName === 'Bob')
+      const alice = peopleRecords.find((r) => r.fields.FirstName === 'Alice')
+      const bob = peopleRecords.find((r) => r.fields.FirstName === 'Bob')
 
       if (!alice || !bob) {
         throw new Error('Alice or Bob not found - prerequisite test may have failed')
@@ -796,7 +827,7 @@ describe('visibleCol - Column Name Resolution', () => {
           }
         }
       ])
-      const projectId = projectIds[0]
+      const _projectId = projectIds[0]
 
       // First verify the record was created
       const projectRecords = await getRecords(testTableId)
@@ -841,7 +872,7 @@ describe('visibleCol - Column Name Resolution', () => {
         .post<{ tables: Array<{ id: string }> }>(`/docs/${docId}/tables`, {
           tables: [{ id: 'DisplayTest4', columns: [{ id: 'Task', fields: { type: 'Text' } }] }]
         })
-        .then(r => r.tables[0].id as TableId)
+        .then((r) => r.tables[0].id as TableId)
 
       // Create Manager column with visibleCol
       await manageColumns(client, {
@@ -902,7 +933,7 @@ describe('visibleCol - Column Name Resolution', () => {
         .post<{ tables: Array<{ id: string }> }>(`/docs/${docId}/tables`, {
           tables: [{ id: 'DisplayTest5', columns: [{ id: 'Name', fields: { type: 'Text' } }] }]
         })
-        .then(r => r.tables[0].id as TableId)
+        .then((r) => r.tables[0].id as TableId)
 
       // Get numeric IDs for different columns
       const firstNameNumericId = await getColumnNumericId(peopleTableId, 'FirstName')
@@ -944,7 +975,7 @@ describe('visibleCol - Column Name Resolution', () => {
 
       // Add a record and verify display shows email, not name
       const peopleRecords = await getRecords(peopleTableId)
-      const alice = peopleRecords.find(r => r.fields.FirstName === 'Alice')
+      const alice = peopleRecords.find((r) => r.fields.FirstName === 'Alice')
 
       if (!alice) {
         throw new Error('Alice not found - prerequisite test may have failed')

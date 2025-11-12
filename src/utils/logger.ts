@@ -171,9 +171,7 @@ export class Logger {
     }
 
     // Output to stderr as JSON
-    const output = this.config.prettyPrint
-      ? JSON.stringify(entry, null, 2)
-      : JSON.stringify(entry)
+    const output = this.config.prettyPrint ? JSON.stringify(entry, null, 2) : JSON.stringify(entry)
 
     console.error(output)
   }

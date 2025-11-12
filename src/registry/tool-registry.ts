@@ -16,11 +16,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { z } from 'zod'
 import type { GristClient } from '../services/grist-client.js'
-import type {
-  ToolDefinition,
-  CategorizedToolDefinition,
-  ToolCategory
-} from './tool-definitions.js'
+import type { CategorizedToolDefinition, ToolCategory, ToolDefinition } from './tool-definitions.js'
 
 // ============================================================================
 // Advanced Generic Types for Registration
@@ -33,7 +29,7 @@ import type {
 interface McpToolOptions {
   readonly title: string
   readonly description: string
-  readonly inputSchema: any // MCP SDK requires `any` type for JSON Schema
+  readonly inputSchema: z.ZodRawShape // MCP SDK accepts ZodRawShape for tool schemas
   readonly annotations?: {
     readonly readOnlyHint?: boolean
     readonly destructiveHint?: boolean
@@ -122,14 +118,14 @@ export async function registerTool<TSchema extends z.ZodTypeAny>(
   client: GristClient,
   definition: ToolDefinition<TSchema>
 ): Promise<ToolRegistrationResult> {
-  const startTime = Date.now()
+  const _startTime = Date.now()
 
   try {
     // Extract Zod shape for MCP SDK
     // The MCP SDK expects ZodRawShape (object of Zod validators) not JSON Schema
     // The SDK handles JSON Schema conversion internally when responding to clients
     // TypeScript doesn't know TSchema has .shape, but all our schemas are ZodObject
-    const schema = definition.inputSchema as any
+    const schema = definition.inputSchema as unknown as z.ZodObject<z.ZodRawShape>
     const mcpOptions: McpToolOptions = {
       title: definition.title,
       description: definition.description,
@@ -138,21 +134,22 @@ export async function registerTool<TSchema extends z.ZodTypeAny>(
     }
 
     // Create type-safe handler wrapper
-    // The outer function signature matches MCP's expectations (params: any)
+    // The outer function signature matches MCP's expectations (params: unknown)
     // The inner call maintains full type safety via Zod inference
-    const wrappedHandler = async (params: any) => {
+    const wrappedHandler = async (params: unknown) => {
       // Optional debug logging for MCP parameters
       if (process.env.DEBUG_MCP_PARAMS === 'true') {
         console.warn(`[MCP] Tool called: ${definition.name}`)
         console.warn('[MCP] Raw parameters:', JSON.stringify(params, null, 2))
 
         // Special logging for widgetOptions if present
-        if (params?.widgetOptions !== undefined) {
+        const paramsRecord = params as Record<string, unknown>
+        if (paramsRecord?.widgetOptions !== undefined) {
           console.warn('[MCP] widgetOptions detected:', {
-            type: typeof params.widgetOptions,
-            value: params.widgetOptions,
-            isString: typeof params.widgetOptions === 'string',
-            isObject: typeof params.widgetOptions === 'object'
+            type: typeof paramsRecord.widgetOptions,
+            value: paramsRecord.widgetOptions,
+            isString: typeof paramsRecord.widgetOptions === 'string',
+            isObject: typeof paramsRecord.widgetOptions === 'object'
           })
         }
       }
@@ -477,9 +474,10 @@ export interface RegistrationMetrics {
  * @param tools - Tools to validate
  * @returns Validation result with any duplicate names
  */
-export function validateToolNames(
-  tools: ReadonlyArray<CategorizedToolDefinition>
-): { valid: boolean; duplicates: string[] } {
+export function validateToolNames(tools: ReadonlyArray<CategorizedToolDefinition>): {
+  valid: boolean
+  duplicates: string[]
+} {
   const names = new Set<string>()
   const duplicates: string[] = []
 
@@ -538,10 +536,16 @@ export function getToolsByAnnotations(
     if (filters.readOnly !== undefined && tool.annotations.readOnlyHint !== filters.readOnly) {
       return false
     }
-    if (filters.destructive !== undefined && tool.annotations.destructiveHint !== filters.destructive) {
+    if (
+      filters.destructive !== undefined &&
+      tool.annotations.destructiveHint !== filters.destructive
+    ) {
       return false
     }
-    if (filters.idempotent !== undefined && tool.annotations.idempotentHint !== filters.idempotent) {
+    if (
+      filters.idempotent !== undefined &&
+      tool.annotations.idempotentHint !== filters.idempotent
+    ) {
       return false
     }
     if (filters.openWorld !== undefined && tool.annotations.openWorldHint !== filters.openWorld) {
@@ -558,24 +562,30 @@ export function getToolsByAnnotations(
  * @param strategies - Strategies to compose (right-to-left precedence)
  * @returns Composed strategy
  */
-export function composeStrategies(
-  ...strategies: RegistrationStrategy[]
-): RegistrationStrategy {
+export function composeStrategies(...strategies: RegistrationStrategy[]): RegistrationStrategy {
   return {
     beforeBatch: (toolCount: number) => {
-      strategies.forEach((s) => s.beforeBatch?.(toolCount))
+      strategies.forEach((s) => {
+        s.beforeBatch?.(toolCount)
+      })
     },
 
     beforeTool: (toolName: string) => {
-      strategies.forEach((s) => s.beforeTool?.(toolName))
+      strategies.forEach((s) => {
+        s.beforeTool?.(toolName)
+      })
     },
 
     afterTool: (result: ToolRegistrationResult) => {
-      strategies.forEach((s) => s.afterTool?.(result))
+      strategies.forEach((s) => {
+        s.afterTool?.(result)
+      })
     },
 
     afterBatch: (summary: BatchRegistrationSummary) => {
-      strategies.forEach((s) => s.afterBatch?.(summary))
+      strategies.forEach((s) => {
+        s.afterBatch?.(summary)
+      })
     },
 
     onError: (error: Error, toolName: string) => {

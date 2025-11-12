@@ -141,14 +141,18 @@ async function testWorkflow1_Discovery() {
   }
 }
 
-function validateChoiceColumns(columns: any[], issues: string[], suggestions: string[]) {
+function validateChoiceColumns(
+  columns: Array<{ id: string; fields?: Record<string, unknown> }>,
+  issues: string[],
+  suggestions: string[]
+) {
   const choiceColumns = columns.filter(
-    (col: any) => col.fields?.type === 'Choice' || col.fields?.type === 'ChoiceList'
+    (col) => col.fields?.type === 'Choice' || col.fields?.type === 'ChoiceList'
   )
 
   if (choiceColumns.length > 0) {
     console.log('\n3. Checking Choice column widgetOptions...')
-    choiceColumns.forEach((col: any) => {
+    choiceColumns.forEach((col) => {
       console.log(`  - ${col.id}: ${JSON.stringify(col.fields?.widgetOptions)}`)
 
       if (col.fields?.widgetOptions === '') {
@@ -194,7 +198,7 @@ async function testWorkflow2_SchemaUnderstanding() {
       issues.push('No table information returned')
     } else {
       console.log('\nTables found:')
-      tablesResponse.tables.forEach((t: any) => {
+      tablesResponse.tables.forEach((t: { id: string }) => {
         console.log(`  - ${t.id}`)
       })
       strengths.push('Tables listed successfully')
@@ -210,9 +214,11 @@ async function testWorkflow2_SchemaUnderstanding() {
 
         if (columnsResponse.columns && columnsResponse.columns.length > 0) {
           console.log('\nColumns:')
-          columnsResponse.columns.forEach((col: any) => {
-            console.log(`  - ${col.id} (${col.fields?.type || 'unknown type'})`)
-          })
+          columnsResponse.columns.forEach(
+            (col: { id: string; fields?: Record<string, unknown> }) => {
+              console.log(`  - ${col.id} (${col.fields?.type || 'unknown type'})`)
+            }
+          )
           strengths.push('Column details retrieved successfully')
           validateChoiceColumns(columnsResponse.columns, issues, suggestions)
         } else {
@@ -262,7 +268,9 @@ async function testWorkflow3_DataQuery() {
     const workspacesResponse = await client.get(`/api/orgs/${orgId}/workspaces`)
     const workspaceId = workspacesResponse[0]?.id
     const docsResponse = await client.get(`/api/workspaces/${workspaceId}/docs`)
-    const docId = docsResponse.find((d: any) => d.name === 'Customer CRM')?.id
+    const docId = docsResponse.find(
+      (d: { name: string; id: string }) => d.name === 'Customer CRM'
+    )?.id
 
     if (!docId) {
       issues.push('Cannot find test document')

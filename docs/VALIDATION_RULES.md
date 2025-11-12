@@ -18,6 +18,25 @@ This document describes all validation rules enforced by the Grist MCP Server. O
 
 ---
 
+## Table of Contents
+
+- [Document Identifiers](#document-identifiers)
+- [Table Identifiers](#table-identifiers)
+- [Column Identifiers](#column-identifiers)
+- [Column Types](#column-types)
+- [Widget Options](#widget-options)
+- [Column Properties](#column-properties)
+- [Reference Columns](#reference-columns)
+- [Validation Matrix](#validation-matrix)
+- [Enum Fields](#enum-fields)
+- [Error Message Examples](#error-message-examples)
+- [Validation Coverage](#validation-coverage)
+- [Comparison: Our Validation vs Grist API](#comparison-our-validation-vs-grist-api)
+- [Testing](#testing)
+- [Future Enhancements](#future-enhancements)
+
+---
+
 ## Document Identifiers
 
 ### Document ID (docId)

@@ -134,10 +134,11 @@ async function testMCPServer() {
     console.log('🎉 ALL MCP SERVER TESTS PASSED!')
     console.log('='.repeat(60))
     console.log('\n✅ The Grist MCP Server is working correctly via MCP protocol!')
-  } catch (error: any) {
+  } catch (error: unknown) {
+    const err = error as { message: string; stack?: string }
     console.error('\n❌ MCP SERVER TEST FAILED:')
-    console.error(error.message)
-    console.error('\nStack:', error.stack)
+    console.error(err.message)
+    console.error('\nStack:', err.stack)
   } finally {
     // Cleanup
     await client.close()

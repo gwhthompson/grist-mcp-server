@@ -11,10 +11,10 @@
  */
 
 import type { z } from 'zod'
+import { isGristError, ValidationError } from '../../errors/index.js'
+import { formatErrorResponse, formatToolResponse } from '../../services/formatter.js'
 import type { GristClient } from '../../services/grist-client.js'
 import type { MCPToolResponse, ResponseFormat } from '../../types.js'
-import { formatToolResponse, formatErrorResponse } from '../../services/formatter.js'
-import { ValidationError, isGristError } from '../../errors/index.js'
 
 /**
  * Abstract base class for all Grist MCP tools
@@ -35,10 +35,7 @@ import { ValidationError, isGristError } from '../../errors/index.js'
  * }
  * ```
  */
-export abstract class GristTool<
-  TInput extends z.ZodTypeAny,
-  TOutput = unknown
-> {
+export abstract class GristTool<TInput extends z.ZodTypeAny, TOutput = unknown> {
   constructor(
     protected readonly client: GristClient,
     protected readonly inputSchema: TInput
@@ -103,7 +100,7 @@ export abstract class GristTool<
    *
    * @param params - Validated parameters
    */
-  protected async beforeExecute(params: z.infer<TInput>): Promise<void> {
+  protected async beforeExecute(_params: z.infer<TInput>): Promise<void> {
     // Default implementation: no-op
     // Subclasses can override for custom pre-execution logic
   }
@@ -116,7 +113,7 @@ export abstract class GristTool<
    * @param params - Validated parameters (for context)
    * @returns Processed result
    */
-  protected async afterExecute(result: TOutput, params: z.infer<TInput>): Promise<TOutput> {
+  protected async afterExecute(result: TOutput, _params: z.infer<TInput>): Promise<TOutput> {
     // Default implementation: return result as-is
     return result
   }
@@ -181,7 +178,7 @@ export abstract class GristTool<
    * @param params - Validated parameters
    * @returns Cache key string or null if caching disabled
    */
-  protected getCacheKey(params: z.infer<TInput>): string | null {
+  protected getCacheKey(_params: z.infer<TInput>): string | null {
     // Default: no caching
     // Subclasses can override to enable caching
     return null
@@ -194,7 +191,7 @@ export abstract class GristTool<
    * @param feature - Feature name to check
    * @returns True if feature is supported
    */
-  protected supportsFeature(feature: 'caching' | 'pagination' | 'filtering'): boolean {
+  protected supportsFeature(_feature: 'caching' | 'pagination' | 'filtering'): boolean {
     // Default: no special features
     return false
   }
@@ -203,13 +200,19 @@ export abstract class GristTool<
 /**
  * Type helper to extract input type from GristTool
  */
-export type ToolInput<T extends GristTool<any, any>> = T extends GristTool<infer TInput, any>
+export type ToolInput<T extends GristTool<z.ZodTypeAny, unknown>> = T extends GristTool<
+  infer TInput,
+  unknown
+>
   ? z.infer<TInput>
   : never
 
 /**
  * Type helper to extract output type from GristTool
  */
-export type ToolOutput<T extends GristTool<any, any>> = T extends GristTool<any, infer TOutput>
+export type ToolOutput<T extends GristTool<z.ZodTypeAny, unknown>> = T extends GristTool<
+  z.ZodTypeAny,
+  infer TOutput
+>
   ? TOutput
   : never

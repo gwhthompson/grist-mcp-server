@@ -4,6 +4,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
+## Table of Contents
+
+- [Development Requirements](#development-requirements)
+- [Core Architecture (Multi-File Pattern)](#core-architecture-multi-file-pattern)
+- [Critical Grist API Patterns](#critical-grist-api-patterns)
+- [Validation Rules (Non-Obvious Constraints)](#validation-rules-non-obvious-constraints)
+- [Docker Testing (MANDATORY)](#docker-testing-mandatory)
+- [Schema Composition Patterns](#schema-composition-patterns)
+- [MCP Protocol Compliance](#mcp-protocol-compliance)
+- [Error Handling Pattern](#error-handling-pattern)
+- [Reference Documentation](#reference-documentation)
+- [TypeScript Configuration](#typescript-configuration)
+- [Common Pitfalls to Avoid](#common-pitfalls-to-avoid)
+- [Development Commands](#development-commands)
+- [Adding New Features](#adding-new-features)
+- [Quality Standards](#quality-standards)
+
+---
+
 ## Development Requirements
 
 **When working on this repository:**
@@ -409,7 +428,7 @@ const choiceList: ListValue = encodeList('option1', 'option2')
 //    ^^^^^^^^^^ Branded type - TypeScript enforces correct structure
 ```
 
-See `docs/IMPROVEMENT_PLAN_2025-01-10.md` for details.
+See git commit history for implementation details.
 
 ---
 
@@ -627,8 +646,7 @@ The `GristClient` automatically redacts sensitive data from errors:
 - `docs/ARCHITECTURE.md` - Registry system, type flow diagrams
 - `docs/TESTING.md` - Docker setup, test procedures
 - `docs/DEVELOPMENT.md` - TypeScript patterns, Grist formulas
-- `docs/CURRENT_STATUS.md` - Latest project status
-- `docs/COMPREHENSIVE_REVIEW_2025-01-09.md` - Quality review (9.8/10 A+)
+- `docs/STATUS.md` - Current project status (includes quality metrics)
 
 ---
 
@@ -780,4 +798,4 @@ npm run check        # Format + lint
 - Full test coverage for all column types
 - Docker integration testing for all tools
 
-**Reference:** `docs/COMPREHENSIVE_REVIEW_2025-01-09.md` for quality benchmarks
+**Reference:** `docs/STATUS.md` for quality metrics and project status

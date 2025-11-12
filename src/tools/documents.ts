@@ -30,7 +30,21 @@ export const CreateDocumentSchema = z
 
 export type CreateDocumentInput = z.infer<typeof CreateDocumentSchema>
 
-export class CreateDocumentTool extends GristTool<typeof CreateDocumentSchema, any> {
+interface CreateDocumentOutput {
+  success: boolean
+  document_id: string
+  document_name: string
+  workspace_id: number
+  url: string
+  forked_from: string | null
+  message: string
+  next_steps: string[]
+}
+
+export class CreateDocumentTool extends GristTool<
+  typeof CreateDocumentSchema,
+  CreateDocumentOutput
+> {
   constructor(client: GristClient) {
     super(client, CreateDocumentSchema)
   }
@@ -42,25 +56,19 @@ export class CreateDocumentTool extends GristTool<typeof CreateDocumentSchema, a
     if (params.forkFromDocId) {
       // Fork/copy existing document via POST /docs/{docId}/copy
       // API: { workspaceId: number, documentName: string, asTemplate?: boolean }
-      const response = await this.client.post<string>(
-        `/docs/${params.forkFromDocId}/copy`,
-        {
-          workspaceId: params.workspaceId,  // Already validated as number by WorkspaceIdSchema
-          documentName: params.name,
-          asTemplate: false  // Keep all data and history
-        }
-      )
-      docId = typeof response === 'string' ? response : (response as any).id
+      const response = await this.client.post<string>(`/docs/${params.forkFromDocId}/copy`, {
+        workspaceId: params.workspaceId, // Already validated as number by WorkspaceIdSchema
+        documentName: params.name,
+        asTemplate: false // Keep all data and history
+      })
+      docId = typeof response === 'string' ? response : (response as { id: string }).id
     } else {
       // Create blank document via POST /workspaces/{workspaceId}/docs
       // API: { name: string, isPinned?: boolean }
-      const response = await this.client.post<string>(
-        `/workspaces/${params.workspaceId}/docs`,
-        {
-          name: params.name
-        }
-      )
-      docId = typeof response === 'string' ? response : (response as any).id
+      const response = await this.client.post<string>(`/workspaces/${params.workspaceId}/docs`, {
+        name: params.name
+      })
+      docId = typeof response === 'string' ? response : (response as { id: string }).id
     }
 
     const docUrl = `${this.client.getBaseUrl()}/doc/${docId}`

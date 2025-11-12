@@ -4,17 +4,17 @@
  * Handles starting, stopping, and checking Docker Grist instance
  */
 
-import { exec } from 'child_process';
-import { promisify } from 'util';
+import { exec } from 'node:child_process'
+import { promisify } from 'node:util'
 
-const execAsync = promisify(exec);
+const execAsync = promisify(exec)
 
 export interface DockerConfig {
-  url: string;
-  apiKey: string;
-  composeFile?: string;
-  startupTimeout?: number;
-  healthCheckInterval?: number;
+  url: string
+  apiKey: string
+  composeFile?: string
+  startupTimeout?: number
+  healthCheckInterval?: number
 }
 
 export const DEFAULT_DOCKER_CONFIG: DockerConfig = {
@@ -23,29 +23,33 @@ export const DEFAULT_DOCKER_CONFIG: DockerConfig = {
   composeFile: './compose.yml',
   startupTimeout: 30000,
   healthCheckInterval: 1000
-};
+}
 
 /**
  * Check if Docker is installed and running
  */
 export async function isDockerAvailable(): Promise<boolean> {
   try {
-    await execAsync('docker --version');
-    return true;
+    await execAsync('docker --version')
+    return true
   } catch {
-    return false;
+    return false
   }
 }
 
 /**
  * Check if Docker Compose is running
  */
-export async function isComposeRunning(config: DockerConfig = DEFAULT_DOCKER_CONFIG): Promise<boolean> {
+export async function isComposeRunning(
+  config: DockerConfig = DEFAULT_DOCKER_CONFIG
+): Promise<boolean> {
   try {
-    const { stdout } = await execAsync(`docker compose -f ${config.composeFile} ps --services --filter "status=running"`);
-    return stdout.trim().length > 0;
+    const { stdout } = await execAsync(
+      `docker compose -f ${config.composeFile} ps --services --filter "status=running"`
+    )
+    return stdout.trim().length > 0
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -53,92 +57,94 @@ export async function isComposeRunning(config: DockerConfig = DEFAULT_DOCKER_CON
  * Start Docker Compose
  */
 export async function startCompose(config: DockerConfig = DEFAULT_DOCKER_CONFIG): Promise<void> {
-  console.log('Starting Docker Compose...');
-  await execAsync(`docker compose -f ${config.composeFile} up -d`);
-  console.log('Docker Compose started');
+  console.log('Starting Docker Compose...')
+  await execAsync(`docker compose -f ${config.composeFile} up -d`)
+  console.log('Docker Compose started')
 }
 
 /**
  * Stop Docker Compose
  */
 export async function stopCompose(config: DockerConfig = DEFAULT_DOCKER_CONFIG): Promise<void> {
-  console.log('Stopping Docker Compose...');
-  await execAsync(`docker compose -f ${config.composeFile} down`);
-  console.log('Docker Compose stopped');
+  console.log('Stopping Docker Compose...')
+  await execAsync(`docker compose -f ${config.composeFile} down`)
+  console.log('Docker Compose stopped')
 }
 
 /**
  * Wait for Grist to be ready
  */
 export async function waitForGrist(config: DockerConfig = DEFAULT_DOCKER_CONFIG): Promise<boolean> {
-  const startTime = Date.now();
-  const timeout = config.startupTimeout || 30000;
+  const startTime = Date.now()
+  const timeout = config.startupTimeout || 30000
 
   while (Date.now() - startTime < timeout) {
     try {
       const response = await fetch(`${config.url}/api/orgs`, {
         headers: { Authorization: `Bearer ${config.apiKey}` }
-      });
+      })
 
       if (response.ok) {
-        console.log('Grist is ready!');
-        return true;
+        console.log('Grist is ready!')
+        return true
       }
     } catch {
       // Grist not ready yet
     }
 
-    await sleep(config.healthCheckInterval || 1000);
+    await sleep(config.healthCheckInterval || 1000)
   }
 
-  throw new Error(`Grist did not become ready within ${timeout}ms`);
+  throw new Error(`Grist did not become ready within ${timeout}ms`)
 }
 
 /**
  * Ensure Docker Compose is running and Grist is ready
  * Automatically detects if Docker is accessible and handles lifecycle
  */
-export async function ensureGristReady(config: DockerConfig = DEFAULT_DOCKER_CONFIG): Promise<void> {
+export async function ensureGristReady(
+  config: DockerConfig = DEFAULT_DOCKER_CONFIG
+): Promise<void> {
   // Try to check if Grist is already accessible
   try {
     const response = await fetch(`${config.url}/api/orgs`, {
       headers: { Authorization: `Bearer ${config.apiKey}` }
-    });
+    })
 
     if (response.ok) {
-      console.log('✓ Grist is already accessible, skipping Docker management');
-      return;
+      console.log('✓ Grist is already accessible, skipping Docker management')
+      return
     }
   } catch {
     // Grist not accessible yet, need to start it
   }
 
   // Check if Docker is accessible
-  const dockerAvailable = await isDockerAvailable();
+  const dockerAvailable = await isDockerAvailable()
 
   if (!dockerAvailable) {
     throw new Error(
       'Docker is not accessible and Grist is not running.\n' +
-      'Please ensure Docker is running or start Grist manually:\n' +
-      '  docker compose up -d && sleep 12'
-    );
+        'Please ensure Docker is running or start Grist manually:\n' +
+        '  docker compose up -d && sleep 12'
+    )
   }
 
   // Docker is accessible, check if compose is running
   if (!(await isComposeRunning(config))) {
-    await startCompose(config);
+    await startCompose(config)
     // Wait for Grist post_start initialization
-    await sleep(12000);
+    await sleep(12000)
   }
 
-  await waitForGrist(config);
+  await waitForGrist(config)
 }
 
 /**
  * Helper to sleep for a given number of milliseconds
  */
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
@@ -151,11 +157,11 @@ export async function getComposeLogs(
   try {
     const cmd = service
       ? `docker compose -f ${config.composeFile} logs ${service}`
-      : `docker compose -f ${config.composeFile} logs`;
-    const { stdout } = await execAsync(cmd);
-    return stdout;
+      : `docker compose -f ${config.composeFile} logs`
+    const { stdout } = await execAsync(cmd)
+    return stdout
   } catch (error) {
-    return `Failed to get logs: ${error}`;
+    return `Failed to get logs: ${error}`
   }
 }
 
@@ -163,9 +169,9 @@ export async function getComposeLogs(
  * Reset Grist database (stop and remove volumes)
  */
 export async function resetGrist(config: DockerConfig = DEFAULT_DOCKER_CONFIG): Promise<void> {
-  console.log('Resetting Grist database...');
-  await execAsync(`docker compose -f ${config.composeFile} down -v`);
-  await startCompose(config);
-  await waitForGrist(config);
-  console.log('Grist reset complete');
+  console.log('Resetting Grist database...')
+  await execAsync(`docker compose -f ${config.composeFile} down -v`)
+  await startCompose(config)
+  await waitForGrist(config)
+  console.log('Grist reset complete')
 }

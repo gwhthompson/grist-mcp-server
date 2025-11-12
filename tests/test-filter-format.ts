@@ -17,8 +17,9 @@ async function testFilters() {
     const result = await client.get(`/docs/${docId}/tables/Contacts/records`, { limit: 3 })
     console.log('✅ No filter works')
     console.log(`   Records: ${result.records?.length || 0}`)
-  } catch (error: any) {
-    console.log('❌ No filter failed:', error.message)
+  } catch (error: unknown) {
+    const err = error as { message: string }
+    console.log('❌ No filter failed:', err.message)
   }
 
   // Test 2: Filter as JSON string
@@ -29,8 +30,9 @@ async function testFilters() {
     })
     console.log('✅ Filter as JSON string works')
     console.log(`   Records: ${result.records?.length || 0}`)
-  } catch (error: any) {
-    console.log('❌ Filter as JSON string failed:', error.message)
+  } catch (error: unknown) {
+    const err = error as { message: string }
+    console.log('❌ Filter as JSON string failed:', err.message)
   }
 
   // Test 3: Check what Grist API actually expects

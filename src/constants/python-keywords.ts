@@ -92,7 +92,7 @@ export function isPythonKeyword(identifier: string): boolean {
  * @returns True if the identifier starts with a reserved prefix
  */
 export function hasGristReservedPrefix(identifier: string): boolean {
-  return GRIST_RESERVED_PREFIXES.some(prefix => identifier.startsWith(prefix))
+  return GRIST_RESERVED_PREFIXES.some((prefix) => identifier.startsWith(prefix))
 }
 
 /**
@@ -104,16 +104,20 @@ export function hasGristReservedPrefix(identifier: string): boolean {
  */
 export function getPythonKeywordError(identifier: string, type: 'column' | 'table'): string {
   if (isPythonKeyword(identifier)) {
-    return `${type} ID "${identifier}" is a Python keyword and cannot be used. ` +
+    return (
+      `${type} ID "${identifier}" is a Python keyword and cannot be used. ` +
       `Python keywords are reserved because Grist uses Python for formulas. ` +
       `Suggestion: Use "${identifier}_col" or "${identifier}_field" instead.`
+    )
   }
 
   if (hasGristReservedPrefix(identifier)) {
-    const prefix = GRIST_RESERVED_PREFIXES.find(p => identifier.startsWith(p))
-    return `${type} ID "${identifier}" starts with reserved prefix "${prefix}". ` +
+    const prefix = GRIST_RESERVED_PREFIXES.find((p) => identifier.startsWith(p))
+    return (
+      `${type} ID "${identifier}" starts with reserved prefix "${prefix}". ` +
       `This prefix is used internally by Grist for system columns. ` +
       `Suggestion: Use a different name without this prefix.`
+    )
   }
 
   return ''

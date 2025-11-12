@@ -3,10 +3,10 @@
  */
 
 export {
+  FormatterRegistry,
   type FormatterStrategy,
+  formatterRegistry,
   JsonFormatterStrategy,
   MarkdownFormatterStrategy,
-  PlainTextFormatterStrategy,
-  FormatterRegistry,
-  formatterRegistry
+  PlainTextFormatterStrategy
 } from './FormatterStrategy.js'

@@ -14,18 +14,16 @@ export class NotFoundError extends GristError {
     public readonly resourceId: string,
     context?: Record<string, unknown>
   ) {
-    super(
-      `${resourceType} not found: ${resourceId}`,
-      'NOT_FOUND',
-      context
-    )
+    super(`${resourceType} not found: ${resourceId}`, 'NOT_FOUND', context)
   }
 
   toUserMessage(): string {
     const suggestions = this.getSuggestions()
-    return `${this.resourceType} not found (ID: '${this.resourceId}')\n\n` +
-           `Possible causes:\n${suggestions.causes.join('\n')}\n\n` +
-           `Next steps:\n${suggestions.nextSteps.join('\n')}`
+    return (
+      `${this.resourceType} not found (ID: '${this.resourceId}')\n\n` +
+      `Possible causes:\n${suggestions.causes.join('\n')}\n\n` +
+      `Next steps:\n${suggestions.nextSteps.join('\n')}`
+    )
   }
 
   isRetryable(): boolean {
@@ -58,7 +56,7 @@ export class NotFoundError extends GristError {
           nextSteps: [
             '1. Use grist_get_tables to see available tables in the document',
             '2. Verify the table ID matches exactly (case-sensitive)',
-            '3. Confirm you\'re using the correct document ID'
+            "3. Confirm you're using the correct document ID"
           ]
         }
       case 'workspace':
@@ -84,20 +82,16 @@ export class NotFoundError extends GristError {
           nextSteps: [
             '1. Use grist_get_tables to see column definitions',
             '2. Check the column ID spelling and case',
-            '3. Verify you\'re looking in the correct table'
+            "3. Verify you're looking in the correct table"
           ]
         }
       case 'record':
         return {
-          causes: [
-            '- Invalid record ID',
-            '- Record was deleted',
-            '- Wrong table specified'
-          ],
+          causes: ['- Invalid record ID', '- Record was deleted', '- Wrong table specified'],
           nextSteps: [
             '1. Use grist_read_records to see available records',
             '2. Verify the record ID is correct',
-            '3. Check that you\'re querying the correct table'
+            "3. Check that you're querying the correct table"
           ]
         }
       case 'organization':
@@ -105,7 +99,7 @@ export class NotFoundError extends GristError {
           causes: [
             '- Invalid organization ID',
             '- No access to this organization',
-            '- Organization doesn\'t exist'
+            "- Organization doesn't exist"
           ],
           nextSteps: [
             '1. Use grist_get_workspaces to see available organizations',

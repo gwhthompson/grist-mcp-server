@@ -4,21 +4,21 @@
 
 import { z } from 'zod'
 import { MAX_RECORDS_PER_BATCH } from '../constants.js'
+import { CellValueSchema } from '../schemas/api-responses.js'
 import {
   DocIdSchema,
   ResponseFormatSchema,
   RowIdsSchema,
   TableIdSchema
 } from '../schemas/common.js'
-import { CellValueSchema } from '../schemas/api-responses.js'
 import {
   buildBulkAddRecordAction,
   buildBulkRemoveRecordAction,
   buildBulkUpdateRecordAction
 } from '../services/action-builder.js'
 import type { GristClient } from '../services/grist-client.js'
+import { toRowId, toTableId } from '../types/advanced.js'
 import type { ApplyResponse, UpsertResponse } from '../types.js'
-import { toTableId, toRowId } from '../types/advanced.js'
 import { GristTool } from './base/GristTool.js'
 
 // ============================================================================
@@ -42,7 +42,7 @@ export const AddRecordsSchema = z
 
 export type AddRecordsInput = z.infer<typeof AddRecordsSchema>
 
-export class AddRecordsTool extends GristTool<typeof AddRecordsSchema, any> {
+export class AddRecordsTool extends GristTool<typeof AddRecordsSchema, unknown> {
   constructor(client: GristClient) {
     super(client, AddRecordsSchema)
   }
@@ -89,7 +89,7 @@ export const UpdateRecordsSchema = z
 
 export type UpdateRecordsInput = z.infer<typeof UpdateRecordsSchema>
 
-export class UpdateRecordsTool extends GristTool<typeof UpdateRecordsSchema, any> {
+export class UpdateRecordsTool extends GristTool<typeof UpdateRecordsSchema, unknown> {
   constructor(client: GristClient) {
     super(client, UpdateRecordsSchema)
   }
@@ -140,7 +140,9 @@ export const UpsertRecordsSchema = z
       .array(UpsertRecordSchema)
       .min(1)
       .max(MAX_RECORDS_PER_BATCH)
-      .describe(`Array of record objects to upsert (max ${MAX_RECORDS_PER_BATCH}). Each record has 'require' (fields to match) and 'fields' (fields to update/add).`),
+      .describe(
+        `Array of record objects to upsert (max ${MAX_RECORDS_PER_BATCH}). Each record has 'require' (fields to match) and 'fields' (fields to update/add).`
+      ),
     onMany: z
       .enum(['first', 'none', 'all'])
       .default('first')
@@ -157,7 +159,7 @@ export const UpsertRecordsSchema = z
 
 export type UpsertRecordsInput = z.infer<typeof UpsertRecordsSchema>
 
-export class UpsertRecordsTool extends GristTool<typeof UpsertRecordsSchema, any> {
+export class UpsertRecordsTool extends GristTool<typeof UpsertRecordsSchema, unknown> {
   constructor(client: GristClient) {
     super(client, UpsertRecordsSchema)
   }
@@ -208,7 +210,7 @@ export const DeleteRecordsSchema = z
 
 export type DeleteRecordsInput = z.infer<typeof DeleteRecordsSchema>
 
-export class DeleteRecordsTool extends GristTool<typeof DeleteRecordsSchema, any> {
+export class DeleteRecordsTool extends GristTool<typeof DeleteRecordsSchema, unknown> {
   constructor(client: GristClient) {
     super(client, DeleteRecordsSchema)
   }

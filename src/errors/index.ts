@@ -4,26 +4,21 @@
  * Provides structured, recoverable errors with actionable messages for LLMs
  */
 
-import { GristError } from './GristError.js'
-import { NotFoundError } from './NotFoundError.js'
-import { ValidationError } from './ValidationError.js'
 import { ApiError } from './ApiError.js'
+import { NotFoundError } from './NotFoundError.js'
 import { RateLimitError } from './RateLimitError.js'
+import { ValidationError } from './ValidationError.js'
 
+export { ApiError, type HttpMethod } from './ApiError.js'
 export { GristError, isGristError } from './GristError.js'
 export { NotFoundError, type ResourceType } from './NotFoundError.js'
-export { ValidationError } from './ValidationError.js'
-export { ApiError, type HttpMethod } from './ApiError.js'
 export { RateLimitError } from './RateLimitError.js'
+export { ValidationError } from './ValidationError.js'
 
 /**
  * Discriminated union of all Grist errors
  */
-export type GristErrorType =
-  | NotFoundError
-  | ValidationError
-  | ApiError
-  | RateLimitError
+export type GristErrorType = NotFoundError | ValidationError | ApiError | RateLimitError
 
 /**
  * Type guards for specific error types

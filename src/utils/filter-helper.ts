@@ -32,16 +32,13 @@ export interface Nameable {
  * // Returns [{name: "Sales Team"}]
  * ```
  */
-export function filterByName<T extends Nameable>(
-  items: T[],
-  searchTerm?: string
-): T[] {
+export function filterByName<T extends Nameable>(items: T[], searchTerm?: string): T[] {
   if (!searchTerm || searchTerm.trim() === '') {
     return items
   }
 
   const lowerSearch = searchTerm.toLowerCase()
-  return items.filter(item => item.name.toLowerCase().includes(lowerSearch))
+  return items.filter((item) => item.name.toLowerCase().includes(lowerSearch))
 }
 
 /**
@@ -61,11 +58,7 @@ export function filterByName<T extends Nameable>(
  * // Returns [{id: "1", status: "Active"}]
  * ```
  */
-export function filterByProperty<T, K extends keyof T>(
-  items: T[],
-  property: K,
-  value: T[K]
-): T[] {
+export function filterByProperty<T, K extends keyof T>(items: T[], property: K, value: T[K]): T[] {
   if (value === undefined || value === null) {
     return items
   }
@@ -73,7 +66,7 @@ export function filterByProperty<T, K extends keyof T>(
   // Case-insensitive string comparison
   if (typeof value === 'string') {
     const lowerValue = value.toLowerCase()
-    return items.filter(item => {
+    return items.filter((item) => {
       const itemValue = item[property]
       if (typeof itemValue === 'string') {
         return itemValue.toLowerCase() === lowerValue
@@ -83,7 +76,7 @@ export function filterByProperty<T, K extends keyof T>(
   }
 
   // Exact comparison for non-strings
-  return items.filter(item => item[property] === value)
+  return items.filter((item) => item[property] === value)
 }
 
 /**
@@ -103,10 +96,7 @@ export function filterByProperty<T, K extends keyof T>(
  * // Returns [2, 4]
  * ```
  */
-export function filterByPredicate<T>(
-  items: T[],
-  predicate: (item: T) => boolean
-): T[] {
+export function filterByPredicate<T>(items: T[], predicate: (item: T) => boolean): T[] {
   if (items.length === 0) {
     return items
   }
@@ -139,15 +129,12 @@ export function filterByPredicate<T>(
  * // Returns [{name: "Bob", age: 35, active: true}]
  * ```
  */
-export function filterWithAnd<T>(
-  items: T[],
-  filters: Array<(item: T) => boolean>
-): T[] {
+export function filterWithAnd<T>(items: T[], filters: Array<(item: T) => boolean>): T[] {
   if (filters.length === 0) {
     return items
   }
 
-  return items.filter(item => filters.every(filter => filter(item)))
+  return items.filter((item) => filters.every((filter) => filter(item)))
 }
 
 /**
@@ -175,15 +162,12 @@ export function filterWithAnd<T>(
  * // Returns [{name: "John", ...}, {name: "Bob", ...}]
  * ```
  */
-export function filterWithOr<T>(
-  items: T[],
-  filters: Array<(item: T) => boolean>
-): T[] {
+export function filterWithOr<T>(items: T[], filters: Array<(item: T) => boolean>): T[] {
   if (filters.length === 0) {
     return items
   }
 
-  return items.filter(item => filters.some(filter => filter(item)))
+  return items.filter((item) => filters.some((filter) => filter(item)))
 }
 
 /**
@@ -206,10 +190,8 @@ export function filterWithOr<T>(
  * const result = users.filter(compositeFilter)
  * ```
  */
-export function composeFiltersAnd<T>(
-  filters: Array<(item: T) => boolean>
-): (item: T) => boolean {
-  return (item: T) => filters.every(filter => filter(item))
+export function composeFiltersAnd<T>(filters: Array<(item: T) => boolean>): (item: T) => boolean {
+  return (item: T) => filters.every((filter) => filter(item))
 }
 
 /**
@@ -231,10 +213,8 @@ export function composeFiltersAnd<T>(
  * const specialUsers = users.filter(compositeFilter)
  * ```
  */
-export function composeFiltersOr<T>(
-  filters: Array<(item: T) => boolean>
-): (item: T) => boolean {
-  return (item: T) => filters.some(filter => filter(item))
+export function composeFiltersOr<T>(filters: Array<(item: T) => boolean>): (item: T) => boolean {
+  return (item: T) => filters.some((filter) => filter(item))
 }
 
 /**
@@ -270,8 +250,8 @@ export function searchAcrossProperties<T>(
 
   const lowerSearch = searchTerm.toLowerCase()
 
-  return items.filter(item => {
-    return properties.some(prop => {
+  return items.filter((item) => {
+    return properties.some((prop) => {
       const value = item[prop]
       if (typeof value === 'string') {
         return value.toLowerCase().includes(lowerSearch)

@@ -16,7 +16,7 @@ import {
 } from '../schemas/common.js'
 import { truncateIfNeeded } from '../services/formatter.js'
 import type { GristClient } from '../services/grist-client.js'
-import type { RecordsResponse, SQLQueryResponse, CellValue } from '../types.js'
+import type { CellValue, RecordsResponse, SQLQueryResponse } from '../types.js'
 import { GristTool } from './base/GristTool.js'
 
 // Type for Grist record structure
@@ -33,6 +33,34 @@ interface FlattenedRecord {
   [key: string]: CellValue | Record<string, string> | undefined // Field values
 }
 
+// Type for SQL query response data
+interface SqlResponseData {
+  total: number
+  offset: number
+  limit: number
+  has_more: boolean
+  next_offset: number | null
+  records: Array<Record<string, CellValue>>
+}
+
+// Type for GetRecords response data
+interface GetRecordsResponseData {
+  document_id: string
+  table_id: string
+  total: number
+  offset: number
+  limit: number
+  has_more: boolean
+  next_offset: number | null
+  filters: Record<string, CellValue | CellValue[]>
+  columns: string | string[]
+  items: FlattenedRecord[]
+  formula_errors?: {
+    records_with_errors: number
+    affected_columns: string[]
+  }
+}
+
 // ============================================================================
 // 1. GRIST_QUERY_SQL (Refactored)
 // ============================================================================
@@ -47,12 +75,12 @@ export const QuerySQLSchema = z
         'SQL query to execute. Supports SELECT, JOINs, WHERE, GROUP BY, ORDER BY. Table names should match Grist table IDs. Example: "SELECT Name, Email FROM Contacts WHERE Status = \'Active\'"'
       ),
     parameters: z
-      .array(z.any())
+      .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
       .optional()
       .describe(
         'Optional parameterized query values. Use ? placeholders in SQL (SQLite style). Example SQL: "WHERE Status = ? AND Priority > ?" with parameters: ["Active", 1]'
       ),
-    response_format: ResponseFormatSchema,
+    response_format: ResponseFormatSchema
   })
   .merge(PaginationSchema)
   .strict()
@@ -63,30 +91,59 @@ export type QuerySQLInput = z.infer<typeof QuerySQLSchema>
  * Query SQL Tool
  * Executes SQL queries with automatic pagination
  */
-export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, any> {
+export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, unknown> {
   constructor(client: GristClient) {
     super(client, QuerySQLSchema)
   }
 
-  protected async executeInternal(params: QuerySQLInput) {
-    // Build SQL query with LIMIT and OFFSET
-    let sql = params.sql.trim()
-
-    // Check if query already has LIMIT/OFFSET
+  /**
+   * Adds LIMIT and OFFSET to SQL query if not already present
+   */
+  private addPaginationToSql(sql: string, limit: number, offset: number): string {
     const hasLimit = /\bLIMIT\b/i.test(sql)
     const hasOffset = /\bOFFSET\b/i.test(sql)
 
-    // Append pagination if not present
+    let paginatedSql = sql.trim()
     if (!hasLimit) {
-      sql += ` LIMIT ${params.limit}`
+      paginatedSql += ` LIMIT ${limit}`
     }
     if (!hasOffset) {
-      sql += ` OFFSET ${params.offset}`
+      paginatedSql += ` OFFSET ${offset}`
     }
+
+    return paginatedSql
+  }
+
+  /**
+   * Checks if error is due to unsupported parameterized queries and throws helpful error
+   */
+  private checkParameterizedQueryError(error: unknown, parameters?: unknown[]): void {
+    if (!parameters || !Array.isArray(parameters) || parameters.length === 0) {
+      return
+    }
+
+    const errorMsg = error instanceof Error ? error.message : String(error)
+    const is400Error = errorMsg.includes('400') || errorMsg.toLowerCase().includes('bad request')
+
+    if (is400Error) {
+      throw new Error(
+        `SQL query failed - Parameterized queries may not be supported.\n\n` +
+          `Your query uses parameters: ${JSON.stringify(parameters)}\n\n` +
+          `Parameterized queries require Grist v1.1.0+. If you're using an older version:\n` +
+          `1. Remove the "parameters" field\n` +
+          `2. Embed values directly in SQL (use proper escaping!)\n` +
+          `3. Example: Instead of "WHERE Status = $1", use "WHERE Status = 'VIP'"\n\n` +
+          `Original error: ${errorMsg}`
+      )
+    }
+  }
+
+  protected async executeInternal(params: QuerySQLInput) {
+    // Build SQL query with LIMIT and OFFSET
+    const sql = this.addPaginationToSql(params.sql, params.limit, params.offset)
 
     // Execute SQL query
     // Note: Parameterized queries (using 'args') may not be supported in all Grist versions
-    // If parameters are provided and fail with 400, we provide helpful error message
     try {
       const response = await this.client.post<SQLQueryResponse>(`/docs/${params.docId}/sql`, {
         sql,
@@ -95,15 +152,13 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, any> {
 
       const records = response.records || []
 
-    // Get total count estimate
-    let total = records.length
-    if (records.length === params.limit) {
-      total = params.offset + records.length + 1 // +1 indicates "possibly more"
-    } else {
-      total = params.offset + records.length
-    }
+      // Get total count estimate
+      const total =
+        records.length === params.limit
+          ? params.offset + records.length + 1 // +1 indicates "possibly more"
+          : params.offset + records.length
 
-    const hasMore = records.length === params.limit
+      const hasMore = records.length === params.limit
 
       return {
         total,
@@ -115,25 +170,12 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, any> {
       }
     } catch (error) {
       // Check if this might be a parameterized query issue
-      if (params.parameters && params.parameters.length > 0) {
-        const errorMsg = error instanceof Error ? error.message : String(error)
-        if (errorMsg.includes('400') || errorMsg.toLowerCase().includes('bad request')) {
-          throw new Error(
-            `SQL query failed - Parameterized queries may not be supported.\n\n` +
-            `Your query uses parameters: ${JSON.stringify(params.parameters)}\n\n` +
-            `Parameterized queries require Grist v1.1.0+. If you're using an older version:\n` +
-            `1. Remove the "parameters" field\n` +
-            `2. Embed values directly in SQL (use proper escaping!)\n` +
-            `3. Example: Instead of "WHERE Status = $1", use "WHERE Status = 'VIP'"\n\n` +
-            `Original error: ${errorMsg}`
-          )
-        }
-      }
+      this.checkParameterizedQueryError(error, params.parameters)
       throw error
     }
   }
 
-  protected formatResponse(data: any, format: 'json' | 'markdown') {
+  protected formatResponse(data: SqlResponseData, format: 'json' | 'markdown') {
     // For SQL query, we want to return items not records for consistency
     // but we'll call the array 'records' since that's what SQL returns
     const { data: truncatedData } = truncateIfNeeded(data.records, format, {
@@ -146,10 +188,14 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, any> {
 
     // truncateIfNeeded returns { data: { ...metadata, items: [...] } }
     // Rename items to records for SQL context
-    const { items, ...rest } = truncatedData as any
+    interface TruncatedDataWithItems {
+      items: unknown[]
+      [key: string]: unknown
+    }
+    const { items, ...rest } = truncatedData as TruncatedDataWithItems
     const responseData = {
       ...rest,
-      records: items  // SQL queries return 'records' not 'items'
+      records: items // SQL queries return 'records' not 'items'
     }
 
     return super.formatResponse(responseData, format)
@@ -174,7 +220,7 @@ export const GetRecordsSchema = z
     tableId: TableIdSchema,
     filters: FilterSchema,
     columns: ColumnSelectionSchema,
-    response_format: ResponseFormatSchema,
+    response_format: ResponseFormatSchema
   })
   .merge(PaginationSchema)
   .strict()
@@ -185,14 +231,14 @@ export type GetRecordsInput = z.infer<typeof GetRecordsSchema>
  * Get Records Tool
  * Fetches records from a table with filtering and column selection
  */
-export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
+export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecordsResponseData> {
   constructor(client: GristClient) {
     super(client, GetRecordsSchema)
   }
 
   protected async executeInternal(params: GetRecordsInput) {
     // Build query parameters
-    const queryParams: any = {
+    const queryParams: Record<string, unknown> = {
       limit: params.limit,
       offset: params.offset
     }
@@ -220,11 +266,13 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
     const nextOffset = hasMore ? params.offset + params.limit : null
 
     // Count formula errors
-    const recordsWithErrors = records.filter(r => r.errors && Object.keys(r.errors).length > 0)
+    const recordsWithErrors = records.filter((r) => r.errors && Object.keys(r.errors).length > 0)
     const errorColumns = new Set<string>()
-    records.forEach(r => {
+    records.forEach((r) => {
       if (r.errors) {
-        Object.keys(r.errors).forEach(col => errorColumns.add(col))
+        Object.keys(r.errors).forEach((col) => {
+          errorColumns.add(col)
+        })
       }
     })
 
@@ -238,17 +286,19 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
       next_offset: nextOffset,
       filters: params.filters || {},
       columns: params.columns || 'all',
-      items: formattedRecords,  // Use 'items' for consistency with other list tools
-      ...(recordsWithErrors.length > 0 ? {
-        formula_errors: {
-          records_with_errors: recordsWithErrors.length,
-          affected_columns: Array.from(errorColumns)
-        }
-      } : {})
+      items: formattedRecords, // Use 'items' for consistency with other list tools
+      ...(recordsWithErrors.length > 0
+        ? {
+            formula_errors: {
+              records_with_errors: recordsWithErrors.length,
+              affected_columns: Array.from(errorColumns)
+            }
+          }
+        : {})
     }
   }
 
-  protected formatResponse(data: any, format: 'json' | 'markdown') {
+  protected formatResponse(data: GetRecordsResponseData, format: 'json' | 'markdown') {
     // truncateIfNeeded already returns { data: { ...metadata, items: [...] } }
     // So truncatedData already has the complete structure we need
     const { data: truncatedData } = truncateIfNeeded(data.items, format, {
@@ -270,7 +320,9 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
   /**
    * Convert simple filters to Grist filter format
    */
-  private convertToGristFilters(filters?: Record<string, CellValue | CellValue[]>): Record<string, CellValue[]> {
+  private convertToGristFilters(
+    filters?: Record<string, CellValue | CellValue[]>
+  ): Record<string, CellValue[]> {
     if (!filters || Object.keys(filters).length === 0) {
       return {}
     }
@@ -290,10 +342,10 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
         value.length > 0 &&
         typeof value[0] === 'string' &&
         GRIST_MARKERS.includes(value[0])
-          ? [value as CellValue]       // Single encoded CellValue like ['L', 1, 2]
+          ? [value as CellValue] // Single encoded CellValue like ['L', 1, 2]
           : Array.isArray(value)
-            ? (value as CellValue[])   // Array of simple values like ['Alice', 'Bob']
-            : [value as CellValue]     // Single simple value
+            ? (value as CellValue[]) // Array of simple values like ['Alice', 'Bob']
+            : [value as CellValue] // Single simple value
 
       gristFilters[key] = arrayValue
     }
@@ -325,9 +377,7 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, any> {
     return records.map((record) => ({
       id: record.id,
       ...record.fields,
-      ...(record.errors && Object.keys(record.errors).length > 0
-        ? { _errors: record.errors }
-        : {})
+      ...(record.errors && Object.keys(record.errors).length > 0 ? { _errors: record.errors } : {})
     }))
   }
 

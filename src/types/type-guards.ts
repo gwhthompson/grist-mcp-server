@@ -5,7 +5,7 @@
  * Leverages TypeScript's type predicates for type narrowing
  */
 
-import { z } from 'zod'
+import type { z } from 'zod'
 import { ValidationError } from '../errors/index.js'
 
 /**
@@ -53,10 +53,7 @@ export function assertType<T extends z.ZodTypeAny>(
 ): asserts value is z.infer<T> {
   const result = schema.safeParse(value)
   if (!result.success) {
-    throw ValidationError.fromZodError(
-      result.error,
-      errorMessage ?? 'Type assertion failed'
-    )
+    throw ValidationError.fromZodError(result.error, errorMessage ?? 'Type assertion failed')
   }
 }
 
@@ -105,10 +102,7 @@ export function safeParse<T extends z.ZodTypeAny>(
  *   data.forEach(ws => console.log(ws.name))
  * }
  */
-export function isArrayOf<T>(
-  value: unknown,
-  guard: (item: unknown) => item is T
-): value is T[] {
+export function isArrayOf<T>(value: unknown, guard: (item: unknown) => item is T): value is T[] {
   return Array.isArray(value) && value.every(guard)
 }
 

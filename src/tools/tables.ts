@@ -15,8 +15,8 @@ import {
   buildRenameTableAction
 } from '../services/action-builder.js'
 import type { GristClient } from '../services/grist-client.js'
-import type { ApplyResponse } from '../types.js'
 import { toTableId } from '../types/advanced.js'
+import type { ApplyResponse } from '../types.js'
 import { GristTool } from './base/GristTool.js'
 
 // ============================================================================
@@ -46,7 +46,7 @@ export const CreateTableSchema = z
 
 export type CreateTableInput = z.infer<typeof CreateTableSchema>
 
-export class CreateTableTool extends GristTool<typeof CreateTableSchema, any> {
+export class CreateTableTool extends GristTool<typeof CreateTableSchema, unknown> {
   constructor(client: GristClient) {
     super(client, CreateTableSchema)
   }
@@ -93,7 +93,7 @@ export const RenameTableSchema = z
 
 export type RenameTableInput = z.infer<typeof RenameTableSchema>
 
-export class RenameTableTool extends GristTool<typeof RenameTableSchema, any> {
+export class RenameTableTool extends GristTool<typeof RenameTableSchema, unknown> {
   constructor(client: GristClient) {
     super(client, RenameTableSchema)
   }
@@ -132,7 +132,7 @@ export const DeleteTableSchema = z
 
 export type DeleteTableInput = z.infer<typeof DeleteTableSchema>
 
-export class DeleteTableTool extends GristTool<typeof DeleteTableSchema, any> {
+export class DeleteTableTool extends GristTool<typeof DeleteTableSchema, unknown> {
   constructor(client: GristClient) {
     super(client, DeleteTableSchema)
   }

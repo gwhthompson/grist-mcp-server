@@ -73,8 +73,8 @@ export const TableIdSchema = z
   .min(1)
   .describe('Table ID from grist_get_tables. Example: "Contacts", "Sales_Data", "Projects"')
 
-export const WorkspaceIdSchema = z
-  .coerce.number()
+export const WorkspaceIdSchema = z.coerce
+  .number()
   .int()
   .positive()
   .describe('Workspace ID from grist_list_workspaces. Example: 123 or 456 (numeric)')
@@ -214,7 +214,12 @@ export const BoolWidgetOptionsSchema = z
  */
 export const AttachmentsWidgetOptionsSchema = z
   .object({
-    height: z.number().int().positive().optional().describe('Height of attachment preview in pixels')
+    height: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Height of attachment preview in pixels')
   })
   .strict()
 
@@ -299,17 +304,20 @@ export const ColumnDefinitionSchema = z
       .optional()
       .describe('Formula code (Python) if isFormula is true. Example: "$Price * $Quantity"'),
 
-    widgetOptions: z.union([
-      z.string(), // JSON string (will be parsed and validated by action builder)
-      WidgetOptionsUnionSchema // Strict validation of widget options object
-    ]).optional().describe(
-      'Widget options validated by column type. Examples:\n' +
-        '- Numeric: {"numMode": "currency", "currency": "USD", "decimals": 2}\n' +
-        '- Choice: {"choices": ["Red", "Blue", "Green"]}\n' +
-        '- Date: {"dateFormat": "YYYY-MM-DD"}\n' +
-        '- Ref/RefList: Widget options for references (alignment, styles)\n' +
-        'Validation is enforced based on column type - unknown properties are rejected.'
-    )
+    widgetOptions: z
+      .union([
+        z.string(), // JSON string (will be parsed and validated by action builder)
+        WidgetOptionsUnionSchema // Strict validation of widget options object
+      ])
+      .optional()
+      .describe(
+        'Widget options validated by column type. Examples:\n' +
+          '- Numeric: {"numMode": "currency", "currency": "USD", "decimals": 2}\n' +
+          '- Choice: {"choices": ["Red", "Blue", "Green"]}\n' +
+          '- Date: {"dateFormat": "YYYY-MM-DD"}\n' +
+          '- Ref/RefList: Widget options for references (alignment, styles)\n' +
+          'Validation is enforced based on column type - unknown properties are rejected.'
+      )
   })
   .strict()
 

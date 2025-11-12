@@ -52,5 +52,10 @@ export interface HttpService {
   /**
    * Generic request method
    */
-  request<T>(method: HttpMethod, path: string, data?: unknown, params?: Record<string, unknown>): Promise<T>
+  request<T>(
+    method: HttpMethod,
+    path: string,
+    data?: unknown,
+    params?: Record<string, unknown>
+  ): Promise<T>
 }

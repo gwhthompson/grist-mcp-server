@@ -4,40 +4,39 @@
  * Complete fixtures for all 11 Grist column types with proper widgetOptions
  */
 
+import type { CellValue } from '../../src/schemas/api-responses.js'
 import {
-  buildTextWidgetOptions,
-  buildNumericWidgetOptions,
-  buildBoolWidgetOptions,
-  buildDateWidgetOptions,
-  buildDateTimeWidgetOptions,
-  buildChoiceWidgetOptions,
-  buildChoiceListWidgetOptions,
-  buildRefWidgetOptions,
-  buildRefListWidgetOptions,
-  buildAttachmentsWidgetOptions
-} from '../helpers/widget-options.js';
-
-import {
-  createList,
-  createDateTime,
   createDate,
+  createDateTime,
+  createList,
   createReference,
-  createReferenceList,
-  SAMPLE_CELL_VALUES
-} from '../helpers/cell-values.js';
+  createReferenceList
+} from '../helpers/cell-values.js'
+import {
+  buildAttachmentsWidgetOptions,
+  buildBoolWidgetOptions,
+  buildChoiceListWidgetOptions,
+  buildChoiceWidgetOptions,
+  buildDateTimeWidgetOptions,
+  buildDateWidgetOptions,
+  buildNumericWidgetOptions,
+  buildRefListWidgetOptions,
+  buildRefWidgetOptions,
+  buildTextWidgetOptions
+} from '../helpers/widget-options.js'
 
 /**
  * Column definition for testing
  */
 export interface ColumnFixture {
-  id: string;
+  id: string
   fields: {
-    type: string;
-    label: string;
-    widgetOptions?: string;
-    description?: string;
-  };
-  sampleValues: any[];
+    type: string
+    label: string
+    widgetOptions?: string
+    description?: string
+  }
+  sampleValues: CellValue[]
 }
 
 /**
@@ -53,13 +52,7 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       widgetOptions: buildTextWidgetOptions({ alignment: 'left' }),
       description: 'Basic text column'
     },
-    sampleValues: [
-      'Hello World',
-      'Multi\nLine\nText',
-      'Special chars: @#$%^&*()',
-      '',
-      null
-    ]
+    sampleValues: ['Hello World', 'Multi\nLine\nText', 'Special chars: @#$%^&*()', '', null]
   },
 
   // 2. Numeric
@@ -71,13 +64,7 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       widgetOptions: buildNumericWidgetOptions({ numMode: 'decimal', decimals: 2 }),
       description: 'Numeric column with decimals'
     },
-    sampleValues: [
-      42,
-      3.14159,
-      -100.5,
-      0,
-      null
-    ]
+    sampleValues: [42, Math.PI, -100.5, 0, null]
   },
 
   // 3. Int
@@ -89,13 +76,7 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       widgetOptions: buildNumericWidgetOptions({ numMode: 'decimal', decimals: 0 }),
       description: 'Integer column'
     },
-    sampleValues: [
-      1,
-      100,
-      -50,
-      0,
-      null
-    ]
+    sampleValues: [1, 100, -50, 0, null]
   },
 
   // 4. Bool
@@ -107,13 +88,7 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       widgetOptions: buildBoolWidgetOptions({ widget: 'CheckBox' }),
       description: 'Boolean column'
     },
-    sampleValues: [
-      true,
-      false,
-      true,
-      false,
-      null
-    ]
+    sampleValues: [true, false, true, false, null]
   },
 
   // 5. Date
@@ -164,21 +139,15 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       widgetOptions: buildChoiceWidgetOptions({
         choices: ['New', 'In Progress', 'Done', 'Archived'],
         choiceOptions: {
-          'New': { fillColor: '#90EE90', textColor: '#000000' },
+          New: { fillColor: '#90EE90', textColor: '#000000' },
           'In Progress': { fillColor: '#FFD700', textColor: '#000000' },
-          'Done': { fillColor: '#87CEEB', textColor: '#000000' },
-          'Archived': { fillColor: '#D3D3D3', textColor: '#696969' }
+          Done: { fillColor: '#87CEEB', textColor: '#000000' },
+          Archived: { fillColor: '#D3D3D3', textColor: '#696969' }
         }
       }),
       description: 'Single choice column with styling'
     },
-    sampleValues: [
-      'New',
-      'In Progress',
-      'Done',
-      'Archived',
-      null
-    ]
+    sampleValues: ['New', 'In Progress', 'Done', 'Archived', null]
   },
 
   // 8. ChoiceList
@@ -190,10 +159,10 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       widgetOptions: buildChoiceListWidgetOptions({
         choices: ['tag1', 'tag2', 'tag3', 'tag4'],
         choiceOptions: {
-          'tag1': { fillColor: '#FF6B6B', textColor: '#FFFFFF' },
-          'tag2': { fillColor: '#4ECDC4', textColor: '#000000' },
-          'tag3': { fillColor: '#FFE66D', textColor: '#000000' },
-          'tag4': { fillColor: '#A8DADC', textColor: '#000000' }
+          tag1: { fillColor: '#FF6B6B', textColor: '#FFFFFF' },
+          tag2: { fillColor: '#4ECDC4', textColor: '#000000' },
+          tag3: { fillColor: '#FFE66D', textColor: '#000000' },
+          tag4: { fillColor: '#A8DADC', textColor: '#000000' }
         }
       }),
       description: 'Multiple choice column with styling'
@@ -260,18 +229,18 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       createList(5, 6, 7) // Multiple attachments
     ]
   }
-};
+}
 
 /**
  * Get all column type names
  */
-export const ALL_COLUMN_TYPES = Object.keys(COLUMN_TYPE_FIXTURES);
+export const ALL_COLUMN_TYPES = Object.keys(COLUMN_TYPE_FIXTURES)
 
 /**
  * Get column fixture by type
  */
 export function getColumnFixture(type: keyof typeof COLUMN_TYPE_FIXTURES): ColumnFixture {
-  return COLUMN_TYPE_FIXTURES[type];
+  return COLUMN_TYPE_FIXTURES[type]
 }
 
 /**
@@ -283,42 +252,38 @@ export const REFERENCE_TABLE_FIXTURE: ColumnFixture = {
     type: 'Text',
     label: 'Reference Table'
   },
-  sampleValues: [
-    'Ref Item 1',
-    'Ref Item 2',
-    'Ref Item 3',
-    'Ref Item 4',
-    'Ref Item 5'
-  ]
-};
+  sampleValues: ['Ref Item 1', 'Ref Item 2', 'Ref Item 3', 'Ref Item 4', 'Ref Item 5']
+}
 
 /**
  * Create records for testing with all column types
  */
-export function createSampleRecords(numRecords: number = 5): Array<{ fields: Record<string, any> }> {
-  const records: Array<{ fields: Record<string, any> }> = [];
+export function createSampleRecords(
+  numRecords: number = 5
+): Array<{ fields: Record<string, CellValue> }> {
+  const records: Array<{ fields: Record<string, CellValue> }> = []
 
   for (let i = 0; i < numRecords; i++) {
-    const fields: Record<string, any> = {};
+    const fields: Record<string, CellValue> = {}
 
-    for (const [key, fixture] of Object.entries(COLUMN_TYPE_FIXTURES)) {
+    for (const [_key, fixture] of Object.entries(COLUMN_TYPE_FIXTURES)) {
       // Get the sample value at this index (cycle if needed)
-      const sampleValue = fixture.sampleValues[i % fixture.sampleValues.length];
-      fields[fixture.id] = sampleValue;
+      const sampleValue = fixture.sampleValues[i % fixture.sampleValues.length]
+      fields[fixture.id] = sampleValue
     }
 
-    records.push({ fields });
+    records.push({ fields })
   }
 
-  return records;
+  return records
 }
 
 /**
  * Create minimal table definition for testing
  */
 export function createMinimalTable(tableId: string = 'TestTable'): {
-  id: string;
-  columns: Array<{ id: string; fields?: any }>;
+  id: string
+  columns: Array<{ id: string; fields?: Record<string, unknown> }>
 } {
   return {
     id: tableId,
@@ -326,21 +291,21 @@ export function createMinimalTable(tableId: string = 'TestTable'): {
       { id: 'name', fields: { type: 'Text', label: 'Name' } },
       { id: 'value', fields: { type: 'Numeric', label: 'Value' } }
     ]
-  };
+  }
 }
 
 /**
  * Create comprehensive table with all column types
  */
 export function createComprehensiveTable(tableId: string = 'ComprehensiveTable'): {
-  id: string;
-  columns: Array<{ id: string; fields: any }>;
+  id: string
+  columns: Array<{ id: string; fields: Record<string, unknown> }>
 } {
   return {
     id: tableId,
-    columns: Object.values(COLUMN_TYPE_FIXTURES).map(fixture => ({
+    columns: Object.values(COLUMN_TYPE_FIXTURES).map((fixture) => ({
       id: fixture.id,
       fields: fixture.fields
     }))
-  };
+  }
 }

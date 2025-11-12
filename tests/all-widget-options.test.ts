@@ -8,18 +8,31 @@
  * 4. Retrieved and parsed
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createTable } from '../src/tools/tables.js'
+import type { DocId, WorkspaceId } from '../src/types/advanced.js'
+import { ensureGristReady } from './helpers/docker.js'
 import {
   createTestClient,
   createTestDocument,
   createTestWorkspace,
-  getFirstOrg,
   deleteDocument,
-  deleteWorkspace
+  deleteWorkspace,
+  getFirstOrg
 } from './helpers/grist-api.js'
-import { ensureGristReady } from './helpers/docker.js'
-import { createTable } from '../src/tools/tables.js'
-import type { DocId, WorkspaceId } from '../src/types/advanced.js'
+
+// Type for Grist columns API response
+interface ColumnMetadata {
+  id: string
+  fields: {
+    widgetOptions?: string
+    [key: string]: unknown
+  }
+}
+
+interface ColumnsResponse {
+  columns: ColumnMetadata[]
+}
 
 describe('All Widget Options Types - Serialization Test', () => {
   const client = createTestClient()
@@ -30,7 +43,11 @@ describe('All Widget Options Types - Serialization Test', () => {
   beforeAll(async () => {
     await ensureGristReady()
     orgId = await getFirstOrg(client)
-    workspaceId = (await createTestWorkspace(client, orgId, 'All Widget Options Test')) as WorkspaceId
+    workspaceId = (await createTestWorkspace(
+      client,
+      orgId,
+      'All Widget Options Test'
+    )) as WorkspaceId
     docId = (await createTestDocument(client, workspaceId, 'Widget Options Doc')) as DocId
   }, 60000)
 
@@ -97,14 +114,17 @@ describe('All Widget Options Types - Serialization Test', () => {
     })
 
     // Retrieve all column metadata
-    const columnsResponse = await client.get<{ columns: any[] }>(
+    const columnsResponse = await client.get<ColumnsResponse>(
       `/docs/${docId}/tables/AllWidgetTypes/columns`
     )
 
-    const columns = columnsResponse.columns.reduce((acc, col) => {
-      acc[col.id] = col.fields.widgetOptions
-      return acc
-    }, {} as Record<string, string>)
+    const columns = columnsResponse.columns.reduce(
+      (acc, col) => {
+        acc[col.id] = col.fields.widgetOptions
+        return acc
+      },
+      {} as Record<string, string>
+    )
 
     console.log('\n=== ALL WIDGET OPTIONS STORED VALUES ===')
 

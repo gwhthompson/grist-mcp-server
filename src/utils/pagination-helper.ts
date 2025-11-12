@@ -13,8 +13,8 @@
  * ```
  */
 
-import type { PaginationParams, PaginationMetadata, ResponseFormat } from '../types.js'
 import { formatToolResponse } from '../services/formatter.js'
+import type { PaginationMetadata, PaginationParams, ResponseFormat } from '../types.js'
 
 /**
  * Generic pagination helper for array-based data

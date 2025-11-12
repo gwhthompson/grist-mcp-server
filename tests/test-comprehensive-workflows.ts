@@ -123,7 +123,7 @@ async function testCompleteWorkflow() {
     console.log(`   Found ${tablesData.table_count} tables`)
 
     // Check if response is helpful for agents
-    const hasContactsTable = tablesData.tables.some((t: any) => t.id === 'Contacts')
+    const hasContactsTable = tablesData.tables.some((t: { id: string }) => t.id === 'Contacts')
     if (!hasContactsTable) {
       addResult(
         'Table Discovery',
@@ -164,8 +164,9 @@ async function testCompleteWorkflow() {
       'PASS',
       `Successfully navigated from workspaces → documents → tables → records (${recordsData.total} results)`
     )
-  } catch (error: any) {
-    addResult('Complete Discovery Workflow', 'FAIL', error.message)
+  } catch (error: unknown) {
+    const err = error as { message: string }
+    addResult('Complete Discovery Workflow', 'FAIL', err.message)
   }
 }
 
@@ -231,8 +232,9 @@ async function testToolSelectionGuidance() {
     console.log(`   ✓ query_sql returned ${sqlData.total} grouped results`)
 
     addResult('Tool Selection Guidance', 'PASS', 'Both tools work as expected for their use cases')
-  } catch (error: any) {
-    addResult('Tool Selection Guidance', 'FAIL', error.message)
+  } catch (error: unknown) {
+    const err = error as { message: string }
+    addResult('Tool Selection Guidance', 'FAIL', err.message)
   }
 }
 
@@ -328,8 +330,9 @@ async function testAddVsUpsertGuidance() {
       'PASS',
       'Both tools work as described, upsert prevents duplicates'
     )
-  } catch (error: any) {
-    addResult('add vs upsert Guidance', 'FAIL', error.message)
+  } catch (error: unknown) {
+    const err = error as { message: string }
+    addResult('add vs upsert Guidance', 'FAIL', err.message)
   }
 }
 
@@ -369,7 +372,7 @@ function assessErrorMessage(metrics: ErrorQualityMetrics, testName: string, pass
   )
 }
 
-async function getFirstDocument(): Promise<any> {
+async function getFirstDocument(): Promise<{ id: string } | null> {
   const docsResult = await getDocuments(client, {
     limit: 1,
     offset: 0,
@@ -493,8 +496,9 @@ async function testPaginationBehavior() {
         `Missing: ${!hasTotal ? 'total ' : ''}${!hasOffset ? 'offset ' : ''}${!hasLimit ? 'limit ' : ''}${!hasHasMore ? 'has_more ' : ''}${!hasNextOffset ? 'next_offset' : ''}`
       )
     }
-  } catch (error: any) {
-    addResult('Pagination Behavior', 'FAIL', error.message)
+  } catch (error: unknown) {
+    const err = error as { message: string }
+    addResult('Pagination Behavior', 'FAIL', err.message)
   }
 }
 
@@ -551,8 +555,9 @@ async function testResponseFormatConsistency() {
       'PASS',
       'Both JSON and Markdown formats work correctly'
     )
-  } catch (error: any) {
-    addResult('Response Format Consistency', 'FAIL', error.message)
+  } catch (error: unknown) {
+    const err = error as { message: string }
+    addResult('Response Format Consistency', 'FAIL', err.message)
   }
 }
 

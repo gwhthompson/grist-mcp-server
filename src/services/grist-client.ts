@@ -21,18 +21,14 @@
  * ```
  */
 
-import axios, {
-  type AxiosError,
-  type AxiosInstance,
-  type AxiosRequestConfig
-} from 'axios'
+import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios'
 import type { z } from 'zod'
 import { API_TIMEOUT } from '../constants.js'
-import { validateApiResponse, safeValidate } from '../schemas/api-responses.js'
+import { safeValidate, validateApiResponse } from '../schemas/api-responses.js'
 import type { ApiPath } from '../types/advanced.js'
+import { Logger, LogLevel } from '../utils/logger.js'
 import { RateLimiter, type RateLimiterConfig } from '../utils/rate-limiter.js'
 import { ResponseCache, type ResponseCacheConfig } from '../utils/response-cache.js'
-import { Logger, LogLevel } from '../utils/logger.js'
 import { sanitizeMessage } from '../utils/sanitizer.js'
 
 // ============================================================================
@@ -218,10 +214,14 @@ export class GristClient {
 
           return this.validateResponse(response.data, options)
         } catch (error) {
-          this.logger.error('GET request failed', {
-            path,
-            params
-          }, error instanceof Error ? error : undefined)
+          this.logger.error(
+            'GET request failed',
+            {
+              path,
+              params
+            },
+            error instanceof Error ? error : undefined
+          )
           throw this.handleError(error, 'GET', path)
         }
       }, `GET ${path}`)
@@ -270,18 +270,18 @@ export class GristClient {
     const result = await this.rateLimiter.schedule(() =>
       this.retryWithBackoff(async () => {
         try {
-          const response = await this.client.post<TResponse>(
-            path,
-            data,
-            options?.config
-          )
+          const response = await this.client.post<TResponse>(path, data, options?.config)
 
           return this.validateResponse(response.data, options)
         } catch (error) {
-          this.logger.error('POST request failed', {
-            path,
-            dataSize: JSON.stringify(data).length
-          }, error instanceof Error ? error : undefined)
+          this.logger.error(
+            'POST request failed',
+            {
+              path,
+              dataSize: JSON.stringify(data).length
+            },
+            error instanceof Error ? error : undefined
+          )
           throw this.handleError(error, 'POST', path)
         }
       }, `POST ${path}`)
@@ -324,18 +324,18 @@ export class GristClient {
     const result = await this.rateLimiter.schedule(() =>
       this.retryWithBackoff(async () => {
         try {
-          const response = await this.client.put<TResponse>(
-            path,
-            data,
-            options?.config
-          )
+          const response = await this.client.put<TResponse>(path, data, options?.config)
 
           return this.validateResponse(response.data, options)
         } catch (error) {
-          this.logger.error('PUT request failed', {
-            path,
-            dataSize: JSON.stringify(data).length
-          }, error instanceof Error ? error : undefined)
+          this.logger.error(
+            'PUT request failed',
+            {
+              path,
+              dataSize: JSON.stringify(data).length
+            },
+            error instanceof Error ? error : undefined
+          )
           throw this.handleError(error, 'PUT', path)
         }
       }, `PUT ${path}`)
@@ -378,18 +378,18 @@ export class GristClient {
     const result = await this.rateLimiter.schedule(() =>
       this.retryWithBackoff(async () => {
         try {
-          const response = await this.client.patch<TResponse>(
-            path,
-            data,
-            options?.config
-          )
+          const response = await this.client.patch<TResponse>(path, data, options?.config)
 
           return this.validateResponse(response.data, options)
         } catch (error) {
-          this.logger.error('PATCH request failed', {
-            path,
-            dataSize: JSON.stringify(data).length
-          }, error instanceof Error ? error : undefined)
+          this.logger.error(
+            'PATCH request failed',
+            {
+              path,
+              dataSize: JSON.stringify(data).length
+            },
+            error instanceof Error ? error : undefined
+          )
           throw this.handleError(error, 'PATCH', path)
         }
       }, `PATCH ${path}`)
@@ -432,9 +432,13 @@ export class GristClient {
 
           return this.validateResponse(response.data, options)
         } catch (error) {
-          this.logger.error('DELETE request failed', {
-            path
-          }, error instanceof Error ? error : undefined)
+          this.logger.error(
+            'DELETE request failed',
+            {
+              path
+            },
+            error instanceof Error ? error : undefined
+          )
           throw this.handleError(error, 'DELETE', path)
         }
       }, `DELETE ${path}`)
@@ -467,7 +471,7 @@ export class GristClient {
       if (payloadSize > MAX_PAYLOAD_SIZE) {
         throw new Error(
           `Request payload too large: ${payloadSize} bytes exceeds maximum of ${MAX_PAYLOAD_SIZE} bytes. ` +
-          `Try reducing the number of records or splitting into multiple requests.`
+            `Try reducing the number of records or splitting into multiple requests.`
         )
       }
     } catch (error) {
@@ -498,11 +502,7 @@ export class GristClient {
     }
 
     // Perform runtime validation with Zod
-    return validateApiResponse(
-      options.schema,
-      data,
-      options.context
-    )
+    return validateApiResponse(options.schema, data, options.context)
   }
 
   /**
@@ -559,10 +559,7 @@ export class GristClient {
    * )
    * ```
    */
-  private async retryWithBackoff<T>(
-    fn: () => Promise<T>,
-    context: string
-  ): Promise<T> {
+  private async retryWithBackoff<T>(fn: () => Promise<T>, context: string): Promise<T> {
     let lastError: Error | undefined
 
     for (let attempt = 0; attempt <= this.retryConfig.maxRetries; attempt++) {
@@ -579,7 +576,7 @@ export class GristClient {
         }
 
         // Calculate delay with exponential backoff and jitter
-        const exponentialDelay = this.retryConfig.baseDelayMs * Math.pow(2, attempt)
+        const exponentialDelay = this.retryConfig.baseDelayMs * 2 ** attempt
         const jitter = Math.random() * 0.3 * exponentialDelay // 0-30% jitter
         const delayMs = Math.min(exponentialDelay + jitter, this.retryConfig.maxDelayMs)
 
@@ -642,12 +639,155 @@ export class GristClient {
    * @returns Promise that resolves after delay
    */
   private sleep(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms))
+    return new Promise((resolve) => setTimeout(resolve, ms))
   }
 
   // ==========================================================================
   // Error Handling
   // ==========================================================================
+
+  /**
+   * Detects if a 500 error is likely due to CellValue encoding issues
+   */
+  private detect500EncodingError(sanitizedMessage: string): boolean {
+    const errorText = String(sanitizedMessage).toLowerCase()
+    return (
+      errorText.includes('invalid') || errorText.includes('type') || errorText.includes('expected')
+    )
+  }
+
+  /**
+   * Detects if a 400 error is from SQL endpoint
+   */
+  private detect400SqlError(path: string): boolean {
+    return path.includes('/sql')
+  }
+
+  /**
+   * Detects if a 400 error is a validation error
+   */
+  private detect400ValidationError(sanitizedMessage: string): boolean {
+    const errorLower = String(sanitizedMessage).toLowerCase()
+    return (
+      errorLower.includes('invalid') ||
+      errorLower.includes('required') ||
+      errorLower.includes('expected')
+    )
+  }
+
+  /**
+   * Builds detailed error message for CellValue encoding issues
+   */
+  private buildEncodingError(sanitizedMessage: string): Error {
+    return new Error(
+      `Grist server error (500) - Likely CellValue encoding issue!\n\n` +
+        `Most common encoding mistakes:\n` +
+        `1. ChoiceList: Missing "L" prefix\n` +
+        `   ❌ Wrong: ["option1", "option2"]\n` +
+        `   ✅ Right: ["L", "option1", "option2"]\n\n` +
+        `2. Date: Using string instead of encoded format\n` +
+        `   ❌ Wrong: "2024-01-15"\n` +
+        `   ✅ Right: ["d", 1705276800000]\n` +
+        `   💡 Use: Date.parse("2024-01-15")\n\n` +
+        `3. DateTime: Missing timezone\n` +
+        `   ❌ Wrong: 1705276800000\n` +
+        `   ✅ Right: ["D", 1705276800000, "UTC"]\n\n` +
+        `4. Reference: Using row number directly\n` +
+        `   ❌ Wrong: 123\n` +
+        `   ✅ Right: ["R", 123]\n\n` +
+        `📖 See grist_add_records tool description for complete encoding guide.\n` +
+        `📖 See docs/reference/grist-types.d.ts for all GristObjCode types.\n\n` +
+        `Original error: ${sanitizedMessage}`
+    )
+  }
+
+  /**
+   * Builds error message for SQL syntax errors
+   */
+  private buildSqlError(sanitizedMessage: string): Error {
+    return new Error(
+      `SQL syntax error: ${sanitizedMessage}\n\n` +
+        `Common SQL mistakes:\n` +
+        `1. Table names are case-sensitive - check exact spelling\n` +
+        `   💡 Use grist_get_tables to see all available tables\n\n` +
+        `2. Column names must match exactly\n` +
+        `   💡 Use grist_get_tables with detail_level="full_schema"\n\n` +
+        `3. String values need single quotes: WHERE Status = 'Active'\n\n` +
+        `4. Check JOIN syntax: LEFT JOIN TableName ON condition\n\n` +
+        `5. Parameterized queries ($1, $2) require Grist v1.1.0+\n` +
+        `   If not supported, embed values directly in SQL\n\n` +
+        `📖 See grist_query_sql tool description for SQL examples.`
+    )
+  }
+
+  /**
+   * Builds error message for validation errors
+   */
+  private buildValidationError(sanitizedMessage: string): Error {
+    return new Error(
+      `Validation error: ${sanitizedMessage}\n\n` +
+        `Common causes:\n` +
+        `1. Missing required fields in request\n` +
+        `2. Invalid data type (string where number expected)\n` +
+        `3. Wrong CellValue encoding format\n` +
+        `   💡 See grist_add_records for complete encoding guide\n\n` +
+        `4. Invalid widget options\n` +
+        `   💡 See grist_manage_columns for widget options by type\n\n` +
+        `5. Invalid column or table ID\n` +
+        `   💡 Use grist_get_tables to see schema\n\n` +
+        `📖 Check tool description for parameter requirements.`
+    )
+  }
+
+  /**
+   * Builds generic 400 error message
+   */
+  private build400Error(sanitizedMessage: string): Error {
+    return new Error(
+      `Bad request (400): ${sanitizedMessage}\n\n` +
+        `The request was rejected by Grist. Common issues:\n` +
+        `- Invalid parameter format\n` +
+        `- Missing required fields\n` +
+        `- Malformed data structure\n\n` +
+        `Check the tool description for correct parameter formats.`
+    )
+  }
+
+  /**
+   * Builds error message for server errors (502, 503, 504)
+   */
+  private buildServerError(status: number): Error {
+    return new Error(
+      `Grist server error (${status}). This is a temporary server issue. ` +
+        `Try again in a few moments. If problem persists, check https://status.getgrist.com`
+    )
+  }
+
+  /**
+   * Handles 500 status code errors
+   */
+  private handle500Error(path: string, sanitizedMessage: string): Error {
+    if (path.includes('/apply') && this.detect500EncodingError(sanitizedMessage)) {
+      return this.buildEncodingError(sanitizedMessage)
+    }
+
+    return this.buildServerError(500)
+  }
+
+  /**
+   * Handles 400 status code errors
+   */
+  private handle400Error(path: string, sanitizedMessage: string): Error {
+    if (this.detect400SqlError(path)) {
+      return this.buildSqlError(sanitizedMessage)
+    }
+
+    if (this.detect400ValidationError(sanitizedMessage)) {
+      return this.buildValidationError(sanitizedMessage)
+    }
+
+    return this.build400Error(sanitizedMessage)
+  }
 
   /**
    * Transform errors into agent-friendly messages
@@ -659,167 +799,74 @@ export class GristClient {
    * @param path - API path that was accessed
    * @returns Transformed Error with actionable message
    */
-  private handleError(
-    error: unknown,
-    method: HttpMethod,
-    path: string
-  ): Error {
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError<{
-        error?: string | { message?: string }
-        message?: string
-        details?: { userError?: string }
-      }>
-      const status = axiosError.response?.status
-      const errorData = axiosError.response?.data
-
-      // Extract error message - Grist returns { error: string, details: { userError: string } }
-      const message =
-        (typeof errorData?.error === 'string'
-          ? errorData.error
-          : errorData?.error?.message) ||
-        errorData?.message ||
-        axiosError.message
-
-      // Extract userError if available (more detailed/user-friendly)
-      const userError = errorData?.details?.userError
-
-      // Sanitize the error message from API
-      const sanitizedMessage = sanitizeMessage(userError || message)
-
-      switch (status) {
-        case 401:
-          return new Error(
-            `Authentication failed. Check that GRIST_API_KEY is valid and not expired. ` +
-              `Get your API key from: ${this.baseUrl}/settings/keys`
-          )
-
-        case 403:
-          return new Error(
-            `Permission denied for ${method} ${path}. API key lacks required access. ` +
-              `Try using grist_list_documents to see which documents you can access.`
-          )
-
-        case 404:
-          // Parse resource type and provide specific, actionable guidance
-          return this.build404Error(path)
-
-        case 429:
-          return new Error(
-            `Rate limit exceeded. The Grist server is limiting your requests. ` +
-              `Wait 60 seconds before retrying this operation.`
-          )
-
-        case 500:
-          // Detect CellValue encoding errors (most common cause of 500 on /apply endpoint)
-          if (path.includes('/apply')) {
-            const errorText = String(sanitizedMessage).toLowerCase()
-
-            // Check for common encoding error indicators
-            if (errorText.includes('invalid') || errorText.includes('type') || errorText.includes('expected')) {
-              return new Error(
-                `Grist server error (500) - Likely CellValue encoding issue!\n\n` +
-                `Most common encoding mistakes:\n` +
-                `1. ChoiceList: Missing "L" prefix\n` +
-                `   ❌ Wrong: ["option1", "option2"]\n` +
-                `   ✅ Right: ["L", "option1", "option2"]\n\n` +
-                `2. Date: Using string instead of encoded format\n` +
-                `   ❌ Wrong: "2024-01-15"\n` +
-                `   ✅ Right: ["d", 1705276800000]\n` +
-                `   💡 Use: Date.parse("2024-01-15")\n\n` +
-                `3. DateTime: Missing timezone\n` +
-                `   ❌ Wrong: 1705276800000\n` +
-                `   ✅ Right: ["D", 1705276800000, "UTC"]\n\n` +
-                `4. Reference: Using row number directly\n` +
-                `   ❌ Wrong: 123\n` +
-                `   ✅ Right: ["R", 123]\n\n` +
-                `📖 See grist_add_records tool description for complete encoding guide.\n` +
-                `📖 See docs/reference/grist-types.d.ts for all GristObjCode types.\n\n` +
-                `Original error: ${sanitizedMessage}`
-              )
-            }
-          }
-
-          return new Error(
-            `Grist server error (${status}). This is a temporary server issue. ` +
-              `Try again in a few moments. If problem persists, check https://status.getgrist.com`
-          )
-        case 400:
-          // Bad Request - Detect specific error types for better guidance
-          const errorLower = String(sanitizedMessage).toLowerCase()
-
-          // SQL syntax errors
-          if (path.includes('/sql')) {
-            return new Error(
-              `SQL syntax error: ${sanitizedMessage}\n\n` +
-              `Common SQL mistakes:\n` +
-              `1. Table names are case-sensitive - check exact spelling\n` +
-              `   💡 Use grist_get_tables to see all available tables\n\n` +
-              `2. Column names must match exactly\n` +
-              `   💡 Use grist_get_tables with detail_level="full_schema"\n\n` +
-              `3. String values need single quotes: WHERE Status = 'Active'\n\n` +
-              `4. Check JOIN syntax: LEFT JOIN TableName ON condition\n\n` +
-              `5. Parameterized queries ($1, $2) require Grist v1.1.0+\n` +
-              `   If not supported, embed values directly in SQL\n\n` +
-              `📖 See grist_query_sql tool description for SQL examples.`
-            )
-          }
-
-          // Validation errors (invalid data, missing required fields)
-          if (errorLower.includes('invalid') || errorLower.includes('required') || errorLower.includes('expected')) {
-            return new Error(
-              `Validation error: ${sanitizedMessage}\n\n` +
-              `Common causes:\n` +
-              `1. Missing required fields in request\n` +
-              `2. Invalid data type (string where number expected)\n` +
-              `3. Wrong CellValue encoding format\n` +
-              `   💡 See grist_add_records for complete encoding guide\n\n` +
-              `4. Invalid widget options\n` +
-              `   💡 See grist_manage_columns for widget options by type\n\n` +
-              `5. Invalid column or table ID\n` +
-              `   💡 Use grist_get_tables to see schema\n\n` +
-              `📖 Check tool description for parameter requirements.`
-            )
-          }
-
-          // Generic 400 error
-          return new Error(
-            `Bad request (400): ${sanitizedMessage}\n\n` +
-            `The request was rejected by Grist. Common issues:\n` +
-            `- Invalid parameter format\n` +
-            `- Missing required fields\n` +
-            `- Malformed data structure\n\n` +
-            `Check the tool description for correct parameter formats.`
-          )
-
-        case 502:
-        case 503:
-        case 504:
-          return new Error(
-            `Grist server error (${status}). This is a temporary server issue. ` +
-              `Try again in a few moments. If problem persists, check https://status.getgrist.com`
-          )
-
-        default:
-          if (axiosError.code === 'ECONNABORTED') {
-            return new Error(
-              `Request timed out after ${API_TIMEOUT}ms. The operation took too long. ` +
-                `Try reducing the amount of data requested or check your network connection.`
-            )
-          }
-
-          return new Error(
-            `Request failed: ${sanitizedMessage}. ${method} ${path} returned status ${status}.`
-          )
+  private handleError(error: unknown, method: HttpMethod, path: string): Error {
+    if (!axios.isAxiosError(error)) {
+      // Non-Axios errors
+      if (error instanceof Error) {
+        return new Error(`Unexpected error: ${sanitizeMessage(error.message)}`)
       }
+      return new Error(`Unexpected error: ${sanitizeMessage(String(error))}`)
     }
 
-    // Non-Axios errors
-    if (error instanceof Error) {
-      return new Error(`Unexpected error: ${sanitizeMessage(error.message)}`)
+    const axiosError = error as AxiosError<{
+      error?: string | { message?: string }
+      message?: string
+      details?: { userError?: string }
+    }>
+    const status = axiosError.response?.status
+    const errorData = axiosError.response?.data
+
+    // Extract error message - Grist returns { error: string, details: { userError: string } }
+    const message =
+      (typeof errorData?.error === 'string' ? errorData.error : errorData?.error?.message) ||
+      errorData?.message ||
+      axiosError.message
+
+    // Extract userError if available (more detailed/user-friendly)
+    const userError = errorData?.details?.userError
+
+    // Sanitize the error message from API
+    const sanitizedMessage = sanitizeMessage(userError || message)
+
+    // Status code handler lookup
+    const handlers: Record<number, () => Error> = {
+      401: () =>
+        new Error(
+          `Authentication failed. Check that GRIST_API_KEY is valid and not expired. ` +
+            `Get your API key from: ${this.baseUrl}/settings/keys`
+        ),
+      403: () =>
+        new Error(
+          `Permission denied for ${method} ${path}. API key lacks required access. ` +
+            `Try using grist_list_documents to see which documents you can access.`
+        ),
+      404: () => this.build404Error(path),
+      429: () =>
+        new Error(
+          `Rate limit exceeded. The Grist server is limiting your requests. ` +
+            `Wait 60 seconds before retrying this operation.`
+        ),
+      400: () => this.handle400Error(path, sanitizedMessage),
+      500: () => this.handle500Error(path, sanitizedMessage),
+      502: () => this.buildServerError(502),
+      503: () => this.buildServerError(503),
+      504: () => this.buildServerError(504)
     }
 
-    return new Error(`Unexpected error: ${sanitizeMessage(String(error))}`)
+    if (status && handlers[status]) {
+      return handlers[status]()
+    }
+
+    if (axiosError.code === 'ECONNABORTED') {
+      return new Error(
+        `Request timed out after ${API_TIMEOUT}ms. The operation took too long. ` +
+          `Try reducing the amount of data requested or check your network connection.`
+      )
+    }
+
+    return new Error(
+      `Request failed: ${sanitizedMessage}. ${method} ${path} returned status ${status}.`
+    )
   }
 
   /**
@@ -961,11 +1008,7 @@ export class GristClient {
    * @param params - Query parameters
    * @returns Cache key string
    */
-  private getCacheKey(
-    method: HttpMethod,
-    path: string,
-    params?: Record<string, unknown>
-  ): string {
+  private getCacheKey(method: HttpMethod, path: string, params?: Record<string, unknown>): string {
     const paramStr = params ? JSON.stringify(params) : ''
     return `${method}:${path}${paramStr ? `:${paramStr}` : ''}`
   }

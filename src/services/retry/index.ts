@@ -2,4 +2,8 @@
  * Retry Service Module
  */
 
-export { type RetryService, type RetryConfig, ExponentialBackoffRetryService } from './RetryService.js'
+export {
+  ExponentialBackoffRetryService,
+  type RetryConfig,
+  type RetryService
+} from './RetryService.js'

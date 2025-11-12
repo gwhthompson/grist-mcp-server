@@ -2,9 +2,9 @@
 
 A Model Context Protocol (MCP) server that enables AI assistants to interact with Grist documents, tables, and records.
 
-**Status:** ✅ Production Ready | **Version:** 1.2.1 | **Build:** Passing | **Quality Score:** 9.8/10 (A+)
+**Status:** ✅ Production Ready | **Version:** 1.2.2 | **Build:** Passing | **Quality Score:** 9.8/10 (A+)
 
-**Validation:** Tested against live Docker Grist instance with comprehensive MCP, TypeScript, and Zod review completed. See [docs/TESTING.md](docs/TESTING.md) and [docs/COMPREHENSIVE_REVIEW_2025-01-09.md](docs/COMPREHENSIVE_REVIEW_2025-01-09.md) for details.
+**Validation:** Tested against live Docker Grist instance with comprehensive MCP, TypeScript, and Zod review completed. See [docs/TESTING.md](docs/TESTING.md) and [docs/STATUS.md](docs/STATUS.md) for details.
 
 ## Features
 
@@ -504,7 +504,8 @@ This MCP server has been validated against a live Grist instance. See [docs/TEST
 
 ## Documentation
 
-- [Implementation Guide](docs/IMPLEMENTATION_GUIDE.md) - Detailed implementation patterns and architecture
+- [Architecture Guide](docs/ARCHITECTURE.md) - System architecture and design patterns
+- [Development Guide](docs/DEVELOPMENT.md) - Development workflow and patterns
 - [Testing Guide](docs/TESTING.md) - Validation procedures and test coverage
 - [Changelog](docs/CHANGELOG.md) - Version history and changes
 
@@ -514,6 +515,27 @@ This MCP server was built following best practices from:
 - [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
 - [MCP Best Practices](https://modelcontextprotocol.io/docs/best-practices)
 - [Grist API Documentation](https://support.getgrist.com/api/)
+
+---
+
+## Documentation
+
+**📚 [Complete Documentation Guide](docs/)**
+
+### For New Users
+- **[Getting Started](docs/STATUS.md)** - Current status and quick overview
+- **[Docker Setup](docs/DOCKER_SETUP.md)** - Local development environment
+
+### For Developers & Contributors
+- **[Development Guide](docs/DEVELOPMENT.md)** - Workflows, patterns, and standards
+- **[Architecture](docs/ARCHITECTURE.md)** - System design and patterns
+- **[Testing Guide](docs/TESTING.md)** - Test strategy and procedures
+- **[Validation Rules](docs/VALIDATION_RULES.md)** - Complete constraints reference
+
+### For AI Assistants
+- **[CLAUDE.md](CLAUDE.md)** - Comprehensive development guide for AI assistants
+
+---
 
 ## License
 

@@ -4,15 +4,16 @@
  * Higher-level helpers for common Grist API operations in tests
  */
 
-import { GristClient } from '../../src/services/grist-client.js';
-import type { DocId, TableId, WorkspaceId, ColId } from '../../src/types/advanced.js';
+import type { CellValue } from '../../src/schemas/api-responses.js'
+import { GristClient } from '../../src/services/grist-client.js'
+import type { DocId, TableId, WorkspaceId } from '../../src/types/advanced.js'
 
 export interface TestContext {
-  client: GristClient;
-  orgId?: number;
-  workspaceId?: WorkspaceId;
-  docId?: DocId;
-  tableId?: TableId;
+  client: GristClient
+  orgId?: number
+  workspaceId?: WorkspaceId
+  docId?: DocId
+  tableId?: TableId
 }
 
 /**
@@ -22,7 +23,7 @@ export function createTestClient(
   url: string = process.env.GRIST_URL || 'http://localhost:8989',
   apiKey: string = process.env.GRIST_API_KEY || 'test_api_key'
 ): GristClient {
-  return new GristClient(url, apiKey);
+  return new GristClient(url, apiKey)
 }
 
 /**
@@ -30,30 +31,30 @@ export function createTestClient(
  * In Docker with GRIST_SINGLE_ORG=example, we must use the "example" org (id=3)
  */
 export async function getFirstOrg(client: GristClient): Promise<number> {
-  const orgs = await client.get<Array<{ id: number; domain: string }>>('/orgs');
+  const orgs = await client.get<Array<{ id: number; domain: string }>>('/orgs')
   if (!orgs || orgs.length === 0) {
-    throw new Error('No organizations found');
+    throw new Error('No organizations found')
   }
 
   // In Docker setup with GRIST_SINGLE_ORG=example, documents must be created in the "example" org
-  const exampleOrg = orgs.find(org => org.domain === 'example');
+  const exampleOrg = orgs.find((org) => org.domain === 'example')
   if (exampleOrg) {
-    return exampleOrg.id;
+    return exampleOrg.id
   }
 
   // Fallback to first org if "example" not found
-  return orgs[0].id;
+  return orgs[0].id
 }
 
 /**
  * Get the first available workspace
  */
 export async function getFirstWorkspace(client: GristClient, orgId: number): Promise<WorkspaceId> {
-  const workspaces = await client.get<Array<{ id: number }>>(`/orgs/${orgId}/workspaces`);
+  const workspaces = await client.get<Array<{ id: number }>>(`/orgs/${orgId}/workspaces`)
   if (!workspaces || workspaces.length === 0) {
-    throw new Error('No workspaces found');
+    throw new Error('No workspaces found')
   }
-  return workspaces[0].id as WorkspaceId;
+  return workspaces[0].id as WorkspaceId
 }
 
 /**
@@ -66,8 +67,8 @@ export async function createTestWorkspace(
 ): Promise<WorkspaceId> {
   const workspaceId = await client.post<number>(`/orgs/${orgId}/workspaces`, {
     name
-  });
-  return workspaceId as WorkspaceId;
+  })
+  return workspaceId as WorkspaceId
 }
 
 /**
@@ -80,8 +81,8 @@ export async function createTestDocument(
 ): Promise<DocId> {
   const docId = await client.post<string>(`/workspaces/${workspaceId}/docs`, {
     name
-  });
-  return docId as DocId;
+  })
+  return docId as DocId
 }
 
 /**
@@ -91,15 +92,15 @@ export async function createTestTable(
   client: GristClient,
   docId: DocId,
   tableId: string = `TestTable_${Date.now()}`,
-  columns: Array<{ id: string; fields?: any }> = [
+  columns: Array<{ id: string; fields?: Record<string, unknown> }> = [
     { id: 'name', fields: { type: 'Text', label: 'Name' } },
     { id: 'value', fields: { type: 'Numeric', label: 'Value' } }
   ]
 ): Promise<TableId> {
   await client.post(`/docs/${docId}/tables`, {
     tables: [{ id: tableId, columns }]
-  });
-  return tableId as TableId;
+  })
+  return tableId as TableId
 }
 
 /**
@@ -109,13 +110,13 @@ export async function addTestRecords(
   client: GristClient,
   docId: DocId,
   tableId: TableId,
-  records: Array<{ fields: Record<string, any> }>
+  records: Array<{ fields: Record<string, CellValue> }>
 ): Promise<number[]> {
   const response = await client.post<{ records: Array<{ id: number }> }>(
     `/docs/${docId}/tables/${tableId}/records`,
     { records }
-  );
-  return response.records.map(r => r.id);
+  )
+  return response.records.map((r) => r.id)
 }
 
 /**
@@ -123,11 +124,12 @@ export async function addTestRecords(
  */
 export async function deleteDocument(client: GristClient, docId: DocId): Promise<void> {
   try {
-    await client.delete(`/docs/${docId}`);
-  } catch (error) {
+    await client.delete(`/docs/${docId}`)
+  } catch (error: unknown) {
     // Ignore 404 errors (already deleted)
-    if (!(error as any).message?.includes('404')) {
-      throw error;
+    const err = error as { message?: string }
+    if (!err.message?.includes('404')) {
+      throw error
     }
   }
 }
@@ -135,13 +137,17 @@ export async function deleteDocument(client: GristClient, docId: DocId): Promise
 /**
  * Delete a workspace (cleanup)
  */
-export async function deleteWorkspace(client: GristClient, workspaceId: WorkspaceId): Promise<void> {
+export async function deleteWorkspace(
+  client: GristClient,
+  workspaceId: WorkspaceId
+): Promise<void> {
   try {
-    await client.delete(`/workspaces/${workspaceId}`);
-  } catch (error) {
+    await client.delete(`/workspaces/${workspaceId}`)
+  } catch (error: unknown) {
     // Ignore 404 errors (already deleted)
-    if (!(error as any).message?.includes('404')) {
-      throw error;
+    const err = error as { message?: string }
+    if (!err.message?.includes('404')) {
+      throw error
     }
   }
 }
@@ -152,16 +158,16 @@ export async function deleteWorkspace(client: GristClient, workspaceId: Workspac
 export async function createFullTestContext(
   client: GristClient,
   options: {
-    workspaceName?: string;
-    docName?: string;
-    tableName?: string;
-    columns?: Array<{ id: string; fields?: any }>;
+    workspaceName?: string
+    docName?: string
+    tableName?: string
+    columns?: Array<{ id: string; fields?: Record<string, unknown> }>
   } = {}
 ): Promise<Required<TestContext>> {
-  const orgId = await getFirstOrg(client);
-  const workspaceId = await createTestWorkspace(client, orgId, options.workspaceName);
-  const docId = await createTestDocument(client, workspaceId, options.docName);
-  const tableId = await createTestTable(client, docId, options.tableName, options.columns);
+  const orgId = await getFirstOrg(client)
+  const workspaceId = await createTestWorkspace(client, orgId, options.workspaceName)
+  const docId = await createTestDocument(client, workspaceId, options.docName)
+  const tableId = await createTestTable(client, docId, options.tableName, options.columns)
 
   return {
     client,
@@ -169,7 +175,7 @@ export async function createFullTestContext(
     workspaceId,
     docId,
     tableId
-  };
+  }
 }
 
 /**
@@ -178,18 +184,18 @@ export async function createFullTestContext(
 export async function cleanupTestContext(context: Partial<TestContext>): Promise<void> {
   // Check for SKIP_CLEANUP environment variable
   if (process.env.SKIP_CLEANUP === 'true' || process.env.NO_CLEANUP === 'true') {
-    console.log('⚠️  Cleanup skipped (SKIP_CLEANUP=true)');
-    console.log(`   Workspace ID: ${context.workspaceId}`);
-    console.log(`   Document ID: ${context.docId}`);
-    console.log(`   Inspect at: http://localhost:8989`);
-    return;
+    console.log('⚠️  Cleanup skipped (SKIP_CLEANUP=true)')
+    console.log(`   Workspace ID: ${context.workspaceId}`)
+    console.log(`   Document ID: ${context.docId}`)
+    console.log(`   Inspect at: http://localhost:8989`)
+    return
   }
 
-  if (context.docId) {
-    await deleteDocument(context.client!, context.docId);
+  if (context.docId && context.client) {
+    await deleteDocument(context.client, context.docId)
   }
-  if (context.workspaceId) {
-    await deleteWorkspace(context.client!, context.workspaceId);
+  if (context.workspaceId && context.client) {
+    await deleteWorkspace(context.client, context.workspaceId)
   }
 }
 
@@ -200,20 +206,20 @@ export async function waitFor(
   condition: () => Promise<boolean> | boolean,
   options: { timeout?: number; interval?: number; message?: string } = {}
 ): Promise<void> {
-  const timeout = options.timeout || 5000;
-  const interval = options.interval || 100;
-  const startTime = Date.now();
+  const timeout = options.timeout || 5000
+  const interval = options.interval || 100
+  const startTime = Date.now()
 
   while (Date.now() - startTime < timeout) {
     if (await condition()) {
-      return;
+      return
     }
-    await sleep(interval);
+    await sleep(interval)
   }
 
-  throw new Error(options.message || `Condition not met within ${timeout}ms`);
+  throw new Error(options.message || `Condition not met within ${timeout}ms`)
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }

@@ -106,7 +106,7 @@ export class FormatterRegistry {
    * Format data using appropriate strategy
    */
   format<T>(data: T, format: string = 'markdown'): string {
-    const strategy = this.strategies.find(s => s.canHandle(format))
+    const strategy = this.strategies.find((s) => s.canHandle(format))
 
     if (!strategy) {
       // Fallback to JSON if unknown format
@@ -121,7 +121,7 @@ export class FormatterRegistry {
    * Get MIME type for format
    */
   getMimeType(format: string = 'markdown'): string {
-    const strategy = this.strategies.find(s => s.canHandle(format))
+    const strategy = this.strategies.find((s) => s.canHandle(format))
     return strategy?.getMimeType() || 'application/json'
   }
 

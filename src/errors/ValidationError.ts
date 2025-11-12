@@ -1,5 +1,5 @@
-import { GristError } from './GristError.js'
 import type { z } from 'zod'
+import { GristError } from './GristError.js'
 
 /**
  * Input validation error
@@ -12,22 +12,23 @@ export class ValidationError extends GristError {
     public readonly constraint: string,
     context?: Record<string, unknown>
   ) {
-    super(
-      `Validation failed for ${field}: ${constraint}`,
-      'VALIDATION_ERROR',
-      { ...context, field, value, constraint }
-    )
+    super(`Validation failed for ${field}: ${constraint}`, 'VALIDATION_ERROR', {
+      ...context,
+      field,
+      value,
+      constraint
+    })
   }
 
   toUserMessage(): string {
-    const valueStr = typeof this.value === 'string'
-      ? `"${this.value}"`
-      : JSON.stringify(this.value)
+    const valueStr = typeof this.value === 'string' ? `"${this.value}"` : JSON.stringify(this.value)
 
-    return `Invalid value for parameter '${this.field}'\n\n` +
-           `Constraint: ${this.constraint}\n` +
-           `Received: ${valueStr}\n\n` +
-           `Please check the parameter documentation and provide a valid value.`
+    return (
+      `Invalid value for parameter '${this.field}'\n\n` +
+      `Constraint: ${this.constraint}\n` +
+      `Received: ${valueStr}\n\n` +
+      `Please check the parameter documentation and provide a valid value.`
+    )
   }
 
   isRetryable(): boolean {
@@ -44,18 +45,9 @@ export class ValidationError extends GristError {
     if (firstIssue) {
       const path = firstIssue.path.join('.')
       const received = 'received' in firstIssue ? firstIssue.received : undefined
-      return new ValidationError(
-        path || field,
-        received,
-        firstIssue.message,
-        { zodIssues: issues }
-      )
+      return new ValidationError(path || field, received, firstIssue.message, { zodIssues: issues })
     }
 
-    return new ValidationError(
-      field,
-      undefined,
-      error.message || 'Validation failed'
-    )
+    return new ValidationError(field, undefined, error.message || 'Validation failed')
   }
 }

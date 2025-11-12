@@ -8,11 +8,7 @@ export abstract class GristError extends Error {
   public readonly context?: Record<string, unknown>
   public readonly timestamp: Date = new Date()
 
-  constructor(
-    message: string,
-    code: string,
-    context?: Record<string, unknown>
-  ) {
+  constructor(message: string, code: string, context?: Record<string, unknown>) {
     super(message)
     this.name = this.constructor.name
     this.code = code

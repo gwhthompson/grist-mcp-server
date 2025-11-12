@@ -12,9 +12,8 @@
  * - Comprehensive error messages for debugging
  */
 
-import { z } from 'zod'
-import { getWidgetOptionsSchema } from '../schemas/widget-options.js'
 import { ValidationError } from '../errors/ValidationError.js'
+import { getWidgetOptionsSchema } from '../schemas/widget-options.js'
 
 /**
  * Validates and serializes widgetOptions for a specific column type
@@ -129,10 +128,7 @@ export function validateAndSerializeWidgetOptions(
  * }
  * ```
  */
-export function isValidWidgetOptions(
-  value: unknown,
-  columnType: string
-): boolean {
+export function isValidWidgetOptions(value: unknown, columnType: string): boolean {
   try {
     validateAndSerializeWidgetOptions(value, columnType)
     return true

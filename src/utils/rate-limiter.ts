@@ -118,10 +118,10 @@ export class RateLimiter {
     // Execute task
     task
       .fn()
-      .then(result => {
+      .then((result) => {
         task.resolve(result)
       })
-      .catch(error => {
+      .catch((error) => {
         task.reject(error)
       })
       .finally(() => {
@@ -174,7 +174,7 @@ export class RateLimiter {
    */
   async waitForIdle(): Promise<void> {
     while (this.activeCount > 0 || this.queue.length > 0) {
-      await new Promise(resolve => setTimeout(resolve, 100))
+      await new Promise((resolve) => setTimeout(resolve, 100))
     }
   }
 }

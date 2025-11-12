@@ -103,9 +103,7 @@ export class PaginationParams {
  * Encapsulates filter validation and conversion
  */
 export class FilterCriteria {
-  private constructor(
-    public readonly filters: ReadonlyMap<string, readonly CellValue[]>
-  ) {}
+  private constructor(public readonly filters: ReadonlyMap<string, readonly CellValue[]>) {}
 
   /**
    * Create filter criteria with validation
@@ -129,8 +127,8 @@ export class FilterCriteria {
       //   - CellValue (single value, which could itself be an encoded array like ['L', ...])
       const arrayValue: CellValue[] =
         Array.isArray(value) && value.length > 0 && typeof value[0] !== 'string'
-          ? (value as CellValue[])  // Array of CellValues
-          : [value as CellValue]    // Single CellValue wrapped in array
+          ? (value as CellValue[]) // Array of CellValues
+          : [value as CellValue] // Single CellValue wrapped in array
 
       filterMap.set(key, Object.freeze(arrayValue))
     }
@@ -144,7 +142,7 @@ export class FilterCriteria {
   toGristFormat(): Record<string, CellValue[]> {
     const result: Record<string, CellValue[]> = {}
     for (const [key, value] of this.filters.entries()) {
-      result[key] = [...value]  // Copy array
+      result[key] = [...value] // Copy array
     }
     return result
   }
@@ -176,9 +174,7 @@ export class FilterCriteria {
  * Encapsulates column selection logic
  */
 export class ColumnSelection {
-  private constructor(
-    public readonly columns: readonly string[] | null
-  ) {}
+  private constructor(public readonly columns: readonly string[] | null) {}
 
   /**
    * Create column selection
@@ -213,7 +209,7 @@ export class ColumnSelection {
     if (this.isAllColumns()) {
       return true
     }
-    return this.columns!.includes(columnId)
+    return this.columns?.includes(columnId) ?? false
   }
 
   /**
@@ -285,7 +281,11 @@ export class OperationResult<T = unknown> {
     if (this.isFailure()) {
       throw this.error
     }
-    return this.data!
+    // Type narrowing: if not failure, data must be present
+    if (this.data === null) {
+      throw new Error('Data is null despite success status')
+    }
+    return this.data
   }
 
   /**
@@ -302,8 +302,14 @@ export class OperationResult<T = unknown> {
     if (this.isFailure()) {
       return OperationResult.fail(this.error)
     }
+
+    // Type narrowing: if not failure, data must be present
+    if (this.data === null) {
+      return OperationResult.fail(new Error('Data is null despite success status'))
+    }
+
     try {
-      return OperationResult.ok(fn(this.data!))
+      return OperationResult.ok(fn(this.data))
     } catch (error) {
       return OperationResult.fail(error instanceof Error ? error : new Error(String(error)))
     }

@@ -30,7 +30,7 @@ export interface MCPToolResponse {
     type: 'text'
     text: string // Markdown or JSON string based on response_format
   }>
-  structuredContent?: any // Always include - machine-readable data
+  structuredContent?: unknown // Always include - machine-readable data
   isError?: boolean // True for error responses
   [key: string]: unknown // Index signature for MCP SDK compatibility
 }
@@ -238,7 +238,7 @@ export interface TableInfo {
     type: string
     isFormula: boolean
     formula?: string
-    widgetOptions?: any
+    widgetOptions?: string | Record<string, unknown> // JSON string or parsed object
   }[]
 }
 
@@ -278,7 +278,7 @@ export interface ApplyRequest {
  */
 export interface ApplyResponse {
   actionNum: number
-  retValues: any[]
+  retValues: Array<number | string | boolean | null | Record<string, unknown>>
 }
 
 /**

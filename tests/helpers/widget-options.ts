@@ -5,22 +5,24 @@
  * from grist-types.d.ts
  */
 
-import type { WidgetOptions } from '../../docs/grist-types.js';
+import type { WidgetOptions } from '../../docs/grist-types.js'
 
 /**
  * Build widgetOptions for Text columns
  */
-export function buildTextWidgetOptions(options: {
-  widget?: 'TextBox' | 'Markdown' | 'HyperLink';
-  alignment?: 'left' | 'center' | 'right';
-  wrap?: boolean;
-  textColor?: string;
-  fillColor?: string;
-  fontBold?: boolean;
-  fontItalic?: boolean;
-  fontUnderline?: boolean;
-  fontStrikethrough?: boolean;
-} = {}): string {
+export function buildTextWidgetOptions(
+  options: {
+    widget?: 'TextBox' | 'Markdown' | 'HyperLink'
+    alignment?: 'left' | 'center' | 'right'
+    wrap?: boolean
+    textColor?: string
+    fillColor?: string
+    fontBold?: boolean
+    fontItalic?: boolean
+    fontUnderline?: boolean
+    fontStrikethrough?: boolean
+  } = {}
+): string {
   const widgetOpts: Partial<WidgetOptions> = {
     widget: options.widget,
     alignment: options.alignment,
@@ -31,25 +33,27 @@ export function buildTextWidgetOptions(options: {
     fontItalic: options.fontItalic,
     fontUnderline: options.fontUnderline,
     fontStrikethrough: options.fontStrikethrough
-  };
+  }
 
-  return JSON.stringify(removeUndefined(widgetOpts));
+  return JSON.stringify(removeUndefined(widgetOpts))
 }
 
 /**
  * Build widgetOptions for Numeric/Int columns
  */
-export function buildNumericWidgetOptions(options: {
-  widget?: 'Spinner';
-  numMode?: 'currency' | 'decimal' | 'percent' | 'scientific';
-  currency?: string;
-  numSign?: 'parens' | null;
-  decimals?: number;
-  maxDecimals?: number;
-  alignment?: 'left' | 'center' | 'right';
-  textColor?: string;
-  fillColor?: string;
-} = {}): string {
+export function buildNumericWidgetOptions(
+  options: {
+    widget?: 'Spinner'
+    numMode?: 'currency' | 'decimal' | 'percent' | 'scientific'
+    currency?: string
+    numSign?: 'parens' | null
+    decimals?: number
+    maxDecimals?: number
+    alignment?: 'left' | 'center' | 'right'
+    textColor?: string
+    fillColor?: string
+  } = {}
+): string {
   const widgetOpts: Partial<WidgetOptions> = {
     widget: options.widget,
     numMode: options.numMode,
@@ -60,63 +64,69 @@ export function buildNumericWidgetOptions(options: {
     alignment: options.alignment,
     textColor: options.textColor,
     fillColor: options.fillColor
-  };
+  }
 
-  return JSON.stringify(removeUndefined(widgetOpts));
+  return JSON.stringify(removeUndefined(widgetOpts))
 }
 
 /**
  * Build widgetOptions for Bool columns
  */
-export function buildBoolWidgetOptions(options: {
-  widget?: 'CheckBox' | 'Switch';
-  alignment?: 'left' | 'center' | 'right';
-  textColor?: string;
-  fillColor?: string;
-} = {}): string {
+export function buildBoolWidgetOptions(
+  options: {
+    widget?: 'CheckBox' | 'Switch'
+    alignment?: 'left' | 'center' | 'right'
+    textColor?: string
+    fillColor?: string
+  } = {}
+): string {
   const widgetOpts: Partial<WidgetOptions> = {
     widget: options.widget,
     alignment: options.alignment,
     textColor: options.textColor,
     fillColor: options.fillColor
-  };
+  }
 
-  return JSON.stringify(removeUndefined(widgetOpts));
+  return JSON.stringify(removeUndefined(widgetOpts))
 }
 
 /**
  * Build widgetOptions for Date columns
  */
-export function buildDateWidgetOptions(options: {
-  dateFormat?: string;
-  isCustomDateFormat?: boolean;
-  alignment?: 'left' | 'center' | 'right';
-  textColor?: string;
-  fillColor?: string;
-} = {}): string {
+export function buildDateWidgetOptions(
+  options: {
+    dateFormat?: string
+    isCustomDateFormat?: boolean
+    alignment?: 'left' | 'center' | 'right'
+    textColor?: string
+    fillColor?: string
+  } = {}
+): string {
   const widgetOpts: Partial<WidgetOptions> = {
     dateFormat: options.dateFormat,
     isCustomDateFormat: options.isCustomDateFormat,
     alignment: options.alignment,
     textColor: options.textColor,
     fillColor: options.fillColor
-  };
+  }
 
-  return JSON.stringify(removeUndefined(widgetOpts));
+  return JSON.stringify(removeUndefined(widgetOpts))
 }
 
 /**
  * Build widgetOptions for DateTime columns
  */
-export function buildDateTimeWidgetOptions(options: {
-  dateFormat?: string;
-  isCustomDateFormat?: boolean;
-  timeFormat?: string;
-  isCustomTimeFormat?: boolean;
-  alignment?: 'left' | 'center' | 'right';
-  textColor?: string;
-  fillColor?: string;
-} = {}): string {
+export function buildDateTimeWidgetOptions(
+  options: {
+    dateFormat?: string
+    isCustomDateFormat?: boolean
+    timeFormat?: string
+    isCustomTimeFormat?: boolean
+    alignment?: 'left' | 'center' | 'right'
+    textColor?: string
+    fillColor?: string
+  } = {}
+): string {
   const widgetOpts: Partial<WidgetOptions> = {
     dateFormat: options.dateFormat,
     isCustomDateFormat: options.isCustomDateFormat,
@@ -125,106 +135,114 @@ export function buildDateTimeWidgetOptions(options: {
     alignment: options.alignment,
     textColor: options.textColor,
     fillColor: options.fillColor
-  };
+  }
 
-  return JSON.stringify(removeUndefined(widgetOpts));
+  return JSON.stringify(removeUndefined(widgetOpts))
 }
 
 /**
  * Build widgetOptions for Choice columns
  */
-export function buildChoiceWidgetOptions(options: {
-  choices: string[];
-  choiceOptions?: Record<string, {
-    textColor?: string;
-    fillColor?: string;
-    fontBold?: boolean;
-    fontItalic?: boolean;
-    fontUnderline?: boolean;
-    fontStrikethrough?: boolean;
-  }>;
-  alignment?: 'left' | 'center' | 'right';
-  textColor?: string;
-  fillColor?: string;
-} = { choices: [] }): string {
+export function buildChoiceWidgetOptions(
+  options: {
+    choices: string[]
+    choiceOptions?: Record<
+      string,
+      {
+        textColor?: string
+        fillColor?: string
+        fontBold?: boolean
+        fontItalic?: boolean
+        fontUnderline?: boolean
+        fontStrikethrough?: boolean
+      }
+    >
+    alignment?: 'left' | 'center' | 'right'
+    textColor?: string
+    fillColor?: string
+  } = { choices: [] }
+): string {
   const widgetOpts: Partial<WidgetOptions> = {
     choices: options.choices,
     choiceOptions: options.choiceOptions,
     alignment: options.alignment,
     textColor: options.textColor,
     fillColor: options.fillColor
-  };
+  }
 
-  return JSON.stringify(removeUndefined(widgetOpts));
+  return JSON.stringify(removeUndefined(widgetOpts))
 }
 
 /**
  * Build widgetOptions for ChoiceList columns
  */
-export function buildChoiceListWidgetOptions(options: {
-  choices: string[];
-  choiceOptions?: Record<string, {
-    textColor?: string;
-    fillColor?: string;
-    fontBold?: boolean;
-    fontItalic?: boolean;
-    fontUnderline?: boolean;
-    fontStrikethrough?: boolean;
-  }>;
-  alignment?: 'left' | 'center' | 'right';
-  textColor?: string;
-  fillColor?: string;
-} = { choices: [] }): string {
+export function buildChoiceListWidgetOptions(
+  options: {
+    choices: string[]
+    choiceOptions?: Record<
+      string,
+      {
+        textColor?: string
+        fillColor?: string
+        fontBold?: boolean
+        fontItalic?: boolean
+        fontUnderline?: boolean
+        fontStrikethrough?: boolean
+      }
+    >
+    alignment?: 'left' | 'center' | 'right'
+    textColor?: string
+    fillColor?: string
+  } = { choices: [] }
+): string {
   // ChoiceList uses same options as Choice
-  return buildChoiceWidgetOptions(options);
+  return buildChoiceWidgetOptions(options)
 }
 
 /**
  * Build widgetOptions for Ref columns
  */
-export function buildRefWidgetOptions(options: {
-  alignment?: 'left' | 'center' | 'right';
-  textColor?: string;
-  fillColor?: string;
-} = {}): string {
+export function buildRefWidgetOptions(
+  options: { alignment?: 'left' | 'center' | 'right'; textColor?: string; fillColor?: string } = {}
+): string {
   const widgetOpts: Partial<WidgetOptions> = {
     alignment: options.alignment,
     textColor: options.textColor,
     fillColor: options.fillColor
-  };
+  }
 
-  return JSON.stringify(removeUndefined(widgetOpts));
+  return JSON.stringify(removeUndefined(widgetOpts))
 }
 
 /**
  * Build widgetOptions for RefList columns
  */
-export function buildRefListWidgetOptions(options: {
-  alignment?: 'left' | 'center' | 'right';
-  textColor?: string;
-  fillColor?: string;
-} = {}): string {
+export function buildRefListWidgetOptions(
+  options: { alignment?: 'left' | 'center' | 'right'; textColor?: string; fillColor?: string } = {}
+): string {
   // RefList uses same options as Ref
-  return buildRefWidgetOptions(options);
+  return buildRefWidgetOptions(options)
 }
 
 /**
  * Build widgetOptions for Attachments columns
  */
-export function buildAttachmentsWidgetOptions(options: {
-  height?: number;
-  alignment?: 'left' | 'center' | 'right';
-  textColor?: string;
-  fillColor?: string;
-} = {}): string {
+export function buildAttachmentsWidgetOptions(
+  options: {
+    height?: number
+    alignment?: 'left' | 'center' | 'right'
+    textColor?: string
+    fillColor?: string
+  } = {}
+): string {
   const widgetOpts: Partial<WidgetOptions> = {
     height: options.height,
     alignment: options.alignment,
     textColor: options.textColor,
     fillColor: options.fillColor
-  };
+  }
 
-  return JSON.stringify(removeUndefined(widgetOpts));
+  return JSON.stringify(removeUndefined(widgetOpts))
 }
 
 /**
@@ -271,9 +289,9 @@ export const SAMPLE_WIDGET_OPTIONS = {
   choiceStyled: buildChoiceWidgetOptions({
     choices: ['New', 'Active', 'Archived'],
     choiceOptions: {
-      'New': { fillColor: '#90EE90', textColor: '#000000' },
-      'Active': { fillColor: '#87CEEB', textColor: '#000000', fontBold: true },
-      'Archived': { fillColor: '#D3D3D3', textColor: '#696969', fontItalic: true }
+      New: { fillColor: '#90EE90', textColor: '#000000' },
+      Active: { fillColor: '#87CEEB', textColor: '#000000', fontBold: true },
+      Archived: { fillColor: '#D3D3D3', textColor: '#696969', fontItalic: true }
     }
   }),
 
@@ -282,9 +300,9 @@ export const SAMPLE_WIDGET_OPTIONS = {
   choiceListStyled: buildChoiceListWidgetOptions({
     choices: ['urgent', 'important', 'review'],
     choiceOptions: {
-      'urgent': { fillColor: '#FF0000', textColor: '#FFFFFF', fontBold: true },
-      'important': { fillColor: '#FFA500', textColor: '#000000' },
-      'review': { fillColor: '#ADD8E6', textColor: '#000000' }
+      urgent: { fillColor: '#FF0000', textColor: '#FFFFFF', fontBold: true },
+      important: { fillColor: '#FFA500', textColor: '#000000' },
+      review: { fillColor: '#ADD8E6', textColor: '#000000' }
     }
   }),
 
@@ -295,17 +313,17 @@ export const SAMPLE_WIDGET_OPTIONS = {
   // Attachments
   attachmentsBasic: buildAttachmentsWidgetOptions({ height: 100 }),
   attachmentsLarge: buildAttachmentsWidgetOptions({ height: 200 })
-} as const;
+} as const
 
 /**
  * Validate widgetOptions JSON string
  */
 export function validateWidgetOptions(widgetOptionsStr: string): boolean {
   try {
-    const parsed = JSON.parse(widgetOptionsStr);
-    return typeof parsed === 'object' && parsed !== null;
+    const parsed = JSON.parse(widgetOptionsStr)
+    return typeof parsed === 'object' && parsed !== null
   } catch {
-    return false;
+    return false
   }
 }
 
@@ -316,14 +334,14 @@ export function validateWidgetOptions(widgetOptionsStr: string): boolean {
 export function parseWidgetOptions(widgetOptionsStr: string): Partial<WidgetOptions> | null {
   try {
     // First, try parsing as valid JSON
-    return JSON.parse(widgetOptionsStr);
+    return JSON.parse(widgetOptionsStr)
   } catch {
     // If that fails, try converting Python-style dict to JSON
     try {
-      const jsonString = widgetOptionsStr.replace(/'/g, '"');
-      return JSON.parse(jsonString);
+      const jsonString = widgetOptionsStr.replace(/'/g, '"')
+      return JSON.parse(jsonString)
     } catch {
-      return null;
+      return null
     }
   }
 }
@@ -331,14 +349,14 @@ export function parseWidgetOptions(widgetOptionsStr: string): Partial<WidgetOpti
 /**
  * Helper to remove undefined values from object
  */
-function removeUndefined<T extends Record<string, any>>(obj: T): Partial<T> {
-  const result: any = {};
+function removeUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const result: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(obj)) {
     if (value !== undefined) {
-      result[key] = value;
+      result[key] = value
     }
   }
-  return result;
+  return result as Partial<T>
 }
 
 /**
@@ -356,4 +374,4 @@ export const COLUMN_TYPE_WIDGET_OPTIONS = {
   Ref: SAMPLE_WIDGET_OPTIONS.refBasic,
   RefList: SAMPLE_WIDGET_OPTIONS.refListBasic,
   Attachments: SAMPLE_WIDGET_OPTIONS.attachmentsBasic
-} as const;
+} as const

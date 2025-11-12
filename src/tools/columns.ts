@@ -22,15 +22,15 @@ import {
   buildRenameColumnAction
 } from '../services/action-builder.js'
 import {
-  resolveVisibleCol,
   extractForeignTable,
-  isReferenceType,
   getColumnNameFromId,
-  getColumnRef
+  getColumnRef,
+  isReferenceType,
+  resolveVisibleCol
 } from '../services/column-resolver.js'
 import type { GristClient } from '../services/grist-client.js'
+import { toColId, toTableId } from '../types/advanced.js'
 import type { ApplyResponse, UserAction } from '../types.js'
-import { toTableId, toColId } from '../types/advanced.js'
 import { GristTool } from './base/GristTool.js'
 
 // ============================================================================
@@ -53,22 +53,20 @@ const AddColumnOperationSchema = z
       .optional()
       .describe('Formula code (Python) if this is a formula column. Example: "$Price * $Quantity"'),
     isFormula: z.boolean().optional().describe('Set to true if this is a formula column'),
-    widgetOptions: WidgetOptionsUnionSchema
-      .optional()
-      .describe(
-        'Widget options object validated by column type. Examples: ' +
+    widgetOptions: WidgetOptionsUnionSchema.optional().describe(
+      'Widget options object validated by column type. Examples: ' +
         '{"numMode": "currency", "currency": "USD"} for Numeric, ' +
         '{"choices": ["Red", "Blue"]} for Choice, ' +
         '{"dateFormat": "YYYY-MM-DD"} for Date. ' +
         'Must match the column type - validation enforced.'
-      ),
+    ),
     visibleCol: z
       .union([z.string(), z.number()])
       .optional()
       .describe(
         'Which column from referenced table to display (Ref/RefList only). ' +
-        'String column name (e.g., "Email") auto-resolves to numeric ID. ' +
-        'Numeric ID (e.g., 456) used directly.'
+          'String column name (e.g., "Email") auto-resolves to numeric ID. ' +
+          'Numeric ID (e.g., 456) used directly.'
       )
   })
   .strict()
@@ -81,21 +79,19 @@ const ModifyColumnOperationSchema = z
     label: z.string().optional(),
     formula: z.string().optional(),
     isFormula: z.boolean().optional(),
-    widgetOptions: WidgetOptionsUnionSchema
-      .optional()
-      .describe(
-        'Widget options object validated by column type. ' +
+    widgetOptions: WidgetOptionsUnionSchema.optional().describe(
+      'Widget options object validated by column type. ' +
         'IMPORTANT: When updating widgetOptions, you MUST also include the "type" field ' +
         'to enable proper validation. Example: {action: "modify", colId: "Price", ' +
         'type: "Numeric", widgetOptions: {"numMode": "currency", "currency": "USD"}}'
-      ),
+    ),
     visibleCol: z
       .union([z.string(), z.number()])
       .optional()
       .describe(
         'Which column from referenced table to display (Ref/RefList only). ' +
-        'String column name (e.g., "Email") auto-resolves to numeric ID. ' +
-        'Numeric ID (e.g., 456) used directly.'
+          'String column name (e.g., "Email") auto-resolves to numeric ID. ' +
+          'Numeric ID (e.g., 456) used directly.'
       )
   })
   .strict()
@@ -145,10 +141,23 @@ export type ManageColumnsInput = z.infer<typeof ManageColumnsSchema>
 export type ColumnOperation = z.infer<typeof ColumnOperationSchema>
 
 /**
+ * Response data for column management operations
+ */
+interface ManageColumnsResponseData {
+  document_id: string
+  table_id: string
+  operations_performed: number
+  actions: string[]
+}
+
+/**
  * Manage Columns Tool
  * Handles add, modify, delete, and rename operations on columns
  */
-export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any> {
+export class ManageColumnsTool extends GristTool<
+  typeof ManageColumnsSchema,
+  ManageColumnsResponseData
+> {
   constructor(client: GristClient) {
     super(client, ManageColumnsSchema)
   }
@@ -169,7 +178,9 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
       const action = this.buildActionForOperation(op, params.tableId)
 
       // Execute the action
-      const response = await this.client.post<ApplyResponse>(`/docs/${params.docId}/apply`, [action])
+      const response = await this.client.post<ApplyResponse>(`/docs/${params.docId}/apply`, [
+        action
+      ])
 
       // Handle visibleCol for add/modify operations
       if ((op.action === 'add' || op.action === 'modify') && 'visibleCol' in op && op.visibleCol) {
@@ -178,8 +189,8 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
     }
 
     // Check if any operations set widgetOptions
-    const hasWidgetOptions = params.operations.some(op =>
-      (op.action === 'add' || op.action === 'modify') && 'widgetOptions' in op
+    const hasWidgetOptions = params.operations.some(
+      (op) => (op.action === 'add' || op.action === 'modify') && 'widgetOptions' in op
     )
 
     // Build success response
@@ -191,9 +202,11 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
       summary: this.calculateOperationSummary(params.operations),
       message: `Successfully completed ${params.operations.length} column operation(s) on ${params.tableId}`,
       details: params.operations.map(this.formatOperationMessage),
-      ...(hasWidgetOptions ? {
-        hint: `To verify widgetOptions were set correctly, use: grist_get_tables({docId: "${params.docId}", tableId: "${params.tableId}", detail_level: "full_schema"})`
-      } : {})
+      ...(hasWidgetOptions
+        ? {
+            hint: `To verify widgetOptions were set correctly, use: grist_get_tables({docId: "${params.docId}", tableId: "${params.tableId}", detail_level: "full_schema"})`
+          }
+        : {})
     }
   }
 
@@ -213,16 +226,16 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
     // Check if widgetOptions is present but type is not
     if (op.widgetOptions !== undefined && !op.type) {
       // Fetch the column metadata from Grist to get the type
-      const columns = await this.client.get<{ columns: Array<{ id: string; fields: { type: string } }> }>(
-        `/docs/${docId}/tables/${tableId}/columns`
-      )
+      const columns = await this.client.get<{
+        columns: Array<{ id: string; fields: { type: string } }>
+      }>(`/docs/${docId}/tables/${tableId}/columns`)
 
-      const column = columns.columns.find(col => col.id === op.colId)
+      const column = columns.columns.find((col) => col.id === op.colId)
       if (!column) {
         throw new Error(
           `Cannot fetch type for column "${op.colId}" in table "${tableId}". ` +
-          `Column not found. When updating widgetOptions, either provide the type explicitly ` +
-          `or ensure the column exists.`
+            `Column not found. When updating widgetOptions, either provide the type explicitly ` +
+            `or ensure the column exists.`
         )
       }
 
@@ -316,7 +329,9 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
     // At this point, visibleCol has been resolved to a number by resolveVisibleColInOperation
     // TypeScript doesn't know this, so we assert it
     if (typeof op.visibleCol !== 'number') {
-      throw new Error(`Internal error: visibleCol should be numeric at this point, got ${typeof op.visibleCol}`)
+      throw new Error(
+        `Internal error: visibleCol should be numeric at this point, got ${typeof op.visibleCol}`
+      )
     }
 
     const foreignColName = await getColumnNameFromId(
@@ -335,7 +350,13 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
       colRef = await getColumnRef(this.client, params.docId, params.tableId, op.colId)
     }
 
-    const setDisplayAction: UserAction = ['SetDisplayFormula', params.tableId, null, colRef, formula]
+    const setDisplayAction: UserAction = [
+      'SetDisplayFormula',
+      params.tableId,
+      null,
+      colRef,
+      formula
+    ]
     await this.client.post<ApplyResponse>(`/docs/${params.docId}/apply`, [setDisplayAction])
   }
 
@@ -351,24 +372,34 @@ export class ManageColumnsTool extends GristTool<typeof ManageColumnsSchema, any
           formula: op.formula,
           isFormula: op.isFormula,
           widgetOptions: op.widgetOptions,
-          ...('visibleCol' in op && op.visibleCol !== undefined ? { visibleCol: op.visibleCol } : {})
+          ...('visibleCol' in op && op.visibleCol !== undefined
+            ? { visibleCol: op.visibleCol }
+            : {})
         })
       case 'modify':
-        return buildModifyColumnAction(toTableId(tableId), toColId(op.colId), this.buildModifyUpdates(op))
+        return buildModifyColumnAction(
+          toTableId(tableId),
+          toColId(op.colId),
+          this.buildModifyUpdates(op)
+        )
       case 'delete':
         return buildRemoveColumnAction(toTableId(tableId), toColId(op.colId))
       case 'rename':
-        return buildRenameColumnAction(toTableId(tableId), toColId(op.oldColId), toColId(op.newColId))
+        return buildRenameColumnAction(
+          toTableId(tableId),
+          toColId(op.oldColId),
+          toColId(op.newColId)
+        )
     }
   }
 
   /**
    * Build updates object for modify operation
    */
-  private buildModifyUpdates(op: ColumnOperation): any {
+  private buildModifyUpdates(op: ColumnOperation): Partial<ColumnInfo> {
     if (op.action !== 'modify') return {}
 
-    const modifyUpdates: any = {}
+    const modifyUpdates: Partial<ColumnInfo> = {}
     if (op.type !== undefined) modifyUpdates.type = op.type
     if (op.label !== undefined) modifyUpdates.label = op.label
     if (op.formula !== undefined) modifyUpdates.formula = op.formula

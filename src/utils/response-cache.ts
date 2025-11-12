@@ -133,7 +133,9 @@ export class ResponseCache<T = unknown> {
       entries
         .sort((a, b) => a[1].expiresAt - b[1].expiresAt)
         .slice(0, entriesToRemove)
-        .forEach(([key]) => this.cache.delete(key))
+        .forEach(([key]) => {
+          this.cache.delete(key)
+        })
     }
 
     const expiresAt = Date.now() + (ttl ?? this.config.defaultTTL)

@@ -7,11 +7,17 @@
  * Refactored with branded types and advanced TypeScript patterns
  */
 
-import type { BulkColValues, ColumnDefinition, ColumnInfo, UserAction, CellValue } from '../types.js'
-import type { TableId, RowId, ColId } from '../types/advanced.js'
+import { ValidationError } from '../errors/ValidationError.js'
+import type { ColId, RowId, TableId } from '../types/advanced.js'
+import type {
+  BulkColValues,
+  CellValue,
+  ColumnDefinition,
+  ColumnInfo,
+  UserAction
+} from '../types.js'
 import { isReferenceType } from './column-resolver.js'
 import { validateAndSerializeWidgetOptions } from './widget-options-validator.js'
-import { ValidationError } from '../errors/ValidationError.js'
 
 /**
  * Type for Grist record data (column ID to cell value mapping)
@@ -40,10 +46,7 @@ export function serializeWidgetOptions(widgetOptions: unknown): string | undefin
  * @param records - Array of records (row-oriented format)
  * @returns UserAction for bulk adding records
  */
-export function buildBulkAddRecordAction(
-  tableId: TableId,
-  records: GristRecordData[]
-): UserAction {
+export function buildBulkAddRecordAction(tableId: TableId, records: GristRecordData[]): UserAction {
   // Grist assigns row IDs automatically - null placeholders for new records
   // Type system now properly supports null values for new records
   const rowIds = records.map(() => null)
@@ -159,6 +162,76 @@ export function buildAddColumnAction(
 }
 
 /**
+ * Validates visibleCol usage when modifying a column
+ * @throws {Error} if visibleCol is used with non-reference type or is not numeric
+ */
+function validateVisibleColForModify(colId: ColId, updates: Partial<ColumnInfo>): void {
+  if (updates.visibleCol === undefined) {
+    return
+  }
+
+  // If updating visibleCol with a type, ensure type is Ref or RefList
+  if (updates.type && !isReferenceType(updates.type)) {
+    throw new Error(
+      `Column "${colId}" is being updated with visibleCol but type "${updates.type}" is not a Ref or RefList type. ` +
+        `visibleCol can only be used with Ref:TableName or RefList:TableName types.`
+    )
+  }
+
+  // Ensure visibleCol is a numeric ID
+  if (typeof updates.visibleCol !== 'number') {
+    throw new Error(
+      `visibleCol for column "${colId}" must be a numeric column reference (colRef). ` +
+        `Use resolveVisibleCol() to convert string column names to numeric IDs. ` +
+        `Received: ${typeof updates.visibleCol}`
+    )
+  }
+}
+
+/**
+ * Validates and serializes widgetOptions for column modification
+ * @returns Serialized widgetOptions string or undefined
+ * @throws {ValidationError} if type is missing or widgetOptions are invalid
+ */
+function validateAndSerializeWidgetOptionsForModify(
+  colId: ColId,
+  updates: Partial<ColumnInfo>
+): string | undefined {
+  if (updates.widgetOptions === undefined) {
+    return undefined
+  }
+
+  // Type is required for proper validation
+  if (!updates.type) {
+    throw new ValidationError(
+      'widgetOptions',
+      updates.widgetOptions,
+      'Column type must be provided when updating widgetOptions. ' +
+        'The type is required to validate widgetOptions against the correct schema. ' +
+        'Either include the type in your modify operation, or the tool layer will fetch it automatically.',
+      { operation: 'ModifyColumn', columnId: colId as string }
+    )
+  }
+
+  // Validate string inputs are valid JSON
+  if (typeof updates.widgetOptions === 'string') {
+    try {
+      JSON.parse(updates.widgetOptions)
+    } catch (error) {
+      throw new ValidationError(
+        'widgetOptions',
+        updates.widgetOptions,
+        `Invalid JSON string: ${error instanceof Error ? error.message : 'Unable to parse'}`,
+        { operation: 'ModifyColumn', columnId: colId as string }
+      )
+    }
+  }
+
+  // Perform type-specific validation and serialization
+  return validateAndSerializeWidgetOptions(updates.widgetOptions, updates.type)
+}
+
+/**
  * Build ModifyColumn action
  *
  * @param tableId - Table identifier (branded type)
@@ -175,60 +248,10 @@ export function buildModifyColumnAction(
   updates: Partial<ColumnInfo>
 ): UserAction {
   // Validate visibleCol usage if being modified
-  if (updates.visibleCol !== undefined) {
-    // If updating visibleCol, the type should also be provided (or already be a Ref type)
-    if (updates.type && !isReferenceType(updates.type)) {
-      throw new Error(
-        `Column "${colId}" is being updated with visibleCol but type "${updates.type}" is not a Ref or RefList type. ` +
-          `visibleCol can only be used with Ref:TableName or RefList:TableName types.`
-      )
-    }
-
-    // Ensure visibleCol is a number
-    if (typeof updates.visibleCol !== 'number') {
-      throw new Error(
-        `visibleCol for column "${colId}" must be a numeric column reference (colRef). ` +
-          `Use resolveVisibleCol() to convert string column names to numeric IDs. ` +
-          `Received: ${typeof updates.visibleCol}`
-      )
-    }
-  }
+  validateVisibleColForModify(colId, updates)
 
   // Validate and serialize widgetOptions if being modified
-  let serializedWidgetOptions: string | undefined = undefined
-  if (updates.widgetOptions !== undefined) {
-    // Type is required for proper validation
-    if (!updates.type) {
-      throw new ValidationError(
-        'widgetOptions',
-        updates.widgetOptions,
-        'Column type must be provided when updating widgetOptions. ' +
-        'The type is required to validate widgetOptions against the correct schema. ' +
-        'Either include the type in your modify operation, or the tool layer will fetch it automatically.',
-        { operation: 'ModifyColumn', columnId: colId as string }
-      )
-    }
-
-    // Validate string inputs are valid JSON
-    if (typeof updates.widgetOptions === 'string') {
-      try {
-        JSON.parse(updates.widgetOptions)
-      } catch (error) {
-        throw new ValidationError(
-          'widgetOptions',
-          updates.widgetOptions,
-          `Invalid JSON string: ${error instanceof Error ? error.message : 'Unable to parse'}`,
-          { operation: 'ModifyColumn', columnId: colId as string }
-        )
-      }
-    }
-
-    // Perform type-specific validation
-    serializedWidgetOptions = validateAndSerializeWidgetOptions(
-      updates.widgetOptions,
-      updates.type
-    )
-  }
+  const serializedWidgetOptions = validateAndSerializeWidgetOptionsForModify(colId, updates)
 
   const processedUpdates = {
     ...updates,

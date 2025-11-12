@@ -7,12 +7,11 @@
  */
 
 import type { GristClient } from './grist-client.js'
-import type { AnyWidgetOptions } from '../schemas/widget-options.js'
 
 /**
  * Column information from Grist API
  */
-interface ColumnInfo {
+export interface ColumnInfo {
   id: string // Column ID (e.g., "Name", "Email")
   fields: {
     colRef: number // Numeric column reference ID
@@ -27,7 +26,7 @@ interface ColumnInfo {
 /**
  * API response structure for column queries
  */
-interface ColumnsApiResponse {
+export interface ColumnsApiResponse {
   columns: ColumnInfo[]
 }
 

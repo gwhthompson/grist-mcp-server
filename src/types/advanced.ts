@@ -10,14 +10,14 @@
  */
 
 import type {
-  WorkspaceInfo,
-  DocumentInfo,
-  TableInfo,
-  DetailLevelWorkspace,
-  DetailLevelTable,
   CellValue,
+  DetailLevelTable,
+  DetailLevelWorkspace,
+  DocumentInfo,
   Record as GristRecord,
-  PaginationMetadata
+  PaginationMetadata,
+  TableInfo,
+  WorkspaceInfo
 } from '../types.js'
 
 // ============================================================================
@@ -165,10 +165,7 @@ export function fromBranded<T>(branded: Brand<T, string>): T {
 /**
  * Summary workspace - contains only essential fields
  */
-export type SummaryWorkspace = Pick<
-  WorkspaceInfo,
-  'id' | 'name' | 'org' | 'access'
->
+export type SummaryWorkspace = Pick<WorkspaceInfo, 'id' | 'name' | 'org' | 'access'>
 
 /**
  * Detailed workspace - contains all fields including nested docs
@@ -182,10 +179,9 @@ export type DetailedWorkspace = WorkspaceInfo
  * type Result = WorkspaceResult<'summary'> // SummaryWorkspace
  * type Result = WorkspaceResult<'detailed'> // DetailedWorkspace
  */
-export type WorkspaceResult<D extends DetailLevelWorkspace> =
-  D extends 'detailed'
-    ? DetailedWorkspace
-    : D extends 'summary'
+export type WorkspaceResult<D extends DetailLevelWorkspace> = D extends 'detailed'
+  ? DetailedWorkspace
+  : D extends 'summary'
     ? SummaryWorkspace
     : never
 
@@ -211,14 +207,13 @@ export type TableFullSchema = TableInfo
  * type Result = TableResult<'names'> // TableNames
  * type Result = TableResult<'columns'> // TableColumns
  */
-export type TableResult<D extends DetailLevelTable> =
-  D extends 'full_schema'
-    ? TableFullSchema
-    : D extends 'columns'
+export type TableResult<D extends DetailLevelTable> = D extends 'full_schema'
+  ? TableFullSchema
+  : D extends 'columns'
     ? TableColumns
     : D extends 'names'
-    ? TableNames
-    : never
+      ? TableNames
+      : never
 
 // ============================================================================
 // Template Literal Types for API Paths
@@ -259,10 +254,9 @@ export type ApiPath =
 /**
  * Helper type to build type-safe API paths
  */
-export type BuildPath<
-  TBase extends string,
-  TParam extends string | number = never
-> = [TParam] extends [never]
+export type BuildPath<TBase extends string, TParam extends string | number = never> = [
+  TParam
+] extends [never]
   ? TBase
   : `${TBase}/${TParam}`
 
@@ -316,9 +310,7 @@ export type AsyncState<T, E = Error> =
  * @template T - The type of data when successful
  * @template E - The type of error (defaults to Error)
  */
-export type Result<T, E = Error> =
-  | { success: true; data: T }
-  | { success: false; error: E }
+export type Result<T, E = Error> = { success: true; data: T } | { success: false; error: E }
 
 // ============================================================================
 // Advanced Type Utilities
@@ -330,7 +322,7 @@ export type Result<T, E = Error> =
  */
 export type DeepReadonly<T> = {
   readonly [P in keyof T]: T[P] extends object
-    ? T[P] extends (...args: any[]) => any
+    ? T[P] extends (...args: readonly unknown[]) => unknown
       ? T[P]
       : DeepReadonly<T[P]>
     : T[P]
@@ -395,10 +387,7 @@ export function isCellValue(value: unknown): value is CellValue {
  * Helper for property checking with better inference
  * Eliminates the need for unsafe 'as any' casts in type guards
  */
-function hasProperty<K extends PropertyKey>(
-  obj: unknown,
-  key: K
-): obj is { [P in K]: unknown } {
+function hasProperty<K extends PropertyKey>(obj: unknown, key: K): obj is { [P in K]: unknown } {
   return typeof obj === 'object' && obj !== null && key in obj
 }
 
@@ -514,12 +503,12 @@ export type PromiseType<T> = T extends Promise<infer U> ? U : never
 /**
  * Extract function return type
  */
-export type ReturnTypeOf<T> = T extends (...args: any[]) => infer R ? R : never
+export type ReturnTypeOf<T> = T extends (...args: readonly unknown[]) => infer R ? R : never
 
 /**
  * Extract function parameters as tuple
  */
-export type ParametersOf<T> = T extends (...args: infer P) => any ? P : never
+export type ParametersOf<T> = T extends (...args: infer P) => unknown ? P : never
 
 // ============================================================================
 // Type Testing Utilities
@@ -529,12 +518,7 @@ export type ParametersOf<T> = T extends (...args: infer P) => any ? P : never
  * Assert that two types are equal
  * Used for compile-time type testing
  */
-export type AssertEqual<T, U> =
-  [T] extends [U]
-    ? [U] extends [T]
-      ? true
-      : false
-    : false
+export type AssertEqual<T, U> = [T] extends [U] ? ([U] extends [T] ? true : false) : false
 
 /**
  * Assert that T extends U

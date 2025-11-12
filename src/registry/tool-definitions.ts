@@ -14,49 +14,38 @@
 
 import type { z } from 'zod'
 import type { GristClient } from '../services/grist-client.js'
-import type { MCPToolResponse } from '../types.js'
+import { ManageColumnsSchema, manageColumns } from '../tools/columns.js'
 
 // Import all schemas
 import {
-  GetWorkspacesSchema,
   GetDocumentsSchema,
   GetTablesSchema,
-  getWorkspaces,
+  GetWorkspacesSchema,
   getDocuments,
-  getTables
+  getTables,
+  getWorkspaces
 } from '../tools/discovery.js'
-import {
-  QuerySQLSchema,
-  GetRecordsSchema,
-  querySql,
-  getRecords
-} from '../tools/reading.js'
+import { CreateDocumentSchema, createDocument } from '../tools/documents.js'
+import { GetRecordsSchema, getRecords, QuerySQLSchema, querySql } from '../tools/reading.js'
 import {
   AddRecordsSchema,
+  addRecords,
+  DeleteRecordsSchema,
+  deleteRecords,
   UpdateRecordsSchema,
   UpsertRecordsSchema,
-  DeleteRecordsSchema,
-  addRecords,
   updateRecords,
-  upsertRecords,
-  deleteRecords
+  upsertRecords
 } from '../tools/records.js'
 import {
   CreateTableSchema,
-  RenameTableSchema,
-  DeleteTableSchema,
   createTable,
-  renameTable,
-  deleteTable
+  DeleteTableSchema,
+  deleteTable,
+  RenameTableSchema,
+  renameTable
 } from '../tools/tables.js'
-import {
-  ManageColumnsSchema,
-  manageColumns
-} from '../tools/columns.js'
-import {
-  CreateDocumentSchema,
-  createDocument
-} from '../tools/documents.js'
+import type { MCPToolResponse } from '../types.js'
 
 // ============================================================================
 // Advanced Type Definitions
@@ -67,10 +56,10 @@ import {
  * These hints help AI assistants understand tool behavior and safety
  */
 export interface ToolAnnotations {
-  readonly readOnlyHint: boolean      // Tool only reads data
-  readonly destructiveHint: boolean   // Tool deletes/destroys data
-  readonly idempotentHint: boolean    // Safe to retry/repeat
-  readonly openWorldHint: boolean     // Can discover new information
+  readonly readOnlyHint: boolean // Tool only reads data
+  readonly destructiveHint: boolean // Tool deletes/destroys data
+  readonly idempotentHint: boolean // Safe to retry/repeat
+  readonly openWorldHint: boolean // Can discover new information
 }
 
 /**
@@ -101,13 +90,7 @@ export interface ToolDefinition<TSchema extends z.ZodTypeAny = z.ZodTypeAny> {
 /**
  * Tool category grouping for organizational clarity
  */
-export type ToolCategory =
-  | 'discovery'
-  | 'reading'
-  | 'records'
-  | 'tables'
-  | 'columns'
-  | 'documents'
+export type ToolCategory = 'discovery' | 'reading' | 'records' | 'tables' | 'columns' | 'documents'
 
 /**
  * Categorized tool definition with category metadata
@@ -1180,7 +1163,9 @@ export const ALL_TOOLS: ReadonlyArray<CategorizedToolDefinition> = [
  * Tool registry organized by category
  * Useful for category-based filtering or documentation generation
  */
-export const TOOLS_BY_CATEGORY: Readonly<Record<ToolCategory, ReadonlyArray<CategorizedToolDefinition>>> = {
+export const TOOLS_BY_CATEGORY: Readonly<
+  Record<ToolCategory, ReadonlyArray<CategorizedToolDefinition>>
+> = {
   discovery: DISCOVERY_TOOLS,
   reading: READING_TOOLS,
   records: RECORD_TOOLS,
@@ -1193,11 +1178,13 @@ export const TOOLS_BY_CATEGORY: Readonly<Record<ToolCategory, ReadonlyArray<Cate
  * Tool lookup by name for O(1) access
  * Useful for dynamic tool resolution
  */
-export const TOOLS_BY_NAME: Readonly<Record<string, CategorizedToolDefinition>> =
-  ALL_TOOLS.reduce((acc, tool) => {
+export const TOOLS_BY_NAME: Readonly<Record<string, CategorizedToolDefinition>> = ALL_TOOLS.reduce(
+  (acc, tool) => {
     acc[tool.name] = tool
     return acc
-  }, {} as Record<string, CategorizedToolDefinition>)
+  },
+  {} as Record<string, CategorizedToolDefinition>
+)
 
 // ============================================================================
 // Utility Types for External Consumers
@@ -1211,7 +1198,7 @@ export const TOOLS_BY_NAME: Readonly<Record<string, CategorizedToolDefinition>> 
  * const toolName: ToolName = 'grist_get_workspaces' // OK
  * const invalid: ToolName = 'invalid_tool' // Type error
  */
-export type ToolName = typeof ALL_TOOLS[number]['name']
+export type ToolName = (typeof ALL_TOOLS)[number]['name']
 
 /**
  * Get the input type for a specific tool by name
@@ -1222,7 +1209,7 @@ export type ToolName = typeof ALL_TOOLS[number]['name']
  * // Infers: z.infer<typeof GetWorkspacesSchema>
  */
 export type ToolInputType<T extends ToolName> = Extract<
-  typeof ALL_TOOLS[number],
+  (typeof ALL_TOOLS)[number],
   { name: T }
 > extends { inputSchema: infer S extends z.ZodTypeAny }
   ? z.infer<S>
@@ -1232,6 +1219,6 @@ export type ToolInputType<T extends ToolName> = Extract<
  * Get the handler function type for a specific tool
  */
 export type ToolHandlerType<T extends ToolName> = Extract<
-  typeof ALL_TOOLS[number],
+  (typeof ALL_TOOLS)[number],
   { name: T }
 >['handler']

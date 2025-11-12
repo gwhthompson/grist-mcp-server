@@ -16,19 +16,19 @@
  * 5. Verify the data can be parsed correctly
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import type { ColumnsApiResponse } from '../src/services/column-resolver.js'
+import { createTable } from '../src/tools/tables.js'
+import type { DocId, WorkspaceId } from '../src/types/advanced.js'
+import { ensureGristReady } from './helpers/docker.js'
 import {
   createTestClient,
   createTestDocument,
   createTestWorkspace,
-  getFirstOrg,
   deleteDocument,
-  deleteWorkspace
+  deleteWorkspace,
+  getFirstOrg
 } from './helpers/grist-api.js'
-import { ensureGristReady } from './helpers/docker.js'
-import { createTable } from '../src/tools/tables.js'
-import { getTables } from '../src/tools/discovery.js'
-import type { DocId, WorkspaceId } from '../src/types/advanced.js'
 
 describe('widgetOptions Serialization Bug Fix', () => {
   const client = createTestClient()
@@ -45,11 +45,7 @@ describe('widgetOptions Serialization Bug Fix', () => {
       orgId,
       'WidgetOptions Serialization Test'
     )) as WorkspaceId
-    docId = (await createTestDocument(
-      client,
-      workspaceId,
-      'Serialization Test Doc'
-    )) as DocId
+    docId = (await createTestDocument(client, workspaceId, 'Serialization Test Doc')) as DocId
   }, 60000)
 
   afterAll(async () => {
@@ -105,12 +101,12 @@ describe('widgetOptions Serialization Bug Fix', () => {
 
     // Retrieve raw column metadata directly from Grist API
     // (getTables parses widgetOptions, we need raw strings)
-    const columnsResponse = await client.get<{ columns: any[] }>(
+    const columnsResponse = await client.get<ColumnsApiResponse>(
       `/docs/${docId}/tables/Orders/columns`
     )
 
     // Find Status column
-    const statusCol = columnsResponse.columns.find((c: any) => c.id === 'Status')
+    const statusCol = columnsResponse.columns.find((c) => c.id === 'Status')
     expect(statusCol).toBeDefined()
     expect(statusCol.fields.widgetOptions).toBeDefined()
 
@@ -139,7 +135,7 @@ describe('widgetOptions Serialization Bug Fix', () => {
     })
 
     // Check Priority column
-    const priorityCol = columnsResponse.columns.find((c: any) => c.id === 'Priority')
+    const priorityCol = columnsResponse.columns.find((c) => c.id === 'Priority')
     expect(priorityCol).toBeDefined()
     const priorityOptions = priorityCol.fields.widgetOptions
     expect(priorityOptions).not.toContain("'")
@@ -151,7 +147,7 @@ describe('widgetOptions Serialization Bug Fix', () => {
     })
 
     // Check OrderTotal column (numeric with currency)
-    const totalCol = columnsResponse.columns.find((c: any) => c.id === 'OrderTotal')
+    const totalCol = columnsResponse.columns.find((c) => c.id === 'OrderTotal')
     expect(totalCol).toBeDefined()
     const totalOptions = totalCol.fields.widgetOptions
     expect(totalOptions).not.toContain("'")
@@ -183,10 +179,10 @@ describe('widgetOptions Serialization Bug Fix', () => {
       response_format: 'json'
     })
 
-    const columnsResponse = await client.get<{ columns: any[] }>(
+    const columnsResponse = await client.get<ColumnsApiResponse>(
       `/docs/${docId}/tables/SimpleTextTable/columns`
     )
-    const nameCol = columnsResponse.columns.find((c: any) => c.id === 'Name')
+    const nameCol = columnsResponse.columns.find((c) => c.id === 'Name')
     expect(nameCol).toBeDefined()
 
     const widgetOptions = nameCol.fields.widgetOptions
@@ -228,13 +224,13 @@ describe('widgetOptions Serialization Bug Fix', () => {
       response_format: 'json'
     })
 
-    const columnsResponse = await client.get<{ columns: any[] }>(
+    const columnsResponse = await client.get<ColumnsApiResponse>(
       `/docs/${docId}/tables/MixedTypes/columns`
     )
 
     // Columns with widgetOptions should be properly serialized
-    const categoryCol = columnsResponse.columns.find((c: any) => c.id === 'Category')
-    const currencyCol = columnsResponse.columns.find((c: any) => c.id === 'Currency')
+    const categoryCol = columnsResponse.columns.find((c) => c.id === 'Category')
+    const currencyCol = columnsResponse.columns.find((c) => c.id === 'Currency')
 
     const categoryOptions = categoryCol.fields.widgetOptions
     const currencyOptions = currencyCol.fields.widgetOptions
@@ -288,10 +284,10 @@ describe('widgetOptions Serialization Bug Fix', () => {
       response_format: 'json'
     })
 
-    const columnsResponse = await client.get<{ columns: any[] }>(
+    const columnsResponse = await client.get<ColumnsApiResponse>(
       `/docs/${docId}/tables/BugReportExample/columns`
     )
-    const statusCol = columnsResponse.columns.find((c: any) => c.id === 'Status')
+    const statusCol = columnsResponse.columns.find((c) => c.id === 'Status')
     const widgetOptions = statusCol.fields.widgetOptions
 
     // The bug was: stored as {'choices': ['Pending', ...]}

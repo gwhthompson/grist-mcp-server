@@ -26,7 +26,8 @@
       "Bash(npm install:*)",
       "WebFetch(domain:v3.zod.dev)",
       "Bash(node ./node_modules/typescript/bin/tsc:*)",
-      "WebFetch(domain:www.npmjs.com)"
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(npm run check:*)"
     ],
     "deny": [],
     "ask": []

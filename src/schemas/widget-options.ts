@@ -15,7 +15,7 @@
  */
 
 import { z } from 'zod'
-import { isValidCurrency, getCurrencyCodeError } from '../constants/iso-4217-currencies.js'
+import { getCurrencyCodeError, isValidCurrency } from '../constants/iso-4217-currencies.js'
 
 // ============================================================================
 // Common Style Properties (shared across many widget types)
@@ -34,27 +34,31 @@ const HexColorSchema = z
  * Text style options applicable to cell content
  * All color values must be in hex format (#RRGGBB)
  */
-const StylePropertiesSchema = z.object({
-  textColor: HexColorSchema.describe('Text color in hex format (e.g., "#FF0000")'),
-  fillColor: HexColorSchema.describe('Background/fill color in hex format (e.g., "#FFFF00")'),
-  fontBold: z.boolean().optional().describe('Bold text formatting'),
-  fontItalic: z.boolean().optional().describe('Italic text formatting'),
-  fontUnderline: z.boolean().optional().describe('Underline text formatting'),
-  fontStrikethrough: z.boolean().optional().describe('Strikethrough text formatting')
-}).strict()
+const StylePropertiesSchema = z
+  .object({
+    textColor: HexColorSchema.describe('Text color in hex format (e.g., "#FF0000")'),
+    fillColor: HexColorSchema.describe('Background/fill color in hex format (e.g., "#FFFF00")'),
+    fontBold: z.boolean().optional().describe('Bold text formatting'),
+    fontItalic: z.boolean().optional().describe('Italic text formatting'),
+    fontUnderline: z.boolean().optional().describe('Underline text formatting'),
+    fontStrikethrough: z.boolean().optional().describe('Strikethrough text formatting')
+  })
+  .strict()
 
 /**
  * Header style options applicable to column headers
  * All color values must be in hex format (#RRGGBB)
  */
-const HeaderStylePropertiesSchema = z.object({
-  headerTextColor: HexColorSchema.describe('Header text color in hex format'),
-  headerFillColor: HexColorSchema.describe('Header background color in hex format'),
-  headerFontBold: z.boolean().optional().describe('Bold header text'),
-  headerFontUnderline: z.boolean().optional().describe('Underline header text'),
-  headerFontItalic: z.boolean().optional().describe('Italic header text'),
-  headerFontStrikethrough: z.boolean().optional().describe('Strikethrough header text')
-}).strict()
+const HeaderStylePropertiesSchema = z
+  .object({
+    headerTextColor: HexColorSchema.describe('Header text color in hex format'),
+    headerFillColor: HexColorSchema.describe('Header background color in hex format'),
+    headerFontBold: z.boolean().optional().describe('Bold header text'),
+    headerFontUnderline: z.boolean().optional().describe('Underline header text'),
+    headerFontItalic: z.boolean().optional().describe('Italic header text'),
+    headerFontStrikethrough: z.boolean().optional().describe('Strikethrough header text')
+  })
+  .strict()
 
 /**
  * Common alignment option
@@ -84,7 +88,9 @@ export const TextWidgetOptionsSchema = StylePropertiesSchema.extend({
   widget: TextWidgetTypeSchema.describe('Widget type for display'),
   alignment: AlignmentSchema.describe('Text alignment'),
   wrap: z.boolean().optional().describe('Enable text wrapping')
-}).merge(HeaderStylePropertiesSchema).strict()
+})
+  .merge(HeaderStylePropertiesSchema)
+  .strict()
 
 export type TextWidgetOptions = z.infer<typeof TextWidgetOptionsSchema>
 
@@ -96,7 +102,10 @@ export type TextWidgetOptions = z.infer<typeof TextWidgetOptionsSchema>
  * Number format modes for numeric columns
  * Matches NumberFormat type from grist-types.d.ts
  */
-const NumberFormatSchema = z.enum(['currency', 'decimal', 'percent', 'scientific', 'text']).nullable().optional()
+const NumberFormatSchema = z
+  .enum(['currency', 'decimal', 'percent', 'scientific', 'text'])
+  .nullable()
+  .optional()
 
 /**
  * Widget options for Numeric and Int columns
@@ -104,17 +113,23 @@ const NumberFormatSchema = z.enum(['currency', 'decimal', 'percent', 'scientific
  */
 export const NumericWidgetOptionsSchema = StylePropertiesSchema.extend({
   widget: NumericWidgetTypeSchema.describe('Widget type for display'),
-  numMode: NumberFormatSchema.describe('Number display mode (currency, decimal, percent, scientific)'),
+  numMode: NumberFormatSchema.describe(
+    'Number display mode (currency, decimal, percent, scientific)'
+  ),
   currency: z
     .string()
     .length(3)
-    .transform(code => code.toUpperCase())
+    .transform((code) => code.toUpperCase())
     .refine(isValidCurrency, (code) => ({
       message: getCurrencyCodeError(code)
     }))
     .optional()
     .describe('ISO 4217 currency code (e.g., "USD", "EUR", "GBP" - case-insensitive)'),
-  numSign: z.enum(['parens']).nullable().optional().describe('Number sign display (null for minus, "parens" for parentheses)'),
+  numSign: z
+    .enum(['parens'])
+    .nullable()
+    .optional()
+    .describe('Number sign display (null for minus, "parens" for parentheses)'),
   decimals: z
     .number()
     .int()
@@ -130,7 +145,9 @@ export const NumericWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Maximum number of decimal places to display (0-20)'),
   alignment: AlignmentSchema.describe('Number alignment')
-}).merge(HeaderStylePropertiesSchema).strict()
+})
+  .merge(HeaderStylePropertiesSchema)
+  .strict()
   .superRefine((data, ctx) => {
     // Cross-field validation: currency mode requires currency code
     if (data.numMode === 'currency' && !data.currency) {
@@ -155,7 +172,9 @@ export type NumericWidgetOptions = z.infer<typeof NumericWidgetOptionsSchema>
 export const BoolWidgetOptionsSchema = StylePropertiesSchema.extend({
   widget: BoolWidgetTypeSchema.describe('Widget type for boolean display (CheckBox or Switch)'),
   alignment: AlignmentSchema.describe('Widget alignment')
-}).merge(HeaderStylePropertiesSchema).strict()
+})
+  .merge(HeaderStylePropertiesSchema)
+  .strict()
 
 export type BoolWidgetOptions = z.infer<typeof BoolWidgetOptionsSchema>
 
@@ -175,7 +194,9 @@ export const DateWidgetOptionsSchema = StylePropertiesSchema.extend({
     .describe('Date format string (e.g., "YYYY-MM-DD", "MMM D, YYYY") - max 100 chars'),
   isCustomDateFormat: z.boolean().optional().describe('Whether the date format is custom'),
   alignment: AlignmentSchema.describe('Date alignment')
-}).merge(HeaderStylePropertiesSchema).strict()
+})
+  .merge(HeaderStylePropertiesSchema)
+  .strict()
   .superRefine((data, ctx) => {
     // Cross-field validation: custom date format requires dateFormat
     if (data.isCustomDateFormat === true && !data.dateFormat) {
@@ -198,11 +219,7 @@ export type DateWidgetOptions = z.infer<typeof DateWidgetOptionsSchema>
  * Controls both date and time format
  */
 export const DateTimeWidgetOptionsSchema = StylePropertiesSchema.extend({
-  dateFormat: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Date format string - max 100 chars'),
+  dateFormat: z.string().max(100).optional().describe('Date format string - max 100 chars'),
   isCustomDateFormat: z.boolean().optional().describe('Whether the date format is custom'),
   timeFormat: z
     .string()
@@ -211,7 +228,9 @@ export const DateTimeWidgetOptionsSchema = StylePropertiesSchema.extend({
     .describe('Time format string (e.g., "HH:mm:ss", "h:mm A") - max 100 chars'),
   isCustomTimeFormat: z.boolean().optional().describe('Whether the time format is custom'),
   alignment: AlignmentSchema.describe('DateTime alignment')
-}).merge(HeaderStylePropertiesSchema).strict()
+})
+  .merge(HeaderStylePropertiesSchema)
+  .strict()
   .superRefine((data, ctx) => {
     // Cross-field validation: custom date format requires dateFormat
     if (data.isCustomDateFormat === true && !data.dateFormat) {
@@ -240,10 +259,7 @@ export type DateTimeWidgetOptions = z.infer<typeof DateTimeWidgetOptionsSchema>
 /**
  * Style configuration for individual choices
  */
-const ChoiceOptionsSchema = z.record(
-  z.string(),
-  StylePropertiesSchema
-).optional()
+const ChoiceOptionsSchema = z.record(z.string(), StylePropertiesSchema).optional()
 
 /**
  * Widget options for Choice columns
@@ -257,7 +273,9 @@ export const ChoiceWidgetOptionsSchema = StylePropertiesSchema.extend({
     .describe('Available choices for the column (max 1000 choices, each max 255 chars)'),
   choiceOptions: ChoiceOptionsSchema.describe('Style configuration for individual choices'),
   alignment: AlignmentSchema.describe('Choice alignment')
-}).merge(HeaderStylePropertiesSchema).strict()
+})
+  .merge(HeaderStylePropertiesSchema)
+  .strict()
 
 export type ChoiceWidgetOptions = z.infer<typeof ChoiceWidgetOptionsSchema>
 
@@ -287,7 +305,9 @@ export const RefWidgetOptionsSchema = StylePropertiesSchema.extend({
     .union([z.string(), z.number()])
     .optional()
     .describe('Column name or numeric ID to display (extracted during processing)')
-}).merge(HeaderStylePropertiesSchema).strict()
+})
+  .merge(HeaderStylePropertiesSchema)
+  .strict()
 
 export type RefWidgetOptions = z.infer<typeof RefWidgetOptionsSchema>
 
@@ -320,7 +340,9 @@ export const AttachmentsWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Attachment display height in pixels (1-5000)'),
   alignment: AlignmentSchema.describe('Attachment alignment')
-}).merge(HeaderStylePropertiesSchema).strict()
+})
+  .merge(HeaderStylePropertiesSchema)
+  .strict()
 
 export type AttachmentsWidgetOptions = z.infer<typeof AttachmentsWidgetOptionsSchema>
 
@@ -391,53 +413,97 @@ export const WidgetOptionsStringSchema = z
   .describe('Widget options as JSON string')
 
 /**
+ * Attempts to parse a string as standard JSON
+ * @returns Parsed object or null if parsing fails
+ */
+function parseAsJson(val: string): object | null {
+  try {
+    return JSON.parse(val)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Converts Python-style dict string (single quotes) to JSON and parses it
+ * @returns Parsed object or null if conversion fails
+ */
+function convertPythonDict(val: string): object | null {
+  try {
+    const jsonString = val.replace(/'/g, '"')
+    return JSON.parse(jsonString)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Logs parsing errors when debug mode is enabled
+ */
+function logParsingError(val: string, jsonError: unknown, conversionError: unknown): void {
+  if (process.env.DEBUG_MCP_PARAMS !== 'true') {
+    return
+  }
+
+  console.error('[widgetOptions] Failed to parse widgetOptions:', {
+    value: val,
+    jsonError: jsonError instanceof Error ? jsonError.message : String(jsonError),
+    conversionError:
+      conversionError instanceof Error ? conversionError.message : String(conversionError)
+  })
+}
+
+/**
+ * Logs Python dict conversion when debug mode is enabled
+ */
+function logPythonConversion(original: string, converted: string): void {
+  if (process.env.DEBUG_MCP_PARAMS !== 'true') {
+    return
+  }
+
+  console.warn('[widgetOptions] Converted Python-style dict to JSON:', {
+    original,
+    converted
+  })
+}
+
+/**
  * Preprocesses widgetOptions value to convert string formats to objects
  * Supports both valid JSON and Python-style dict strings with single quotes
  */
 function preprocessWidgetOptions(val: unknown): object {
-  // If it's undefined or null, return empty object
+  // If it's undefined, null, or empty string, return empty object
   if (val === undefined || val === null || val === '') {
     return {}
   }
+
   // If it's already an object, return as-is
   if (typeof val === 'object') {
     return val
   }
-  // If it's a string, try to parse it
-  if (typeof val === 'string') {
-    // First, try parsing as valid JSON
-    try {
-      return JSON.parse(val)
-    } catch (jsonError) {
-      // If that fails, try converting Python-style dict to JSON
-      // Replace single quotes with double quotes
-      try {
-        const jsonString = val.replace(/'/g, '"')
-        const parsed = JSON.parse(jsonString)
 
-        // Log warning if debug mode is enabled
-        if (process.env.DEBUG_MCP_PARAMS === 'true') {
-          console.warn('[widgetOptions] Converted Python-style dict to JSON:', {
-            original: val,
-            converted: jsonString
-          })
-        }
-
-        return parsed
-      } catch (conversionError) {
-        // If all parsing fails, log error and return empty object
-        if (process.env.DEBUG_MCP_PARAMS === 'true') {
-          console.error('[widgetOptions] Failed to parse widgetOptions:', {
-            value: val,
-            jsonError: jsonError instanceof Error ? jsonError.message : String(jsonError),
-            conversionError: conversionError instanceof Error ? conversionError.message : String(conversionError)
-          })
-        }
-        return {}
-      }
-    }
+  // If it's not a string, return empty object
+  if (typeof val !== 'string') {
+    return {}
   }
-  // Otherwise return empty object
+
+  // Try parsing as standard JSON first
+  const parsed = parseAsJson(val)
+  if (parsed !== null) {
+    return parsed
+  }
+
+  // Try converting Python dict to JSON
+  const jsonError = new Error('Standard JSON parsing failed')
+  const converted = convertPythonDict(val)
+  if (converted !== null) {
+    logPythonConversion(val, val.replace(/'/g, '"'))
+    return converted
+  }
+
+  // All parsing failed - log and return empty object
+  const conversionError = new Error('Python dict conversion failed')
+  logParsingError(val, jsonError, conversionError)
   return {}
 }
 
@@ -445,10 +511,7 @@ function preprocessWidgetOptions(val: unknown): object {
  * Preprocessor that converts JSON string to object before validation
  * Supports both valid JSON and Python-style dict strings with single quotes
  */
-export const WidgetOptionsSchema = z.preprocess(
-  preprocessWidgetOptions,
-  WidgetOptionsUnionSchema
-)
+export const WidgetOptionsSchema = z.preprocess(preprocessWidgetOptions, WidgetOptionsUnionSchema)
 
 // ============================================================================
 // Type-Safe Widget Options Factory Functions
@@ -506,7 +569,11 @@ export function parseWidgetOptions<T = AnyWidgetOptions>(
   const preprocessed = preprocessWidgetOptions(widgetOptionsStr)
 
   // If preprocessing resulted in empty object and input wasn't empty, parsing failed
-  if (Object.keys(preprocessed).length === 0 && widgetOptionsStr.trim() !== '{}' && widgetOptionsStr.trim() !== '') {
+  if (
+    Object.keys(preprocessed).length === 0 &&
+    widgetOptionsStr.trim() !== '{}' &&
+    widgetOptionsStr.trim() !== ''
+  ) {
     return null
   }
 
@@ -530,7 +597,7 @@ export function stringifyWidgetOptions(options: AnyWidgetOptions | null | undefi
   }
 
   // Remove undefined values
-  const cleanOptions: Record<string, any> = {}
+  const cleanOptions: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(options)) {
     if (value !== undefined) {
       cleanOptions[key] = value

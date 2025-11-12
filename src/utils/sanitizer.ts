@@ -13,9 +13,9 @@
  */
 const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   // API keys and tokens (Bearer, various formats)
-  { pattern: /Bearer\s+[A-Za-z0-9_\-]{20,}/gi, replacement: 'Bearer ***' },
-  { pattern: /api[_-]?key[:\s=]+[A-Za-z0-9_\-]{20,}/gi, replacement: 'api_key=***' },
-  { pattern: /token[:\s=]+[A-Za-z0-9_\-]{20,}/gi, replacement: 'token=***' },
+  { pattern: /Bearer\s+[A-Za-z0-9_-]{20,}/gi, replacement: 'Bearer ***' },
+  { pattern: /api[_-]?key[:\s=]+[A-Za-z0-9_-]{20,}/gi, replacement: 'api_key=***' },
+  { pattern: /token[:\s=]+[A-Za-z0-9_-]{20,}/gi, replacement: 'token=***' },
 
   // Email addresses (partial redaction to preserve domain for debugging)
   {
@@ -24,7 +24,7 @@ const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   },
 
   // Long alphanumeric strings that might be keys or tokens (20+ chars)
-  { pattern: /\b[A-Za-z0-9_\-]{40,}\b/g, replacement: '***' },
+  { pattern: /\b[A-Za-z0-9_-]{40,}\b/g, replacement: '***' },
 
   // Authorization headers
   { pattern: /Authorization:\s*[^\s]+/gi, replacement: 'Authorization: ***' },
@@ -37,15 +37,15 @@ const SENSITIVE_PATTERNS: Array<{ pattern: RegExp; replacement: string }> = [
   { pattern: /[?&](api[_-]?key|token|auth)[=][^&\s]+/gi, replacement: '?$1=***' },
 
   // Document IDs (preserve format but redact value)
-  { pattern: /docId[:\s=]+"?([A-Za-z0-9_\-]{15,})"?/gi, replacement: 'docId=***' },
+  { pattern: /docId[:\s=]+"?([A-Za-z0-9_-]{15,})"?/gi, replacement: 'docId=***' },
 
   // File paths that might contain usernames
   {
-    pattern: /\/Users\/[^\/\s]+/g,
+    pattern: /\/Users\/[^/\s]+/g,
     replacement: '/Users/***'
   },
   {
-    pattern: /\/home\/[^\/\s]+/g,
+    pattern: /\/home\/[^/\s]+/g,
     replacement: '/home/***'
   },
   {
@@ -111,7 +111,7 @@ export function sanitizeError(error: Error): Error {
   // Preserve other enumerable properties
   for (const key of Object.keys(error)) {
     if (key !== 'message' && key !== 'stack' && key !== 'name') {
-      ;(sanitized as any)[key] = (error as any)[key]
+      ;(sanitized as Record<string, unknown>)[key] = (error as Record<string, unknown>)[key]
     }
   }
 
@@ -155,12 +155,12 @@ export function sanitizeObject<T>(obj: T): T {
     return obj.map((item) => sanitizeObject(item)) as unknown as T
   }
 
-  const sanitized: any = {}
+  const sanitized: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(obj)) {
     sanitized[key] = sanitizeObject(value)
   }
 
-  return sanitized
+  return sanitized as T
 }
 
 /**
@@ -199,7 +199,7 @@ export function containsSensitiveData(text: string): boolean {
  * @param error - Axios error to sanitize
  * @returns Sanitized error message
  */
-export function sanitizeAxiosError(error: any): string {
+export function sanitizeAxiosError(error: unknown): string {
   if (!error) {
     return 'Unknown error'
   }

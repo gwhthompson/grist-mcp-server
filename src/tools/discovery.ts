@@ -16,11 +16,11 @@ import {
   TableIdSchema,
   WorkspaceIdSchema
 } from '../schemas/common.js'
+import { truncateIfNeeded } from '../services/formatter.js'
 import type { GristClient } from '../services/grist-client.js'
 import type { DocumentInfo, WorkspaceInfo } from '../types.js'
-import { PaginatedGristTool, type PaginatedResponse } from './base/PaginatedGristTool.js'
 import { GristTool } from './base/GristTool.js'
-import { truncateIfNeeded } from '../services/formatter.js'
+import { PaginatedGristTool, type PaginatedResponse } from './base/PaginatedGristTool.js'
 
 // ============================================================================
 // 1. GRIST_GET_WORKSPACES (Refactored)
@@ -37,7 +37,7 @@ export const GetWorkspacesSchema = z
           'Leave empty to list all accessible workspaces.'
       ),
     detail_level: DetailLevelWorkspaceSchema,
-    response_format: ResponseFormatSchema,
+    response_format: ResponseFormatSchema
   })
   .merge(PaginationSchema)
   .strict()
@@ -78,24 +78,29 @@ export class GetWorkspacesTool extends PaginatedGristTool<
     // Fetch workspaces from each org
     const allWorkspaces: WorkspaceInfo[] = []
     for (const org of orgs) {
-      const workspacesResponse = await this.client.get<WorkspaceInfo[]>(`/orgs/${org.id}/workspaces`)
+      const workspacesResponse = await this.client.get<WorkspaceInfo[]>(
+        `/orgs/${org.id}/workspaces`
+      )
       allWorkspaces.push(...workspacesResponse)
     }
 
     // Format based on detail level
-    return allWorkspaces.map(ws => this.formatWorkspace(ws, params.detail_level))
+    return allWorkspaces.map((ws) => this.formatWorkspace(ws, params.detail_level))
   }
 
   /**
    * Filter workspaces by name if name_contains is provided
    */
-  protected filterItems(items: FormattedWorkspace[], params: GetWorkspacesInput): FormattedWorkspace[] {
+  protected filterItems(
+    items: FormattedWorkspace[],
+    params: GetWorkspacesInput
+  ): FormattedWorkspace[] {
     if (!params.name_contains) {
       return items
     }
 
     const searchTerm = params.name_contains.toLowerCase()
-    return items.filter(ws => ws.name.toLowerCase().includes(searchTerm))
+    return items.filter((ws) => ws.name.toLowerCase().includes(searchTerm))
   }
 
   /**
@@ -125,7 +130,10 @@ export class GetWorkspacesTool extends PaginatedGristTool<
   /**
    * Override formatResponse to include truncation logic
    */
-  protected formatResponse(data: PaginatedResponse<FormattedWorkspace>, format: 'json' | 'markdown') {
+  protected formatResponse(
+    data: PaginatedResponse<FormattedWorkspace>,
+    format: 'json' | 'markdown'
+  ) {
     const { data: truncatedData } = truncateIfNeeded(data.items, format, {
       total: data.pagination.total,
       offset: data.pagination.offset,
@@ -134,7 +142,10 @@ export class GetWorkspacesTool extends PaginatedGristTool<
       next_offset: data.pagination.next_offset
     })
 
-    return super.formatResponse(truncatedData as any, format)
+    return super.formatResponse(
+      truncatedData as unknown as PaginatedResponse<FormattedWorkspace>,
+      format
+    )
   }
 }
 
@@ -176,7 +187,7 @@ export const GetDocumentsSchema = z
           '- summary: name, id, workspace (fast, minimal tokens)\n' +
           '- detailed: + permissions, timestamps, urls (comprehensive)'
       ),
-    response_format: ResponseFormatSchema,
+    response_format: ResponseFormatSchema
   })
   .merge(PaginationSchema)
   .strict()
@@ -223,9 +234,11 @@ export class GetDocumentsTool extends PaginatedGristTool<
 
     // Mode 2: Get by workspace
     if (params.workspaceId) {
-      const response = await this.client.get<{ docs: DocumentInfo[] }>(`/workspaces/${params.workspaceId}`)
+      const response = await this.client.get<{ docs: DocumentInfo[] }>(
+        `/workspaces/${params.workspaceId}`
+      )
       const docs = response.docs || []
-      return docs.map(doc => this.formatDocument(doc, params.detail_level, baseUrl))
+      return docs.map((doc) => this.formatDocument(doc, params.detail_level, baseUrl))
     }
 
     // Mode 3: Get all documents
@@ -235,19 +248,25 @@ export class GetDocumentsTool extends PaginatedGristTool<
   /**
    * Filter documents by name if name_contains is provided
    */
-  protected filterItems(items: FormattedDocument[], params: GetDocumentsInput): FormattedDocument[] {
+  protected filterItems(
+    items: FormattedDocument[],
+    params: GetDocumentsInput
+  ): FormattedDocument[] {
     if (!params.name_contains) {
       return items
     }
 
     const searchTerm = params.name_contains.toLowerCase()
-    return items.filter(doc => doc.name.toLowerCase().includes(searchTerm))
+    return items.filter((doc) => doc.name.toLowerCase().includes(searchTerm))
   }
 
   /**
    * Fetch all documents from all workspaces
    */
-  private async fetchAllDocuments(baseUrl: string, detailLevel: string): Promise<FormattedDocument[]> {
+  private async fetchAllDocuments(
+    baseUrl: string,
+    detailLevel: string
+  ): Promise<FormattedDocument[]> {
     const documents: FormattedDocument[] = []
     const orgs = await this.client.get<Array<{ id: number }>>('/orgs')
 
@@ -256,7 +275,7 @@ export class GetDocumentsTool extends PaginatedGristTool<
 
       for (const ws of workspaces) {
         if (ws.docs) {
-          documents.push(...ws.docs.map(doc => this.formatDocument(doc, detailLevel, baseUrl)))
+          documents.push(...ws.docs.map((doc) => this.formatDocument(doc, detailLevel, baseUrl)))
         }
       }
     }
@@ -267,7 +286,11 @@ export class GetDocumentsTool extends PaginatedGristTool<
   /**
    * Format document based on detail level
    */
-  private formatDocument(doc: DocumentInfo, detailLevel: string, baseUrl: string): FormattedDocument {
+  private formatDocument(
+    doc: DocumentInfo,
+    detailLevel: string,
+    baseUrl: string
+  ): FormattedDocument {
     if (detailLevel === 'summary') {
       return {
         id: doc.id,
@@ -294,7 +317,10 @@ export class GetDocumentsTool extends PaginatedGristTool<
   /**
    * Override formatResponse to include truncation logic
    */
-  protected formatResponse(data: PaginatedResponse<FormattedDocument>, format: 'json' | 'markdown') {
+  protected formatResponse(
+    data: PaginatedResponse<FormattedDocument>,
+    format: 'json' | 'markdown'
+  ) {
     const { data: truncatedData } = truncateIfNeeded(data.items, format, {
       total: data.pagination.total,
       offset: data.pagination.offset,
@@ -303,7 +329,10 @@ export class GetDocumentsTool extends PaginatedGristTool<
       next_offset: data.pagination.next_offset
     })
 
-    return super.formatResponse(truncatedData as any, format)
+    return super.formatResponse(
+      truncatedData as unknown as PaginatedResponse<FormattedDocument>,
+      format
+    )
   }
 }
 
@@ -332,25 +361,30 @@ export type GetTablesInput = z.infer<typeof GetTablesSchema>
 
 interface FormattedTable {
   id: string
-  columns?: string[] | Array<{
-    id: string
-    label: string
-    type: string
-    is_formula: boolean
-    formula: string | null
-    widget_options: any
-  }>
+  columns?:
+    | string[]
+    | Array<{
+        id: string
+        label: string
+        type: string
+        is_formula: boolean
+        formula: string | null
+        widget_options: string | Record<string, unknown> | null
+      }>
 }
 
 /**
  * Get Tables Tool
  * Fetches table structure with configurable detail level
  */
-export class GetTablesTool extends GristTool<typeof GetTablesSchema, {
-  document_id: string
-  table_count: number
-  items: FormattedTable[]
-}> {
+export class GetTablesTool extends GristTool<
+  typeof GetTablesSchema,
+  {
+    document_id: string
+    table_count: number
+    items: FormattedTable[]
+  }
+> {
   constructor(client: GristClient) {
     super(client, GetTablesSchema)
   }
@@ -364,11 +398,11 @@ export class GetTablesTool extends GristTool<typeof GetTablesSchema, {
 
     // Filter by tableId if specified
     if (params.tableId) {
-      tableList = tableList.filter(t => t.id === params.tableId)
+      tableList = tableList.filter((t) => t.id === params.tableId)
       if (tableList.length === 0) {
         throw new Error(
           `Table '${params.tableId}' not found in document. ` +
-          `Use grist_get_tables without tableId to see all available tables.`
+            `Use grist_get_tables without tableId to see all available tables.`
         )
       }
     }
@@ -386,30 +420,33 @@ export class GetTablesTool extends GristTool<typeof GetTablesSchema, {
   /**
    * Format tables based on detail level
    */
-  private async formatTables(tables: any[], params: GetTablesInput): Promise<FormattedTable[]> {
+  private async formatTables(
+    tables: Array<{ id: string }>,
+    params: GetTablesInput
+  ): Promise<FormattedTable[]> {
     if (params.detail_level === 'names') {
-      return tables.map(t => ({ id: t.id }))
+      return tables.map((t) => ({ id: t.id }))
     }
 
     if (params.detail_level === 'columns' || params.detail_level === 'full_schema') {
       return Promise.all(
-        tables.map(async t => {
-          const columnsResponse = await this.client.get<{ columns: any[] }>(
-            `/docs/${params.docId}/tables/${t.id}/columns`
-          )
+        tables.map(async (t) => {
+          const columnsResponse = await this.client.get<{
+            columns: Array<Record<string, unknown>>
+          }>(`/docs/${params.docId}/tables/${t.id}/columns`)
           const columns = columnsResponse.columns || []
 
           if (params.detail_level === 'columns') {
             return {
               id: t.id,
-              columns: columns.map(c => c.id)
+              columns: columns.map((c) => c.id)
             }
           }
 
           // full_schema
           return {
             id: t.id,
-            columns: columns.map(c => ({
+            columns: columns.map((c) => ({
               id: c.id,
               label: c.fields.label || c.id,
               type: c.fields.type,
@@ -427,7 +464,7 @@ export class GetTablesTool extends GristTool<typeof GetTablesSchema, {
       )
     }
 
-    return tables.map(t => ({ id: t.id }))
+    return tables.map((t) => ({ id: t.id }))
   }
 }
 

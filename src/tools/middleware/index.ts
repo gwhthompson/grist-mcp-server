@@ -5,17 +5,18 @@
  * Follows Open/Closed Principle - open for extension, closed for modification
  */
 
-import type { GristTool } from '../base/GristTool.js'
+import type { z } from 'zod'
 import type { ResponseCache } from '../../utils/response-cache.js'
+import type { GristTool } from '../base/GristTool.js'
 
 /**
  * Middleware function signature
  * Wraps tool execution with additional functionality
  */
-export type ToolMiddleware<TResult = any> = (
-  tool: GristTool<any, any>,
+export type ToolMiddleware<TResult = unknown> = (
+  tool: GristTool<z.ZodTypeAny, unknown>,
   next: () => Promise<TResult>,
-  params: any
+  params: unknown
 ) => Promise<TResult>
 
 /**
@@ -62,7 +63,7 @@ export function withCaching(cache: ResponseCache, ttl: number = 60000): ToolMidd
  * ```
  */
 export function withMetrics(toolName: string): ToolMiddleware {
-  return async (tool, next, params) => {
+  return async (_tool, next, _params) => {
     const start = Date.now()
     try {
       const result = await next()
@@ -99,7 +100,10 @@ export function withLogging(logLevel: 'info' | 'debug' = 'info'): ToolMiddleware
       console.error(`[INFO] ${toolName} completed successfully`)
       return result
     } catch (error) {
-      console.error(`[ERROR] ${toolName} failed:`, error instanceof Error ? error.message : String(error))
+      console.error(
+        `[ERROR] ${toolName} failed:`,
+        error instanceof Error ? error.message : String(error)
+      )
       throw error
     }
   }
@@ -112,10 +116,10 @@ export function withLogging(logLevel: 'info' | 'debug' = 'info'): ToolMiddleware
  * @param validator - Validation function
  * @returns Middleware function
  */
-export function withValidation<T>(
-  validator: (params: any) => { valid: boolean; errors?: string[] }
+export function withValidation<_T>(
+  validator: (params: unknown) => { valid: boolean; errors?: string[] }
 ): ToolMiddleware {
-  return async (tool, next, params) => {
+  return async (_tool, next, params) => {
     const validation = validator(params)
     if (!validation.valid) {
       throw new Error(`Validation failed: ${validation.errors?.join(', ')}`)
@@ -142,9 +146,9 @@ export function withValidation<T>(
  */
 export function composeMiddleware(...middlewares: ToolMiddleware[]): ToolMiddleware {
   return async (tool, next, params) => {
-    let index = 0
+    const _index = 0
 
-    async function dispatch(i: number): Promise<any> {
+    async function dispatch(i: number): Promise<unknown> {
       if (i >= middlewares.length) {
         return next()
       }
@@ -174,7 +178,7 @@ export function composeMiddleware(...middlewares: ToolMiddleware[]): ToolMiddlew
  * ```
  */
 export function withCondition(
-  condition: (params: any) => boolean,
+  condition: (params: unknown) => boolean,
   middleware: ToolMiddleware
 ): ToolMiddleware {
   return async (tool, next, params) => {

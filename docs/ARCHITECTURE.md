@@ -5,7 +5,7 @@
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                         MCP Server Entry Point                          │
-│                      src/index.refactored.ts (~200 lines)               │
+│                          src/index.ts (~395 lines)                      │
 │                                                                          │
 │  ┌────────────────────────────────────────────────────────────────┐    │
 │  │ main()                                                          │    │
@@ -21,7 +21,7 @@
                                                 ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        Tool Registry System                             │
-│                  src/registry/tool-registry.ts (~450 lines)             │
+│                  src/registry/tool-registry.ts (~594 lines)             │
 │                                                                          │
 │  ┌────────────────────────────────────────────────────────────────┐    │
 │  │ registerToolsBatch()                                            │    │
@@ -48,7 +48,7 @@
                                         ▼
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                        Tool Definitions Registry                        │
-│                src/registry/tool-definitions.ts (~950 lines)            │
+│               src/registry/tool-definitions.ts (~1237 lines)            │
 │                                                                          │
 │  ┌────────────────────────────────────────────────────────────────┐    │
 │  │ ALL_TOOLS: ReadonlyArray<CategorizedToolDefinition>            │    │
@@ -229,13 +229,13 @@ BEFORE (Monolithic)
 
 AFTER (Modular)
 ┌────────────────────────────────────────┐
-│ src/index.refactored.ts                │
-│ ~200 lines (80% reduction!)            │
-│  ├── Config validation  (~40 lines)    │
-│  ├── Init functions     (~60 lines)    │
-│  ├── Tool registration  (~30 lines)    │
-│  ├── Logging           (~40 lines)     │
-│  └── Error handling    (~30 lines)     │
+│ src/index.ts                           │
+│ ~395 lines (62% reduction!)            │
+│  ├── Config validation  (~50 lines)    │
+│  ├── Init functions     (~80 lines)    │
+│  ├── Tool registration  (~50 lines)    │
+│  ├── Error handling     (~100 lines)   │
+│  └── Logging/setup      (~115 lines)   │
 └────────────────────────────────────────┘
          │
          ├── Uses ──────────────────────┐
@@ -243,7 +243,7 @@ AFTER (Modular)
          ▼                              ▼
 ┌────────────────────────┐    ┌────────────────────────┐
 │ tool-definitions.ts    │    │ tool-registry.ts       │
-│ ~950 lines             │    │ ~450 lines             │
+│ ~1237 lines            │    │ ~594 lines             │
 │  ├── 15 tools          │    │  ├── registerTool()    │
 │  ├── Annotations       │    │  ├── Batch register    │
 │  ├── Categories        │    │  ├── Strategies        │
@@ -305,7 +305,7 @@ Type-safe API path construction.
 
 | Aspect          | Before | After | Improvement |
 |-----------------|--------|-------|-------------|
-| Main file size  | 1,047  | ~200  | 80% smaller |
+| Main file size  | 1,047  | ~395  | 62% smaller |
 | Tool duplication| High   | None  | DRY presets |
 | Type safety     | `any`  | Full  | 100% typed  |
 | Testability     | Low    | High  | Modular     |
@@ -353,7 +353,7 @@ server.registerTool(
 
 This modular architecture provides:
 
-✅ **80% code reduction** in main entry point
+✅ **62% code reduction** in main entry point (1,047 → 395 lines)
 ✅ **100% type safety** with no `any` types
 ✅ **Single source of truth** for tool metadata
 ✅ **Easy extensibility** - add tools with 1 entry

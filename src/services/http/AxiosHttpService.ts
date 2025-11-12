@@ -6,8 +6,8 @@
  */
 
 import axios, { type AxiosInstance } from 'axios'
-import type { HttpService, HttpMethod } from './HttpService.js'
 import { API_TIMEOUT } from '../../constants.js'
+import type { HttpMethod, HttpService } from './HttpService.js'
 
 /**
  * Axios-based HTTP service implementation
@@ -15,11 +15,7 @@ import { API_TIMEOUT } from '../../constants.js'
 export class AxiosHttpService implements HttpService {
   private readonly client: AxiosInstance
 
-  constructor(
-    baseUrl: string,
-    apiKey: string,
-    timeout: number = API_TIMEOUT
-  ) {
+  constructor(baseUrl: string, apiKey: string, timeout: number = API_TIMEOUT) {
     this.client = axios.create({
       baseURL: `${baseUrl}/api`,
       headers: {

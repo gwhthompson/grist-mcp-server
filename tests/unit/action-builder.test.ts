@@ -5,14 +5,14 @@
  * across all action builders to prevent Python-style dict strings in Grist.
  */
 
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
-  serializeWidgetOptions,
   buildAddColumnAction,
+  buildAddTableAction,
   buildModifyColumnAction,
-  buildAddTableAction
+  serializeWidgetOptions
 } from '../../src/services/action-builder.js'
-import { toTableId, toColId } from '../../src/types/advanced.js'
+import { toColId, toTableId } from '../../src/types/advanced.js'
 
 describe('serializeWidgetOptions', () => {
   describe('handles undefined and null values', () => {
@@ -79,14 +79,10 @@ describe('serializeWidgetOptions', () => {
 
 describe('buildAddColumnAction', () => {
   it('serializes widgetOptions in column info', () => {
-    const action = buildAddColumnAction(
-      toTableId('TestTable'),
-      toColId('Status'),
-      {
-        type: 'Choice',
-        widgetOptions: { choices: ['Pending', 'Complete'] }
-      }
-    )
+    const action = buildAddColumnAction(toTableId('TestTable'), toColId('Status'), {
+      type: 'Choice',
+      widgetOptions: { choices: ['Pending', 'Complete'] }
+    })
 
     expect(action[0]).toBe('AddColumn')
     expect(action[1]).toBe('TestTable')
@@ -98,13 +94,9 @@ describe('buildAddColumnAction', () => {
   })
 
   it('handles undefined widgetOptions', () => {
-    const action = buildAddColumnAction(
-      toTableId('TestTable'),
-      toColId('Name'),
-      {
-        type: 'Text'
-      }
-    )
+    const action = buildAddColumnAction(toTableId('TestTable'), toColId('Name'), {
+      type: 'Text'
+    })
 
     const colInfo = action[3]
     expect(colInfo.widgetOptions).toBeUndefined()
@@ -112,14 +104,10 @@ describe('buildAddColumnAction', () => {
 
   it('preserves already-stringified widgetOptions', () => {
     const jsonString = '{"choices":["A","B"]}'
-    const action = buildAddColumnAction(
-      toTableId('TestTable'),
-      toColId('Choice'),
-      {
-        type: 'Choice',
-        widgetOptions: jsonString
-      }
-    )
+    const action = buildAddColumnAction(toTableId('TestTable'), toColId('Choice'), {
+      type: 'Choice',
+      widgetOptions: jsonString
+    })
 
     const colInfo = action[3]
     expect(colInfo.widgetOptions).toBe(jsonString)
@@ -128,14 +116,10 @@ describe('buildAddColumnAction', () => {
 
 describe('buildModifyColumnAction', () => {
   it('serializes widgetOptions in updates', () => {
-    const action = buildModifyColumnAction(
-      toTableId('TestTable'),
-      toColId('Status'),
-      {
-        type: 'Choice', // Type is now required when widgetOptions is provided
-        widgetOptions: { choices: ['Open', 'Closed'] }
-      }
-    )
+    const action = buildModifyColumnAction(toTableId('TestTable'), toColId('Status'), {
+      type: 'Choice', // Type is now required when widgetOptions is provided
+      widgetOptions: { choices: ['Open', 'Closed'] }
+    })
 
     expect(action[0]).toBe('ModifyColumn')
     expect(action[1]).toBe('TestTable')
@@ -148,23 +132,15 @@ describe('buildModifyColumnAction', () => {
 
   it('throws ValidationError when widgetOptions provided without type', () => {
     expect(() => {
-      buildModifyColumnAction(
-        toTableId('TestTable'),
-        toColId('Status'),
-        {
-          widgetOptions: { choices: ['Open', 'Closed'] }
-          // type is missing - should throw
-        }
-      )
+      buildModifyColumnAction(toTableId('TestTable'), toColId('Status'), {
+        widgetOptions: { choices: ['Open', 'Closed'] }
+        // type is missing - should throw
+      })
     }).toThrow(/Column type must be provided/)
   })
 
   it('handles empty updates object', () => {
-    const action = buildModifyColumnAction(
-      toTableId('TestTable'),
-      toColId('Name'),
-      {}
-    )
+    const action = buildModifyColumnAction(toTableId('TestTable'), toColId('Name'), {})
 
     const updates = action[3]
     expect(updates.widgetOptions).toBeUndefined()
@@ -193,7 +169,7 @@ describe('buildAddTableAction', () => {
     expect(action[0]).toBe('AddTable')
     expect(action[1]).toBe('Orders')
 
-    const columns = action[2] as any[]
+    const columns = action[2] as unknown[]
     expect(columns).toHaveLength(3)
 
     // First column: no widgetOptions
@@ -202,7 +178,9 @@ describe('buildAddTableAction', () => {
 
     // Second column: Status with choices
     expect(columns[1].id).toBe('Status')
-    expect(columns[1].widgetOptions).toBe('{"choices":["Pending","Processing","Shipped","Delivered","Cancelled"]}')
+    expect(columns[1].widgetOptions).toBe(
+      '{"choices":["Pending","Processing","Shipped","Delivered","Cancelled"]}'
+    )
     expect(columns[1].widgetOptions).not.toContain("'") // Critical: no single quotes
 
     // Third column: Priority with choices
@@ -228,7 +206,7 @@ describe('buildAddTableAction', () => {
       }
     ])
 
-    const columns = action[2] as any[]
+    const columns = action[2] as unknown[]
 
     expect(columns[0].widgetOptions).toBeUndefined()
     expect(columns[1].widgetOptions).toBe('{"numMode":"currency","currency":"USD"}')
@@ -244,7 +222,7 @@ describe('buildAddTableAction', () => {
       }
     ])
 
-    const columns = action[2] as any[]
+    const columns = action[2] as unknown[]
     expect(columns[0].id).toBe('MyColumn')
     expect(columns[0].colId).toBeUndefined() // colId should be removed
     expect(columns[0].widgetOptions).toBe('{"alignment":"center"}')
@@ -269,7 +247,7 @@ describe('integration: prevent Python-style dict strings', () => {
       }
     ])
 
-    const columns = action[2] as any[]
+    const columns = action[2] as unknown[]
     const widgetOptions = columns[0].widgetOptions
 
     // Should be parseable as JSON
@@ -289,7 +267,7 @@ describe('integration: prevent Python-style dict strings', () => {
       }
     ])
 
-    const columns = action[2] as any[]
+    const columns = action[2] as unknown[]
     const widgetOptions = columns[0].widgetOptions
 
     // Should NOT contain single quotes (Python dict style)

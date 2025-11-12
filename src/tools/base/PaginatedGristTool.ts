@@ -6,7 +6,6 @@
  */
 
 import type { z } from 'zod'
-import type { GristClient } from '../../services/grist-client.js'
 import { GristTool } from './GristTool.js'
 
 /**
@@ -80,10 +79,7 @@ export abstract class PaginatedGristTool<
    * @param params - Validated parameters (must include offset/limit)
    * @returns Paginated response with metadata
    */
-  protected paginate(
-    items: TItem[],
-    params: z.infer<TInput>
-  ): PaginatedResponse<TItem> {
+  protected paginate(items: TItem[], params: z.infer<TInput>): PaginatedResponse<TItem> {
     const offset = this.getOffset(params)
     const limit = this.getLimit(params)
     const total = items.length
@@ -111,7 +107,8 @@ export abstract class PaginatedGristTool<
    * @returns Offset value
    */
   protected getOffset(params: z.infer<TInput>): number {
-    const offset = (params as any).offset
+    const paramsRecord = params as Record<string, unknown>
+    const offset = paramsRecord.offset
     return typeof offset === 'number' ? offset : 0
   }
 
@@ -123,7 +120,8 @@ export abstract class PaginatedGristTool<
    * @returns Limit value
    */
   protected getLimit(params: z.infer<TInput>): number {
-    const limit = (params as any).limit
+    const paramsRecord = params as Record<string, unknown>
+    const limit = paramsRecord.limit
     return typeof limit === 'number' ? limit : 100
   }
 
@@ -135,7 +133,7 @@ export abstract class PaginatedGristTool<
    * @param params - Validated parameters
    * @returns Filtered items
    */
-  protected filterItems(items: TItem[], params: z.infer<TInput>): TItem[] {
+  protected filterItems(items: TItem[], _params: z.infer<TInput>): TItem[] {
     // Default: no filtering
     // Subclasses can override for custom filtering
     return items
@@ -149,7 +147,7 @@ export abstract class PaginatedGristTool<
    * @param params - Validated parameters
    * @returns Sorted items
    */
-  protected sortItems(items: TItem[], params: z.infer<TInput>): TItem[] {
+  protected sortItems(items: TItem[], _params: z.infer<TInput>): TItem[] {
     // Default: no sorting
     // Subclasses can override for custom sorting
     return items
@@ -190,5 +188,5 @@ export abstract class PaginatedGristTool<
 /**
  * Type helper to extract item type from PaginatedGristTool
  */
-export type PaginatedToolItem<T extends PaginatedGristTool<any, any, any>> =
-  T extends PaginatedGristTool<any, infer TItem, any> ? TItem : never
+export type PaginatedToolItem<T extends PaginatedGristTool<z.ZodTypeAny, unknown, unknown>> =
+  T extends PaginatedGristTool<z.ZodTypeAny, infer TItem, unknown> ? TItem : never

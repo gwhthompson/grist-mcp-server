@@ -1,6 +1,6 @@
 {
   "name": "grist-mcp-server",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Production-grade MCP server for Grist API integration with retry logic, rate limiting, caching, and comprehensive error handling",
   "type": "module",
   "main": "dist/index.js",

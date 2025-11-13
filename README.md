@@ -2,7 +2,7 @@
 
 A Model Context Protocol (MCP) server that enables AI assistants to interact with Grist documents, tables, and records.
 
-**Status:** ✅ Production Ready | **Version:** 1.2.2 | **Build:** Passing | **Quality Score:** 9.8/10 (A+)
+**Status:** ✅ Production Ready | **Version:** 1.2.3 | **Build:** Passing | **Quality Score:** 9.8/10 (A+)
 
 **Validation:** Tested against live Docker Grist instance with comprehensive MCP, TypeScript, and Zod review completed.
 

@@ -429,10 +429,22 @@ export class GetTablesTool extends GristTool<
     }
 
     if (params.detail_level === 'columns' || params.detail_level === 'full_schema') {
+      // Define proper type for column API response
+      interface ColumnApiResponse {
+        id: string
+        fields: {
+          label?: string
+          type: string
+          isFormula?: boolean
+          formula?: string | null
+          widgetOptions?: string | Record<string, unknown>
+        }
+      }
+
       return Promise.all(
         tables.map(async (t) => {
           const columnsResponse = await this.client.get<{
-            columns: Array<Record<string, unknown>>
+            columns: ColumnApiResponse[]
           }>(`/docs/${params.docId}/tables/${t.id}/columns`)
           const columns = columnsResponse.columns || []
 

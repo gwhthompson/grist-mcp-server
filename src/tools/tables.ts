@@ -55,7 +55,13 @@ export class CreateTableTool extends GristTool<typeof CreateTableSchema, unknown
     const action = buildAddTableAction(toTableId(params.tableName), params.columns)
     const response = await this.client.post<ApplyResponse>(`/docs/${params.docId}/apply`, [action])
 
-    const tableId = response.retValues[0]?.table_id || params.tableName
+    const retValue = response.retValues[0]
+    let tableId: string
+    if (typeof retValue === 'object' && retValue !== null && 'table_id' in retValue) {
+      tableId = (retValue as { table_id: string }).table_id
+    } else {
+      tableId = params.tableName
+    }
 
     return {
       success: true,

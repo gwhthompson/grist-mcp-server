@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server that enables AI assistants to interact wit
 
 **Status:** ✅ Production Ready | **Version:** 1.2.2 | **Build:** Passing | **Quality Score:** 9.8/10 (A+)
 
-**Validation:** Tested against live Docker Grist instance with comprehensive MCP, TypeScript, and Zod review completed. See [docs/TESTING.md](docs/TESTING.md) and [docs/STATUS.md](docs/STATUS.md) for details.
+**Validation:** Tested against live Docker Grist instance with comprehensive MCP, TypeScript, and Zod review completed.
 
 ## Features
 
@@ -18,57 +18,56 @@ A Model Context Protocol (MCP) server that enables AI assistants to interact wit
 
 ## Quick Start
 
-### Installation
+### Installation (Recommended: MCPB Bundle)
+
+**What is MCPB?** This server is packaged using the [MCP Bundles (MCPB)](https://github.com/modelcontextprotocol/mcpb) format for one-click installation in Claude Desktop and other supporting applications.
+
+**Install the Bundle:**
+
+1. Download `grist-mcp-server.mcpb` from this repository
+2. In Claude Desktop, go to Settings → Developer → MCP Servers
+3. Click "Install from MCPB" and select the downloaded file
+4. Configure your settings:
+   - **Grist API Key**: Get from https://docs.getgrist.com/settings/keys
+   - **Grist Base URL**: Use `https://docs.getgrist.com` (or your self-hosted URL)
+5. Restart Claude Desktop
+
+**Done!** The 15 Grist tools are now available in Claude.
+
+### Alternative: Manual Installation (For Developers)
+
+If you prefer to install from source or need to modify the server:
 
 ```bash
+# Clone and build
 cd grist-mcp-server
 npm install
 npm run build
 ```
 
-### Configuration
+**Configure Claude Desktop:**
 
-1. **Get Your Grist API Key**
+Add to your configuration file:
 
-   Visit https://docs.getgrist.com/settings/keys to create an API key.
+**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
+**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
 
-2. **Configure Claude Desktop**
+```json
+{
+  "mcpServers": {
+    "grist": {
+      "command": "node",
+      "args": ["/absolute/path/to/grist-mcp-server/dist/index.js"],
+      "env": {
+        "GRIST_API_KEY": "your_api_key_here",
+        "GRIST_BASE_URL": "https://docs.getgrist.com"
+      }
+    }
+  }
+}
+```
 
-   Add to your Claude Desktop configuration file:
-
-   **macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-
-   **Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
-
-   ```json
-   {
-     "mcpServers": {
-       "grist": {
-         "command": "node",
-         "args": ["/path/to/grist-mcp-server/dist/index.js"],
-         "env": {
-           "GRIST_API_KEY": "your_api_key_here",
-           "GRIST_BASE_URL": "https://docs.getgrist.com"
-         }
-       }
-     }
-   }
-   ```
-
-3. **For Self-Hosted Grist** (optional)
-
-   Set `GRIST_BASE_URL` to your instance URL:
-
-   ```json
-   "env": {
-     "GRIST_API_KEY": "your_api_key_here",
-     "GRIST_BASE_URL": "https://grist.yourcompany.com"
-   }
-   ```
-
-4. **Restart Claude Desktop**
-
-   The Grist tools will be available in Claude's tool menu.
+**Restart Claude Desktop** to activate the server.
 
 ## Available Tools
 
@@ -327,23 +326,28 @@ Sensitive data is automatically redacted from errors:
 
 ## Development
 
-### Build
+### Build Commands
 
 ```bash
-npm run build
+npm run build      # Compile TypeScript
+npm run dev        # Watch mode (auto-rebuild)
+npm run clean      # Remove dist/ directory
 ```
 
-### Watch Mode
+### MCPB Bundle Packaging
 
 ```bash
-npm run dev
+npm run build          # Build the server
+npm ci --omit=dev      # Install only production dependencies
+mcpb pack              # Create .mcpb bundle
 ```
 
-### Clean Build
+### Code Quality
 
 ```bash
-npm run clean
-npm run build
+npm run format     # Format code with Biome
+npm run lint       # Lint code with Biome
+npm run check      # Format + lint
 ```
 
 ## Response Formats
@@ -481,9 +485,39 @@ Common errors:
 2. Check network connectivity to Grist server
 3. Ensure API key is from the correct instance
 
-## Testing & Validation
+## Testing
 
-This MCP server has been validated against a live Grist instance. See [docs/TESTING.md](docs/TESTING.md) for detailed validation results and testing procedures.
+### Docker Setup for Local Testing
+
+```bash
+# Start Grist container
+docker compose up -d
+
+# Wait for initialization (critical - 12 seconds minimum)
+sleep 12
+
+# Set environment variables
+export GRIST_API_KEY=test_api_key
+export GRIST_BASE_URL=http://localhost:8989
+
+# Run tests
+npm test                    # All tests
+npm run test:watch          # Watch mode
+npm run test:no-cleanup     # Keep test data for inspection
+
+# Stop and clean up
+docker compose down -v
+```
+
+### Test Commands
+
+```bash
+npm test              # Run all tests
+npm run test:watch    # Watch mode
+npm run test:ui       # Visual test UI
+npm run build         # Build TypeScript
+npm run dev           # Watch mode (development)
+```
 
 ## Security Best Practices
 
@@ -504,10 +538,8 @@ This MCP server has been validated against a live Grist instance. See [docs/TEST
 
 ## Documentation
 
-- [Architecture Guide](docs/ARCHITECTURE.md) - System architecture and design patterns
-- [Development Guide](docs/DEVELOPMENT.md) - Development workflow and patterns
-- [Testing Guide](docs/TESTING.md) - Validation procedures and test coverage
-- [Changelog](docs/CHANGELOG.md) - Version history and changes
+- **[docs/reference/](docs/reference/)** - Grist API specifications (OpenAPI, TypeScript types, UserAction definitions)
+- **[CLAUDE.md](CLAUDE.md)** - Development guide for AI assistants
 
 ## Contributing
 
@@ -515,25 +547,6 @@ This MCP server was built following best practices from:
 - [MCP TypeScript SDK](https://github.com/modelcontextprotocol/typescript-sdk)
 - [MCP Best Practices](https://modelcontextprotocol.io/docs/best-practices)
 - [Grist API Documentation](https://support.getgrist.com/api/)
-
----
-
-## Documentation
-
-**📚 [Complete Documentation Guide](docs/)**
-
-### For New Users
-- **[Getting Started](docs/STATUS.md)** - Current status and quick overview
-- **[Docker Setup](docs/DOCKER_SETUP.md)** - Local development environment
-
-### For Developers & Contributors
-- **[Development Guide](docs/DEVELOPMENT.md)** - Workflows, patterns, and standards
-- **[Architecture](docs/ARCHITECTURE.md)** - System design and patterns
-- **[Testing Guide](docs/TESTING.md)** - Test strategy and procedures
-- **[Validation Rules](docs/VALIDATION_RULES.md)** - Complete constraints reference
-
-### For AI Assistants
-- **[CLAUDE.md](CLAUDE.md)** - Comprehensive development guide for AI assistants
 
 ---
 

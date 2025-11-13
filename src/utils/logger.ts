@@ -44,6 +44,8 @@ export interface LoggerConfig {
   includeStackTraces: boolean
   /** Pretty-print JSON output (default: false for production) */
   prettyPrint: boolean
+  /** Enable debug logging - overrides minLevel to DEBUG when true (default: false) */
+  enableDebug?: boolean
 }
 
 /**
@@ -79,10 +81,15 @@ export class Logger {
    * @param config - Optional logger configuration
    */
   constructor(config: Partial<LoggerConfig> = {}) {
+    // If enableDebug is explicitly set to true, override minLevel to DEBUG
+    const minLevel =
+      config.enableDebug === true ? LogLevel.DEBUG : config.minLevel ?? LogLevel.INFO
+
     this.config = {
-      minLevel: config.minLevel ?? LogLevel.INFO,
+      minLevel,
       includeStackTraces: config.includeStackTraces ?? true,
-      prettyPrint: config.prettyPrint ?? false
+      prettyPrint: config.prettyPrint ?? false,
+      enableDebug: config.enableDebug
     }
   }
 
@@ -102,9 +109,10 @@ export class Logger {
    *
    * @param message - Warning message
    * @param context - Optional context object
+   * @param error - Optional Error object
    */
-  warn(message: string, context?: Record<string, unknown>): void {
-    this.log(LogLevel.WARN, message, context)
+  warn(message: string, context?: Record<string, unknown>, error?: Error): void {
+    this.log(LogLevel.WARN, message, context, error)
   }
 
   /**
@@ -122,9 +130,10 @@ export class Logger {
    *
    * @param message - Debug message
    * @param context - Optional context object
+   * @param error - Optional Error object
    */
-  debug(message: string, context?: Record<string, unknown>): void {
-    this.log(LogLevel.DEBUG, message, context)
+  debug(message: string, context?: Record<string, unknown>, error?: Error): void {
+    this.log(LogLevel.DEBUG, message, context, error)
   }
 
   /**
@@ -211,10 +220,10 @@ export const defaultLogger = new Logger()
 export const log = {
   error: (message: string, context?: Record<string, unknown>, error?: Error) =>
     defaultLogger.error(message, context, error),
-  warn: (message: string, context?: Record<string, unknown>) =>
-    defaultLogger.warn(message, context),
+  warn: (message: string, context?: Record<string, unknown>, error?: Error) =>
+    defaultLogger.warn(message, context, error),
   info: (message: string, context?: Record<string, unknown>) =>
     defaultLogger.info(message, context),
-  debug: (message: string, context?: Record<string, unknown>) =>
-    defaultLogger.debug(message, context)
+  debug: (message: string, context?: Record<string, unknown>, error?: Error) =>
+    defaultLogger.debug(message, context, error)
 }

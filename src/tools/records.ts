@@ -17,8 +17,11 @@ import {
   buildBulkUpdateRecordAction
 } from '../services/action-builder.js'
 import type { GristClient } from '../services/grist-client.js'
-import { toRowId, toTableId } from '../types/advanced.js'
+import { getSchemaCache } from '../services/schema-cache.js'
+import { toDocId, toRowId, toTableId } from '../types/advanced.js'
 import type { ApplyResponse, UpsertResponse } from '../types.js'
+import { validateRecordValues } from '../validators/column-type-validators.js'
+import { validateWritableColumns } from '../validators/writable-columns.js'
 import { GristTool } from './base/GristTool.js'
 
 // ============================================================================
@@ -48,6 +51,29 @@ export class AddRecordsTool extends GristTool<typeof AddRecordsSchema, unknown> 
   }
 
   protected async executeInternal(params: AddRecordsInput) {
+    // Fetch table schema for validation
+    const schemaCache = getSchemaCache(this.client)
+    const columns = await schemaCache.getTableColumns(
+      toDocId(params.docId),
+      toTableId(params.tableId)
+    )
+
+    // Validate each record
+    for (let i = 0; i < params.records.length; i++) {
+      const record = params.records[i]
+
+      // VALIDATION LAYER 1: Check formula column writes
+      validateWritableColumns(record, columns)
+
+      // VALIDATION LAYER 2: Check column type compatibility
+      const validationErrors = validateRecordValues(record, columns)
+      if (validationErrors.length > 0) {
+        // Throw first validation error (fail fast)
+        throw validationErrors[0]
+      }
+    }
+
+    // All validation passed - proceed with action
     const action = buildBulkAddRecordAction(toTableId(params.tableId), params.records)
     const response = await this.client.post<ApplyResponse>(`/docs/${params.docId}/apply`, [action])
 
@@ -95,6 +121,24 @@ export class UpdateRecordsTool extends GristTool<typeof UpdateRecordsSchema, unk
   }
 
   protected async executeInternal(params: UpdateRecordsInput) {
+    // Fetch table schema for validation
+    const schemaCache = getSchemaCache(this.client)
+    const columns = await schemaCache.getTableColumns(
+      toDocId(params.docId),
+      toTableId(params.tableId)
+    )
+
+    // VALIDATION LAYER 1: Check formula column writes
+    validateWritableColumns(params.updates, columns)
+
+    // VALIDATION LAYER 2: Check column type compatibility
+    const validationErrors = validateRecordValues(params.updates, columns)
+    if (validationErrors.length > 0) {
+      // Throw first validation error (fail fast)
+      throw validationErrors[0]
+    }
+
+    // All validation passed - proceed with action
     const action = buildBulkUpdateRecordAction(
       toTableId(params.tableId),
       params.rowIds.map(toRowId),

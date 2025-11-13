@@ -14,7 +14,7 @@ import type {
   DetailLevelTable,
   DetailLevelWorkspace,
   DocumentInfo,
-  Record as GristRecord,
+  GristRecord,
   PaginationMetadata,
   TableInfo,
   WorkspaceInfo

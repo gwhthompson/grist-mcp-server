@@ -4,36 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ---
 
-## Table of Contents
-
-- [Development Requirements](#development-requirements)
-- [Core Architecture (Multi-File Pattern)](#core-architecture-multi-file-pattern)
-- [Critical Grist API Patterns](#critical-grist-api-patterns)
-- [Validation Rules (Non-Obvious Constraints)](#validation-rules-non-obvious-constraints)
-- [Docker Testing (MANDATORY)](#docker-testing-mandatory)
-- [Schema Composition Patterns](#schema-composition-patterns)
-- [MCP Protocol Compliance](#mcp-protocol-compliance)
-- [Error Handling Pattern](#error-handling-pattern)
-- [Reference Documentation](#reference-documentation)
-- [TypeScript Configuration](#typescript-configuration)
-- [Common Pitfalls to Avoid](#common-pitfalls-to-avoid)
-- [Development Commands](#development-commands)
-- [Adding New Features](#adding-new-features)
-- [Quality Standards](#quality-standards)
-
----
-
-## Development Requirements
-
-**When working on this repository:**
-
-### Agent & Skill Usage (MANDATORY - Use Proactively)
+## Agent & Skill Usage (MANDATORY)
 
 **⚠️ CRITICAL: Before starting ANY work, determine which agents/skills apply and invoke them FIRST.**
 
-These specialized tools are **required**, not optional. They prevent errors and ensure quality:
-
-#### 1. Context7 MCP Tool (Documentation Fetching)
+### 1. Context7 MCP Tool (Documentation Fetching)
 
 **ALWAYS fetch documentation BEFORE implementing:**
 
@@ -54,7 +29,7 @@ mcp__context7__get-library-docs({
 
 **Why:** This codebase uses Zod v3 (not v4). Fetching wrong version docs leads to errors.
 
-#### 2. javascript-typescript:typescript-pro Agent
+### 2. javascript-typescript:typescript-pro Agent
 
 **INVOKE THIS AGENT when performing:**
 - TypeScript error analysis or debugging
@@ -62,11 +37,9 @@ mcp__context7__get-library-docs({
 - Complex type inference implementation
 - Generic type pattern design
 - Schema validation logic
-- Any work involving TypeScript's type system
 
 **How to invoke:**
 ```typescript
-// Use Task tool with this agent
 Task({
   subagent_type: "javascript-typescript:typescript-pro",
   description: "Analyze TypeScript inference issue",
@@ -74,9 +47,7 @@ Task({
 })
 ```
 
-**Why:** This agent has deep TypeScript expertise for this exact codebase architecture.
-
-#### 3. typescript-advanced-types Skill
+### 3. typescript-advanced-types Skill
 
 **INVOKE THIS SKILL before working with:**
 - Branded types (DocId, TableId, RowId, Timestamp, CurrencyCode)
@@ -84,16 +55,13 @@ Task({
 - Template literal types (API paths, reference types)
 - Discriminated unions (CellValue variants, Result<T,E>)
 - Mapped types or complex generic constraints
-- Any type-level programming
 
 **How to invoke:**
 ```typescript
 Skill({ skill: "typescript-advanced-types" })
 ```
 
-**Why:** Provides patterns library and expert guidance for advanced TypeScript features.
-
-#### 4. mcp-builder Skill
+### 4. mcp-builder Skill
 
 **INVOKE THIS SKILL when:**
 - Creating ANY new MCP tool
@@ -108,69 +76,11 @@ Skill({ skill: "typescript-advanced-types" })
 Skill({ skill: "mcp-builder" })
 ```
 
-**Why:** Ensures adherence to MCP specification and best practices for LLM-friendly APIs.
-
 ---
 
-### Workflow: When to Use Each Tool
+## Reference Documentation (CRITICAL)
 
-**Starting any task? Follow this checklist:**
-
-1. ☑️ **Grist API work?** → Read **`./docs/reference/`** specifications FIRST
-2. ☑️ **External library work?** → Use **Context7** to fetch latest docs
-3. ☑️ **TypeScript changes?** → Invoke **typescript-pro agent** for review
-4. ☑️ **Advanced types involved?** → Invoke **typescript-advanced-types skill**
-5. ☑️ **MCP tool changes?** → Invoke **mcp-builder skill**
-
-**Example: Adding a new column type validation**
-
-```typescript
-// Step 1: Read Grist API specifications
-// Read: ./docs/reference/grist-types.d.ts (for GristType definitions)
-// Read: ./docs/reference/grist-apply-actions.d.ts (for ModifyColumn action)
-
-// Step 2: Fetch Zod v3 docs
-mcp__context7__get-library-docs({
-  context7CompatibleLibraryID: "/websites/v3_zod_dev",
-  topic: "discriminated unions, refinements, custom error maps",
-  tokens: 8000
-})
-
-// Step 3: Invoke typescript-advanced-types skill for branded type guidance
-Skill({ skill: "typescript-advanced-types" })
-
-// Step 4: Invoke typescript-pro agent to review implementation
-Task({
-  subagent_type: "javascript-typescript:typescript-pro",
-  description: "Review column type validation",
-  prompt: "Analyze the new validation schema for type safety..."
-})
-
-// Step 5: If modifying tool interface, invoke mcp-builder
-Skill({ skill: "mcp-builder" })
-```
-
-**Example: Implementing CellValue encoding**
-
-```typescript
-// Step 1: Read Grist encoding specifications
-// Read: ./docs/reference/grist-types.d.ts
-// Focus on: CellValue type, GristObjCode enum, encoding examples
-
-// Step 2: Invoke typescript-advanced-types for discriminated unions
-Skill({ skill: "typescript-advanced-types" })
-
-// Step 3: Review implementation with typescript-pro
-Task({
-  subagent_type: "javascript-typescript:typescript-pro",
-  description: "Review CellValue encoding",
-  prompt: "Review the discriminated union implementation for CellValue..."
-})
-```
-
-### General Requirements
-
-**4. Always Reference `./docs/reference/` for Grist API specifications (READ-ONLY)**
+**Always Reference `./docs/reference/` for Grist API specifications (READ-ONLY)**
 
 This directory contains **authoritative Grist API documentation** that you MUST reference:
 
@@ -181,14 +91,13 @@ This directory contains **authoritative Grist API documentation** that you MUST 
 
 **⚠️ CRITICAL: NEVER MODIFY FILES IN `docs/reference/`**
 
-These files are **documentation of the upstream Grist API**, not our production code. They describe what Grist's API expects, not what our MCP server uses internally.
+These files are **documentation of the upstream Grist API**, not our production code.
 
 - ❌ **DO NOT** add branded types to these files
 - ❌ **DO NOT** add imports to `src/` from these files
 - ❌ **DO NOT** change type signatures in these files
 - ✅ **DO** reference them for understanding Grist's API contract
 - ✅ **DO** copy patterns to new files in `src/types/` if needed
-- ✅ **DO** keep them in sync with upstream Grist documentation
 
 **When to use each:**
 - Building API requests? → Check `grist-api-spec.yml` for endpoint signatures
@@ -202,16 +111,15 @@ These files are **documentation of the upstream Grist API**, not our production 
 - `src/encoding/cell-value-builders.ts` - Branded CellValue types
 - `src/services/action-builder.ts` - Functions that use branded types internally
 
-**5. Ensure all code passes integration tests against the Docker Grist container**
+---
 
-### Documentation & Library References
+## Zod v3 (NOT v4) - CRITICAL
 
-**⚠️ CRITICAL: This codebase uses Zod v3 (not v4)**
+**⚠️ This codebase uses Zod v3 (not v4)**
 
 Always fetch Zod v3 documentation via Context7 **BEFORE** writing validation code:
 
 ```typescript
-// MANDATORY before Zod work
 mcp__context7__get-library-docs({
   context7CompatibleLibraryID: "/websites/v3_zod_dev",
   topic: "refinements, error handling, preprocessing, transforms",
@@ -226,80 +134,11 @@ mcp__context7__get-library-docs({
 - Type inference with discriminated unions has v3-specific patterns
 - Using v4 docs will cause compilation errors
 
-**Other libraries:**
-- Always fetch current documentation via Context7 before implementing
-- Never assume API patterns - always verify with latest docs
-
 ---
 
-## Core Architecture (Multi-File Pattern)
+## Critical Grist API Patterns (EASY TO GET WRONG)
 
-### Registry-Based Tool System
-
-The server uses a **modular registry architecture** that reduced the codebase by 80%:
-
-```
-src/index.ts (~300 lines)
-  ├── Environment validation
-  ├── GristClient initialization
-  └── registerToolsBatch(server, client, ALL_TOOLS)
-
-src/registry/tool-definitions.ts
-  └── ALL_TOOLS: Array of 14 tool definitions
-      - Zod schemas with full type inference
-      - Type-safe handlers (zero `any` types)
-      - Annotation presets (READ_ONLY, WRITE_SAFE, DESTRUCTIVE)
-
-src/registry/tool-registry.ts
-  └── Generic registration system
-      - Converts Zod → JSON Schema
-      - Wraps handlers with validation
-      - Full TypeScript inference preserved
-```
-
-**To add a new tool:** Add one entry to `ALL_TOOLS` array. Registration is automatic.
-
-### Advanced Type System
-
-> **🚨 MANDATORY: Invoke `typescript-advanced-types` skill BEFORE implementing or modifying ANY of these patterns:**
->
-> ```typescript
-> Skill({ skill: "typescript-advanced-types" })
-> ```
->
-> This skill provides the pattern library and expert guidance required for:
-> - Branded types (all ID types, domain values)
-> - Conditional types (result types, conditional returns)
-> - Template literal types (API paths, format strings)
-> - Discriminated unions (CellValue, error types)
-> - Type-level programming (mapped types, inference)
->
-> **Don't skip this step** - it prevents hours of debugging type inference issues.
-
-**Branded Types** prevent ID mixing:
-```typescript
-type DocId = Brand<string, 'DocId'>     // Can't pass TableId where DocId expected
-type TableId = Brand<string, 'TableId'>
-type RowId = Brand<number, 'RowId'>     // Can't pass WorkspaceId where RowId expected
-```
-
-**Conditional Types** for detail-level responses:
-```typescript
-type WorkspaceResult<D> = D extends 'summary' ? SummaryInfo : DetailedInfo
-```
-
-**Template Literal Types** for type-safe API paths:
-```typescript
-type ApiPath = `/api/docs/${string}/tables/${string}/records`
-```
-
-**Implementation:** See `src/types/advanced.ts` for all branded type definitions and type utilities used throughout the codebase.
-
----
-
-## Critical Grist API Patterns
-
-### 1. UserAction Format (EASY TO GET WRONG)
+### 1. UserAction Format
 
 ```typescript
 // ❌ WRONG - Common mistake
@@ -359,6 +198,7 @@ visibleCol: 456  // Numeric ID at top-level
 ```
 
 **Implementation:** `src/services/column-resolver.ts`
+
 **Note:** visibleCol is a column property (like type, formula), NOT a widget option. Set at operation top-level.
 
 ### 4. CellValue Encoding (Critical for Correctness)
@@ -371,7 +211,7 @@ Grist uses a **special encoding format** for complex data types. This is the #1 
 
 **Current Solution (Test Helpers):**
 
-Located in `tests/helpers/cell-values.ts` (will be moved to production in improvement plan):
+Located in `tests/helpers/cell-values.ts`:
 
 ```typescript
 import { createList, createDate, createDateTime } from './tests/helpers/cell-values.js'
@@ -416,25 +256,9 @@ await client.post(`/docs/${docId}/apply`, [
 ])
 ```
 
-**Future: Type-Safe Encoders (Improvement Plan Phase 1):**
-
-A type-safe encoding system is planned to catch these errors at **compile-time**:
-
-```typescript
-// Planned improvement - compile-time safety
-import { encodeList, encodeDate, encodeDateTime } from 'src/encoding/cell-value-builders.js'
-
-const choiceList: ListValue = encodeList('option1', 'option2')
-//    ^^^^^^^^^^ Branded type - TypeScript enforces correct structure
-```
-
-See git commit history for implementation details.
-
 ---
 
 ## Validation Rules (Non-Obvious Constraints)
-
-**See `docs/VALIDATION_RULES.md` for complete reference.**
 
 ### Identifiers
 
@@ -505,74 +329,12 @@ export GRIST_BASE_URL=http://localhost:8989  # NO /api suffix
 
 # 4. Run tests
 npm run build
-npm test                    # 174 tests
-npm run test:no-cleanup     # Keep data for inspection
-```
-
-### Test Coverage Requirements
-
-- All 11 Grist column types (Text, Numeric, Int, Bool, Date, DateTime, Choice, ChoiceList, Ref, RefList, Attachments)
-- All CellValue encodings (primitives + Grist arrays like `["L", 1, 2, 3]`)
-- All widget options properties
-- Negative tests for validation errors
-
-**Test files:** `tests/` directory (30+ test files)
-
----
-
-## Schema Composition Patterns
-
-### Always Use .strict()
-
-```typescript
-const Schema = z.object({...}).strict()  // Reject unknown properties
-```
-
-### Use .merge() for DRY
-
-```typescript
-const GetDocumentsSchema = BaseParamsSchema
-  .merge(PaginationSchema)
-  .merge(ResponseFormatSchema)
-  .strict()
-```
-
-**Reusable schemas:** `src/schemas/common.ts`
-
-### Provide Defaults
-
-```typescript
-response_format: z.enum(['json', 'markdown']).default('markdown')
-detail_level: z.enum(['summary', 'detailed']).default('summary')
-offset: z.number().int().min(0).default(0)
-limit: z.number().int().min(1).max(1000).default(100)
+npm test
 ```
 
 ---
 
 ## MCP Protocol Compliance
-
-> **🚨 MANDATORY: Invoke `mcp-builder` skill BEFORE any MCP tool work:**
->
-> ```typescript
-> Skill({ skill: "mcp-builder" })
-> ```
->
-> **Required when:**
-> - Creating ANY new tool (even if small)
-> - Modifying tool schemas or parameters
-> - Changing tool response formats
-> - Adding/updating tool annotations
-> - Validating MCP protocol compliance
-> - Designing workflow-centric tool APIs
->
-> This skill ensures:
-> - Adherence to MCP specification
-> - LLM-friendly error messages
-> - Proper tool annotations
-> - Workflow-centric design (not just API wrappers)
->
-> **Don't skip this step** - it prevents protocol violations and poor LLM UX.
 
 ### Tool Naming Convention
 
@@ -631,25 +393,6 @@ The `GristClient` automatically redacts sensitive data from errors:
 
 ---
 
-## Reference Documentation
-
-### Grist API Specifications
-
-- `docs/reference/grist-api-spec.yml` - OpenAPI specification
-- `docs/reference/grist-types.d.ts` - TypeScript type definitions
-- `docs/reference/grist-apply-actions.d.ts` - UserAction tuple types
-- `docs/reference/grist-database-schema.md` - Metadata schema v44 (18 tables)
-
-### MCP Server Guides
-
-- `docs/VALIDATION_RULES.md` - Complete validation constraints (Python keywords, ISO currencies, etc.)
-- `docs/ARCHITECTURE.md` - Registry system, type flow diagrams
-- `docs/TESTING.md` - Docker setup, test procedures
-- `docs/DEVELOPMENT.md` - TypeScript patterns, Grist formulas
-- `docs/STATUS.md` - Current project status (includes quality metrics)
-
----
-
 ## TypeScript Configuration
 
 **Non-negotiable settings:**
@@ -685,117 +428,37 @@ import { GristClient } from './services/grist-client'     // ❌ Wrong
 9. **Date encoding** - Dates require `["d", timestamp]` format, use `createDate()` helper
 10. **DateTime encoding** - DateTime requires `["D", timestamp, timezone]` format, use `createDateTime()` helper
 
-**Critical:** Pitfalls #8-10 are the **#1 source of user errors**. Always use encoding helpers from `tests/helpers/cell-values.ts`. A type-safe production encoding system is planned in the improvement roadmap to catch these at compile-time.
+**Critical:** Pitfalls #8-10 are the **#1 source of user errors**. Always use encoding helpers from `tests/helpers/cell-values.ts`.
 
 ---
 
-## Development Commands
+## MCPB Bundle Packaging
+
+This project uses [MCP Bundles (MCPB)](https://github.com/modelcontextprotocol/mcpb) for packaging. See the [MCPB specification](https://raw.githubusercontent.com/modelcontextprotocol/mcpb/refs/heads/main/README.md) for details.
+
+**When adding new tools:** Update both `src/registry/tool-definitions.ts` AND `manifest.json` tools array.
 
 ```bash
-# Build
-npm run build        # TypeScript → dist/
-npm run dev          # Watch mode with tsx
-
-# Testing
-npm test             # All tests (174 tests)
-npm run test:watch   # Watch mode
-npm run test:ui      # Visual test UI
-npm run test:no-cleanup  # Keep test data for inspection
-
-# Docker
-docker compose up -d && sleep 12  # Start + wait for initialization
-docker compose down -v            # Stop and remove volumes
-
-# Code Quality
-npm run format       # Biome format
-npm run lint         # Biome lint
-npm run check        # Format + lint
+npm run build          # Build the server
+npm ci --omit=dev      # Install only production dependencies
+mcpb pack              # Create .mcpb bundle
 ```
 
 ---
 
-## Adding New Features
+## Adding New Tools
 
-### New Tool
+**Workflow:**
 
-**Workflow (MANDATORY agent/skill integration):**
+1. **Pre-Planning:** Invoke `mcp-builder` skill + fetch Zod v3 docs via Context7
+2. **Implementation:** Add entry to `src/registry/tool-definitions.ts` (`ALL_TOOLS` array)
+3. **Update Manifest:** Add tool to `manifest.json` tools array
+4. **Review:** Invoke `typescript-pro` agent for type safety review
+5. **Validation:** Add integration tests in `tests/` and run against Docker container
 
-1. **Pre-Planning Phase** ⚠️ REQUIRED
-   ```typescript
-   // STEP 1: Fetch MCP best practices
-   Skill({ skill: "mcp-builder" })
-
-   // STEP 2: Fetch Zod v3 docs
-   mcp__context7__get-library-docs({
-     context7CompatibleLibraryID: "/websites/v3_zod_dev",
-     topic: "schema definition, validation, error handling",
-     tokens: 8000
-   })
-   ```
-
-2. **Planning Phase**
-   - Review tool naming convention (grist_{verb}_{noun})
-   - Determine appropriate annotation preset
-   - Design workflow-centric API (not just endpoint wrapper)
-   - Plan error messages with actionable guidance
-
-3. **Implementation Phase**
-   ```typescript
-   // STEP 3: Invoke typescript-advanced-types if using branded types
-   Skill({ skill: "typescript-advanced-types" })
-   ```
-   - Add entry to `src/registry/tool-definitions.ts` (`ALL_TOOLS` array)
-   - Create Zod schema in appropriate tool file
-   - Implement handler function with type-safe patterns
-   - Use annotation preset (READ_ONLY_ANNOTATIONS, WRITE_SAFE_ANNOTATIONS, etc.)
-
-4. **Review Phase** ⚠️ REQUIRED
-   ```typescript
-   // STEP 4: Get expert TypeScript review
-   Task({
-     subagent_type: "javascript-typescript:typescript-pro",
-     description: "Review new tool implementation",
-     prompt: "Analyze the new tool for type safety, error handling, and TypeScript best practices..."
-   })
-   ```
-
-5. **Validation Phase**
-   - Verify tool schema and response format (mcp-builder patterns)
-   - Add integration tests in `tests/`
-   - Run tests against Docker container
-
-6. **Quality Check**
-   - ✅ Zero `any` types in implementation
-   - ✅ Actionable error messages with suggestions
-   - ✅ Strict mode compliance
-   - ✅ MCP protocol compliance
-   - ✅ Type inference preserved throughout
-
-### New Validation Rule
-
-1. Update schema in `src/schemas/common.ts` or create new schema
-2. Document in `docs/VALIDATION_RULES.md`
-3. Add negative test cases in `tests/negative-tests.test.ts`
-
-### New Widget Option
-
-1. Add to discriminated union in `src/schemas/widget-options.ts`
-2. Add cross-field validation if needed (`.superRefine()`)
-3. Add preprocessing if needed (Python dict compatibility)
-4. Test in `tests/widget-options.test.ts`
-
----
-
-## Quality Standards
-
-**Current Status:** 9.8/10 (A+) - Top 5% of TypeScript projects
-
-**Maintain these standards:**
-- Zero `any` types in production code
-- 100% TypeScript strict mode compliance
-- Comprehensive Zod validation
-- Actionable error messages with guidance
-- Full test coverage for all column types
-- Docker integration testing for all tools
-
-**Reference:** `docs/STATUS.md` for quality metrics and project status
+**Quality Check:**
+- ✅ Zero `any` types in implementation
+- ✅ Actionable error messages with suggestions
+- ✅ Strict mode compliance
+- ✅ MCP protocol compliance
+- ✅ Type inference preserved throughout

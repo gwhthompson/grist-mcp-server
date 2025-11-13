@@ -8,7 +8,7 @@ export default defineConfig({
     environment: 'node',
 
     // Test execution
-    testTimeout: 30000, // 30 seconds for API tests
+    testTimeout: 30000, // 30 seconds for API tests (unit tests override to 5s)
     hookTimeout: 10000,
     teardownTimeout: 10000,
 
@@ -39,12 +39,31 @@ export default defineConfig({
     exclude: [
       'node_modules',
       'dist',
-      'tests/test-*.ts', // Old test files
+      'tests/exploratory/**/*', // Exploratory test files (moved from root)
+      'tests/test-*.ts', // Old test files (if any remain)
       'tests/explore-*.ts' // Exploration files
     ],
 
-    // Reporter configuration
-    reporters: ['verbose'],
+    // Reporter configuration - Clean output
+    reporters: ['default'],
+    silent: false, // Show test names, but suppress stdout/stderr
+
+    // Suppress console output during tests (except failures)
+    onConsoleLog: (log, type) => {
+      // Suppress stderr logs from GristClient during negative tests
+      if (type === 'stderr' && log.includes('"level":"error"')) {
+        return false
+      }
+      // Suppress verbose Zod error dumps
+      if (log.includes('ZodError:') || log.includes('unionErrors')) {
+        return false
+      }
+      // Suppress stack traces in logs
+      if (log.includes('at file:///') || log.includes('at node:internal')) {
+        return false
+      }
+      return true // Allow other console output
+    },
 
     // Parallel execution
     poolOptions: {

@@ -214,14 +214,7 @@ export class GristClient {
 
           return this.validateResponse(response.data, options)
         } catch (error) {
-          this.logger.error(
-            'GET request failed',
-            {
-              path,
-              params
-            },
-            error instanceof Error ? error : undefined
-          )
+          this.logRequestError(error, 'GET', path, { params })
           throw this.handleError(error, 'GET', path)
         }
       }, `GET ${path}`)
@@ -274,14 +267,9 @@ export class GristClient {
 
           return this.validateResponse(response.data, options)
         } catch (error) {
-          this.logger.error(
-            'POST request failed',
-            {
-              path,
-              dataSize: JSON.stringify(data).length
-            },
-            error instanceof Error ? error : undefined
-          )
+          this.logRequestError(error, 'POST', path, {
+            dataSize: JSON.stringify(data).length
+          })
           throw this.handleError(error, 'POST', path)
         }
       }, `POST ${path}`)
@@ -328,14 +316,9 @@ export class GristClient {
 
           return this.validateResponse(response.data, options)
         } catch (error) {
-          this.logger.error(
-            'PUT request failed',
-            {
-              path,
-              dataSize: JSON.stringify(data).length
-            },
-            error instanceof Error ? error : undefined
-          )
+          this.logRequestError(error, 'PUT', path, {
+            dataSize: JSON.stringify(data).length
+          })
           throw this.handleError(error, 'PUT', path)
         }
       }, `PUT ${path}`)
@@ -382,14 +365,9 @@ export class GristClient {
 
           return this.validateResponse(response.data, options)
         } catch (error) {
-          this.logger.error(
-            'PATCH request failed',
-            {
-              path,
-              dataSize: JSON.stringify(data).length
-            },
-            error instanceof Error ? error : undefined
-          )
+          this.logRequestError(error, 'PATCH', path, {
+            dataSize: JSON.stringify(data).length
+          })
           throw this.handleError(error, 'PATCH', path)
         }
       }, `PATCH ${path}`)
@@ -432,13 +410,7 @@ export class GristClient {
 
           return this.validateResponse(response.data, options)
         } catch (error) {
-          this.logger.error(
-            'DELETE request failed',
-            {
-              path
-            },
-            error instanceof Error ? error : undefined
-          )
+          this.logRequestError(error, 'DELETE', path)
           throw this.handleError(error, 'DELETE', path)
         }
       }, `DELETE ${path}`)
@@ -532,6 +504,95 @@ export class GristClient {
   }
 
   // ==========================================================================
+  // Error Classification & Logging
+  // ==========================================================================
+
+  /**
+   * Classify error severity to determine appropriate log level
+   *
+   * SAFETY: Conservative classification - unknown errors default to CRITICAL
+   *
+   * @private
+   * @param error - Error to classify
+   * @returns 'validation' | 'retriable' | 'critical'
+   */
+  private classifyErrorSeverity(
+    error: unknown
+  ): 'validation' | 'retriable' | 'critical' {
+    if (!axios.isAxiosError(error)) {
+      // Non-HTTP errors are always critical (network, timeout, etc.)
+      return 'critical'
+    }
+
+    const status = error.response?.status
+
+    // Retriable transient errors
+    if (status && this.retryConfig.retryableStatuses.includes(status)) {
+      return 'retriable'
+    }
+
+    // Expected validation/client errors
+    if (status === 400 || status === 404 || status === 422) {
+      return 'validation'
+    }
+
+    // Auth, permission, and server errors are critical
+    // Includes: 401, 403, 500, 501, etc.
+    return 'critical'
+  }
+
+  /**
+   * Log error at appropriate level based on severity
+   *
+   * SAFETY: All errors are logged - only the level changes
+   *
+   * @private
+   * @param error - Error to log
+   * @param method - HTTP method
+   * @param path - API path
+   * @param additionalContext - Additional context for logging
+   */
+  private logRequestError(
+    error: unknown,
+    method: HttpMethod,
+    path: string,
+    additionalContext?: Record<string, unknown>
+  ): void {
+    const severity = this.classifyErrorSeverity(error)
+    const context = {
+      method,
+      path,
+      status: this.getErrorStatus(error),
+      ...additionalContext
+    }
+
+    switch (severity) {
+      case 'validation':
+        // Expected validation errors - debug level (hidden in tests, visible when debugging)
+        this.logger.debug(
+          `${method} validation error`,
+          context,
+          error instanceof Error ? error : undefined
+        )
+        break
+
+      case 'retriable':
+        // Retriable errors - don't log on first attempt, retry logic will handle
+        // This prevents duplicate logging (here + retry warn)
+        break
+
+      case 'critical':
+        // Critical errors - always log at ERROR level
+        this.logger.error(
+          `${method} request failed`,
+          context,
+          error instanceof Error ? error : undefined
+        )
+        break
+    }
+  }
+
+  // ==========================================================================
   // Retry Logic
   // ==========================================================================
 
@@ -571,6 +632,15 @@ export class GristClient {
         const isLastAttempt = attempt === this.retryConfig.maxRetries
 
         if (!isRetryable || isLastAttempt) {
+          // Log critical error on final retry exhaustion
+          if (isLastAttempt && isRetryable) {
+            this.logger.error('Retry exhausted', {
+              attempt: attempt + 1,
+              maxRetries: this.retryConfig.maxRetries,
+              context,
+              status: this.getErrorStatus(error)
+            })
+          }
           // Not retryable or out of retries - throw immediately
           throw error
         }
@@ -583,8 +653,8 @@ export class GristClient {
         // Store error for potential final throw
         lastError = error instanceof Error ? error : new Error(String(error))
 
-        // Log retry attempt with structured logging
-        this.logger.warn('Retrying request after error', {
+        // Log retry attempt at debug level (quiet in normal operation)
+        this.logger.debug('Retrying request after error', {
           attempt: attempt + 1,
           maxRetries: this.retryConfig.maxRetries,
           context,

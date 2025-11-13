@@ -30,7 +30,7 @@ export interface MCPToolResponse {
     type: 'text'
     text: string // Markdown or JSON string based on response_format
   }>
-  structuredContent?: unknown // Always include - machine-readable data
+  structuredContent?: { [x: string]: unknown } // Always include - machine-readable data
   isError?: boolean // True for error responses
   [key: string]: unknown // Index signature for MCP SDK compatibility
 }
@@ -251,8 +251,9 @@ export interface TablesApiResponse {
 
 /**
  * Record structure for API operations
+ * Named GristRecord to avoid conflict with TypeScript's built-in Record utility type
  */
-export interface Record {
+export interface GristRecord {
   id: number
   fields: { [colId: string]: CellValue }
   errors?: { [colId: string]: string } // Formula evaluation errors
@@ -293,7 +294,7 @@ export interface SQLQueryResponse {
  * Records response from GET /tables/{tableId}/records
  */
 export interface RecordsResponse {
-  records: Record[]
+  records: GristRecord[]
 }
 
 /**

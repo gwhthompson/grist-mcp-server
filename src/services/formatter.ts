@@ -32,7 +32,7 @@ export function formatToolResponse<T>(
         text
       }
     ],
-    structuredContent: data // ALWAYS include - enables programmatic access
+    structuredContent: data as { [x: string]: unknown } // ALWAYS include - enables programmatic access
   }
 }
 

@@ -111,7 +111,9 @@ export function sanitizeError(error: Error): Error {
   // Preserve other enumerable properties
   for (const key of Object.keys(error)) {
     if (key !== 'message' && key !== 'stack' && key !== 'name') {
-      ;(sanitized as Record<string, unknown>)[key] = (error as Record<string, unknown>)[key]
+      const errorRecord = error as unknown as Record<string, unknown>
+      const sanitizedRecord = sanitized as unknown as Record<string, unknown>
+      sanitizedRecord[key] = errorRecord[key]
     }
   }
 
@@ -204,21 +206,34 @@ export function sanitizeAxiosError(error: unknown): string {
     return 'Unknown error'
   }
 
-  let message = error.message || String(error)
+  // Type guard for objects with message property
+  const hasMessage = (e: unknown): e is { message: string } =>
+    typeof e === 'object' &&
+    e !== null &&
+    'message' in e &&
+    typeof (e as { message?: unknown }).message === 'string'
+
+  let message = hasMessage(error) ? error.message : String(error)
 
   // Sanitize the basic message
   message = sanitizeMessage(message)
 
   // Add sanitized request info if available
-  if (error.config) {
-    const method = error.config.method?.toUpperCase()
-    const url = sanitizeMessage(error.config.url || '')
-    message += ` (${method} ${url})`
+  if (typeof error === 'object' && error !== null && 'config' in error) {
+    const config = (error as { config?: { method?: string; url?: string } }).config
+    if (config) {
+      const method = config.method?.toUpperCase()
+      const url = sanitizeMessage(config.url || '')
+      message += ` (${method} ${url})`
+    }
   }
 
   // Add response status if available
-  if (error.response) {
-    message += ` [${error.response.status}]`
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = (error as { response?: { status?: number } }).response
+    if (response?.status) {
+      message += ` [${response.status}]`
+    }
   }
 
   return message

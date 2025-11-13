@@ -27,7 +27,14 @@
       "WebFetch(domain:v3.zod.dev)",
       "Bash(node ./node_modules/typescript/bin/tsc:*)",
       "WebFetch(domain:www.npmjs.com)",
-      "Bash(npm run check:*)"
+      "Bash(npm run check:*)",
+      "Bash(git log:*)",
+      "Bash(npm run format:*)",
+      "Bash(npx biome format:*)",
+      "Bash(npx biome lint:*)",
+      "Skill(javascript-typescript:javascript-testing-patterns)",
+      "Skill(javascript-testing-patterns)",
+      "Bash(mcpb --help:*)"
     ],
     "deny": [],
     "ask": []

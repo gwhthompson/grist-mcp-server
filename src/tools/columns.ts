@@ -29,7 +29,8 @@ import {
   resolveVisibleCol
 } from '../services/column-resolver.js'
 import type { GristClient } from '../services/grist-client.js'
-import { toColId, toTableId } from '../types/advanced.js'
+import { getSchemaCache } from '../services/schema-cache.js'
+import { toColId, toDocId, toTableId } from '../types/advanced.js'
 import type { ApplyResponse, UserAction } from '../types.js'
 import { GristTool } from './base/GristTool.js'
 
@@ -188,6 +189,11 @@ export class ManageColumnsTool extends GristTool<
       }
     }
 
+    // Invalidate schema cache after successful column operations
+    // This ensures fresh schema is fetched on next record validation
+    const schemaCache = getSchemaCache(this.client)
+    schemaCache.invalidateCache(toDocId(params.docId), toTableId(params.tableId))
+
     // Check if any operations set widgetOptions
     const hasWidgetOptions = params.operations.some(
       (op) => (op.action === 'add' || op.action === 'modify') && 'widgetOptions' in op
@@ -198,7 +204,13 @@ export class ManageColumnsTool extends GristTool<
       success: true,
       document_id: params.docId,
       table_id: params.tableId,
-      operations_completed: params.operations.length,
+      operations_performed: params.operations.length,
+      actions: enrichedOperations.map((op) => {
+        if (op.action === 'rename') {
+          return `${op.action}: ${op.oldColId} -> ${op.newColId}`
+        }
+        return `${op.action}: ${op.colId}`
+      }),
       summary: this.calculateOperationSummary(params.operations),
       message: `Successfully completed ${params.operations.length} column operation(s) on ${params.tableId}`,
       details: params.operations.map(this.formatOperationMessage),
@@ -345,7 +357,12 @@ export class ManageColumnsTool extends GristTool<
 
     let colRef: number
     if (op.action === 'add') {
-      colRef = response.retValues[0]?.colRef
+      const retValue = response.retValues[0]
+      if (typeof retValue === 'object' && retValue !== null && 'colRef' in retValue) {
+        colRef = (retValue as { colRef: number }).colRef
+      } else {
+        colRef = 0
+      }
     } else {
       colRef = await getColumnRef(this.client, params.docId, params.tableId, op.colId)
     }
@@ -395,11 +412,14 @@ export class ManageColumnsTool extends GristTool<
 
   /**
    * Build updates object for modify operation
+   * Returns object with optional column properties for modification
    */
-  private buildModifyUpdates(op: ColumnOperation): Partial<ColumnInfo> {
+  private buildModifyUpdates(
+    op: ColumnOperation
+  ): Record<string, string | number | boolean | object | undefined> {
     if (op.action !== 'modify') return {}
 
-    const modifyUpdates: Partial<ColumnInfo> = {}
+    const modifyUpdates: Record<string, string | number | boolean | object | undefined> = {}
     if (op.type !== undefined) modifyUpdates.type = op.type
     if (op.label !== undefined) modifyUpdates.label = op.label
     if (op.formula !== undefined) modifyUpdates.formula = op.formula

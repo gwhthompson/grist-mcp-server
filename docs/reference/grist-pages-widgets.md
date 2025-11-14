@@ -218,10 +218,10 @@ Create a page with two widgets arranged horizontally:
 ```
 
 **Notes:**
-- In multi-action requests, use zero-based indexing (0, 1, 2...) to reference newly created rows
-- First `CreateViewSection` creates widget with ID `0` (first action's return)
-- Second `CreateViewSection` creates widget with ID `1` (second action's return)
-- `UpdateRecord` uses `0` to reference the newly created view from the first action
+- In multi-action requests, use zero-based indexing (`0`, `1`, `2`, ...) to reference the result of each action in the request (not the actual IDs assigned by Grist)
+- The first `CreateViewSection` result is referenced as `0` (the result of the first action)
+- The second `CreateViewSection` result is referenced as `1` (the result of the second action)
+- `UpdateRecord` uses `0` to reference the result from the first action (not the actual view ID assigned by Grist)
 - `layoutSpec` must be a stringified JSON object
 
 ---

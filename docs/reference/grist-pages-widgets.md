@@ -470,7 +470,7 @@ When sending multiple actions in a single request, use zero-based indexing to re
 ]
 ```
 - First action creates a record - reference it as `0` in subsequent actions
-- Second action updates the record created by the first action
+- Second action references the record created by the first action using zero-based index `0`
 
 ### JSON Field Serialization
 

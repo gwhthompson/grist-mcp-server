@@ -218,6 +218,9 @@ Create a page with two widgets arranged horizontally:
 ```
 
 **Notes:**
+- Both `CreateViewSection` actions use `viewRef: 0` to add widgets to the same page:
+  - The first action creates a new view (page)
+  - The second action references the view created by action 0 (zero-based index)
 - In multi-action requests, use zero-based indexing (`0`, `1`, `2`, ...) to reference the result of each action in the request (not the actual IDs assigned by Grist)
 - The first `CreateViewSection` result is referenced as `0` (the result of the first action)
 - The second `CreateViewSection` result is referenced as `1` (the result of the second action)

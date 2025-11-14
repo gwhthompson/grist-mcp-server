@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
-  formatToolResponse,
-  formatErrorResponse,
   formatAsMarkdown,
+  formatErrorResponse,
+  formatToolResponse,
   truncateIfNeeded
 } from '../../../src/services/formatter.js'
 import type { ResponseFormat } from '../../../src/types.js'
@@ -49,7 +49,10 @@ describe('Formatter Service', () => {
     })
 
     it('should handle arrays', () => {
-      const data = [{ id: 1, name: 'Alice' }, { id: 2, name: 'Bob' }]
+      const data = [
+        { id: 1, name: 'Alice' },
+        { id: 2, name: 'Bob' }
+      ]
       const result = formatToolResponse(data, 'markdown')
 
       expect(result.content[0].text).toContain('1.')
@@ -257,7 +260,10 @@ describe('Formatter Service', () => {
 
     describe('no truncation needed', () => {
       it('should return full data if under limit', () => {
-        const items = [{ id: 1, name: 'A' }, { id: 2, name: 'B' }]
+        const items = [
+          { id: 1, name: 'A' },
+          { id: 2, name: 'B' }
+        ]
         const result = truncateIfNeeded(items, 'json', {})
 
         expect(result.data.items).toHaveLength(2)
@@ -310,16 +316,17 @@ describe('Formatter Service', () => {
       })
 
       it('should provide actionable suggestions', () => {
-        const largeItems = Array.from({ length: 1000 }, (_, i) => ({ id: i, data: 'x'.repeat(100) }))
+        const largeItems = Array.from({ length: 1000 }, (_, i) => ({
+          id: i,
+          data: 'x'.repeat(100)
+        }))
         const result = truncateIfNeeded(largeItems, 'json', { offset: 0, limit: 100 })
 
         expect(Array.isArray(result.data.suggestions)).toBe(true)
         if (result.data.suggestions) {
           expect(result.data.suggestions.length).toBeGreaterThan(0)
           // Should suggest using offset
-          const offsetSuggestion = result.data.suggestions.find((s) =>
-            String(s).includes('offset')
-          )
+          const offsetSuggestion = result.data.suggestions.find((s) => String(s).includes('offset'))
           expect(offsetSuggestion).toBeDefined()
         }
       })
@@ -327,7 +334,10 @@ describe('Formatter Service', () => {
 
     describe('truncation suggestions', () => {
       it('should suggest offset for pagination', () => {
-        const largeItems = Array.from({ length: 1000 }, (_, i) => ({ id: i, data: 'x'.repeat(100) }))
+        const largeItems = Array.from({ length: 1000 }, (_, i) => ({
+          id: i,
+          data: 'x'.repeat(100)
+        }))
         const result = truncateIfNeeded(largeItems, 'json', { offset: 10 })
 
         const suggestions = result.data.suggestions as string[]
@@ -339,7 +349,10 @@ describe('Formatter Service', () => {
       })
 
       it('should suggest reducing detail level', () => {
-        const largeItems = Array.from({ length: 1000 }, (_, i) => ({ id: i, data: 'x'.repeat(100) }))
+        const largeItems = Array.from({ length: 1000 }, (_, i) => ({
+          id: i,
+          data: 'x'.repeat(100)
+        }))
         const result = truncateIfNeeded(largeItems, 'json', { detail_level: 'detailed' })
 
         const suggestions = result.data.suggestions as string[]
@@ -348,7 +361,10 @@ describe('Formatter Service', () => {
       })
 
       it('should suggest column selection', () => {
-        const largeItems = Array.from({ length: 1000 }, (_, i) => ({ id: i, data: 'x'.repeat(100) }))
+        const largeItems = Array.from({ length: 1000 }, (_, i) => ({
+          id: i,
+          data: 'x'.repeat(100)
+        }))
         const result = truncateIfNeeded(largeItems, 'json', { columns: '*' })
 
         const suggestions = result.data.suggestions as string[]
@@ -357,7 +373,10 @@ describe('Formatter Service', () => {
       })
 
       it('should suggest adding filters', () => {
-        const largeItems = Array.from({ length: 1000 }, (_, i) => ({ id: i, data: 'x'.repeat(100) }))
+        const largeItems = Array.from({ length: 1000 }, (_, i) => ({
+          id: i,
+          data: 'x'.repeat(100)
+        }))
         const result = truncateIfNeeded(largeItems, 'json', {})
 
         const suggestions = result.data.suggestions as string[]
@@ -366,7 +385,10 @@ describe('Formatter Service', () => {
       })
 
       it('should suggest reducing limit', () => {
-        const largeItems = Array.from({ length: 1000 }, (_, i) => ({ id: i, data: 'x'.repeat(100) }))
+        const largeItems = Array.from({ length: 1000 }, (_, i) => ({
+          id: i,
+          data: 'x'.repeat(100)
+        }))
         const result = truncateIfNeeded(largeItems, 'json', { limit: 200 })
 
         const suggestions = result.data.suggestions as string[]

@@ -83,7 +83,7 @@ export class Logger {
   constructor(config: Partial<LoggerConfig> = {}) {
     // If enableDebug is explicitly set to true, override minLevel to DEBUG
     const minLevel =
-      config.enableDebug === true ? LogLevel.DEBUG : config.minLevel ?? LogLevel.INFO
+      config.enableDebug === true ? LogLevel.DEBUG : (config.minLevel ?? LogLevel.INFO)
 
     this.config = {
       minLevel,

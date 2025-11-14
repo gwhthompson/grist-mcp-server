@@ -5,7 +5,7 @@
  * Based on javascript-testing-patterns skill and test-architecture-review.md
  */
 
-import { z } from 'zod'
+import type { z } from 'zod'
 import type { MCPToolResponse } from '../../src/types.js'
 
 /**
@@ -29,9 +29,7 @@ export function expectValidSchema<T>(
   const result = schema.safeParse(data)
 
   if (!result.success) {
-    const message = context
-      ? `Schema validation failed for ${context}`
-      : 'Schema validation failed'
+    const message = context ? `Schema validation failed for ${context}` : 'Schema validation failed'
 
     console.error(message)
     console.error('Errors:', result.error.format())
@@ -77,9 +75,7 @@ export function assertValidSchema<T>(data: unknown, schema: z.ZodSchema<T>): T {
  */
 export function isValidDocIdFormat(value: unknown): value is string {
   return (
-    typeof value === 'string' &&
-    value.length === 22 &&
-    /^[1-9A-HJ-NP-Za-km-z]{22}$/.test(value)
+    typeof value === 'string' && value.length === 22 && /^[1-9A-HJ-NP-Za-km-z]{22}$/.test(value)
   )
 }
 

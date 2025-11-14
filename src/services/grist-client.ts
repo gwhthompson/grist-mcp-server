@@ -516,9 +516,7 @@ export class GristClient {
    * @param error - Error to classify
    * @returns 'validation' | 'retriable' | 'critical'
    */
-  private classifyErrorSeverity(
-    error: unknown
-  ): 'validation' | 'retriable' | 'critical' {
+  private classifyErrorSeverity(error: unknown): 'validation' | 'retriable' | 'critical' {
     if (!axios.isAxiosError(error)) {
       // Non-HTTP errors are always critical (network, timeout, etc.)
       return 'critical'

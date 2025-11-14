@@ -270,10 +270,7 @@ export function createDateFromISO(isoString: string): DateValue {
  * const dateTime = createDateTimeFromISO('2024-01-15T10:30:00Z', 'UTC')
  * // Returns: ["D", 1705313400000, "UTC"]
  */
-export function createDateTimeFromISO(
-  isoString: string,
-  timezone: string = 'UTC'
-): DateTimeValue {
+export function createDateTimeFromISO(isoString: string, timezone: string = 'UTC'): DateTimeValue {
   return CellValueFactory.dateTime(Date.parse(isoString), timezone)
 }
 

@@ -35,13 +35,10 @@ export type GristObjCode = z.infer<typeof GristObjCodeSchema>
  */
 export const ListValueContractSchema = z.tuple([
   z.literal('L'),
-  ...z.array(z.union([z.string(), z.number(), z.boolean()])) as never[]
+  ...(z.array(z.union([z.string(), z.number(), z.boolean()])) as never[])
 ])
 
-export type ListValueContract = readonly [
-  'L',
-  ...(string | number | boolean)[]
-]
+export type ListValueContract = readonly ['L', ...(string | number | boolean)[]]
 
 /**
  * Date value contract
@@ -57,11 +54,7 @@ export type DateValueContract = readonly ['d', number]
  * Format: ["D", unixTimestamp, timezone]
  * Used for: DateTime columns
  */
-export const DateTimeValueContractSchema = z.tuple([
-  z.literal('D'),
-  z.number(),
-  z.string()
-])
+export const DateTimeValueContractSchema = z.tuple([z.literal('D'), z.number(), z.string()])
 
 export type DateTimeValueContract = readonly ['D', number, string]
 
@@ -70,11 +63,7 @@ export type DateTimeValueContract = readonly ['D', number, string]
  * Format: ["R", tableId, rowId]
  * Used for: Ref columns
  */
-export const ReferenceValueContractSchema = z.tuple([
-  z.literal('R'),
-  z.string(),
-  z.number()
-])
+export const ReferenceValueContractSchema = z.tuple([z.literal('R'), z.string(), z.number()])
 
 export type ReferenceValueContract = readonly ['R', string, number]
 
@@ -96,10 +85,7 @@ export type ReferenceListValueContract = readonly ['r', string, number[]]
  * Format: ["O", {key: value, ...}]
  * Used for: Complex object storage
  */
-export const DictValueContractSchema = z.tuple([
-  z.literal('O'),
-  z.record(z.unknown())
-])
+export const DictValueContractSchema = z.tuple([z.literal('O'), z.record(z.unknown())])
 
 export type DictValueContract = readonly ['O', Record<string, unknown>]
 
@@ -108,11 +94,9 @@ export type DictValueContract = readonly ['O', Record<string, unknown>]
  * Format: ["E", errorName, errorMessage, ...]
  * Used for: Formula errors
  */
-export const ExceptionValueContractSchema = z.tuple([
-  z.literal('E'),
-  z.string(),
-  z.string()
-]).rest(z.unknown())
+export const ExceptionValueContractSchema = z
+  .tuple([z.literal('E'), z.string(), z.string()])
+  .rest(z.unknown())
 
 export type ExceptionValueContract = readonly ['E', string, string, ...unknown[]]
 
@@ -170,10 +154,7 @@ export function isListValue(value: unknown): value is ListValueContract {
  */
 export function isDateValue(value: unknown): value is DateValueContract {
   return (
-    Array.isArray(value) &&
-    value.length === 2 &&
-    value[0] === 'd' &&
-    typeof value[1] === 'number'
+    Array.isArray(value) && value.length === 2 && value[0] === 'd' && typeof value[1] === 'number'
   )
 }
 

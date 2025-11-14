@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { isValidDocId, getDocIdError } from '../../../src/utils/identifier-validation.js'
+import { describe, expect, it } from 'vitest'
+import { getDocIdError, isValidDocId } from '../../../src/utils/identifier-validation.js'
 
 describe('DocId Validation', () => {
   describe('isValidDocId', () => {

@@ -23,21 +23,18 @@ export type MCPTextContent = z.infer<typeof MCPTextContentSchema>
  * MCP tool response schema (complete)
  * Validates the full response structure from MCP tools
  */
-export const MCPToolResponseContractSchema = z.object({
-  content: z
-    .array(MCPTextContentSchema)
-    .min(1)
-    .describe('Content array with at least one text item'),
+export const MCPToolResponseContractSchema = z
+  .object({
+    content: z
+      .array(MCPTextContentSchema)
+      .min(1)
+      .describe('Content array with at least one text item'),
 
-  structuredContent: z
-    .unknown()
-    .describe('Machine-readable structured data (JSON)'),
+    structuredContent: z.unknown().describe('Machine-readable structured data (JSON)'),
 
-  isError: z
-    .boolean()
-    .optional()
-    .describe('Error flag (true for error responses)')
-}).strict()
+    isError: z.boolean().optional().describe('Error flag (true for error responses)')
+  })
+  .strict()
 
 export type MCPToolResponseContract = z.infer<typeof MCPToolResponseContractSchema>
 
@@ -72,14 +69,16 @@ export type MCPErrorResponseContract = z.infer<typeof MCPErrorResponseContractSc
  * MCP paginated response schema
  * For responses with pagination metadata
  */
-export const MCPPaginatedResponseSchema = z.object({
-  items: z.array(z.unknown()).describe('Data items'),
-  total: z.number().int().nonnegative().optional().describe('Total count'),
-  offset: z.number().int().nonnegative().optional().describe('Current offset'),
-  limit: z.number().int().positive().optional().describe('Items per page'),
-  has_more: z.boolean().optional().describe('More items available'),
-  next_offset: z.number().int().nonnegative().optional().describe('Next page offset')
-}).passthrough()
+export const MCPPaginatedResponseSchema = z
+  .object({
+    items: z.array(z.unknown()).describe('Data items'),
+    total: z.number().int().nonnegative().optional().describe('Total count'),
+    offset: z.number().int().nonnegative().optional().describe('Current offset'),
+    limit: z.number().int().positive().optional().describe('Items per page'),
+    has_more: z.boolean().optional().describe('More items available'),
+    next_offset: z.number().int().nonnegative().optional().describe('Next page offset')
+  })
+  .passthrough()
 
 export type MCPPaginatedResponse = z.infer<typeof MCPPaginatedResponseSchema>
 
@@ -87,14 +86,16 @@ export type MCPPaginatedResponse = z.infer<typeof MCPPaginatedResponseSchema>
  * MCP truncated response schema
  * For responses that exceeded character limit
  */
-export const MCPTruncatedResponseSchema = z.object({
-  items: z.array(z.unknown()).describe('Truncated data items'),
-  truncated: z.literal(true).describe('Truncation flag'),
-  items_returned: z.number().int().positive().describe('Items actually returned'),
-  items_requested: z.number().int().positive().describe('Items originally requested'),
-  truncation_reason: z.string().min(1).describe('Why truncation occurred'),
-  suggestions: z.array(z.string()).optional().describe('Actionable suggestions')
-}).passthrough()
+export const MCPTruncatedResponseSchema = z
+  .object({
+    items: z.array(z.unknown()).describe('Truncated data items'),
+    truncated: z.literal(true).describe('Truncation flag'),
+    items_returned: z.number().int().positive().describe('Items actually returned'),
+    items_requested: z.number().int().positive().describe('Items originally requested'),
+    truncation_reason: z.string().min(1).describe('Why truncation occurred'),
+    suggestions: z.array(z.string()).optional().describe('Actionable suggestions')
+  })
+  .passthrough()
 
 export type MCPTruncatedResponse = z.infer<typeof MCPTruncatedResponseSchema>
 
@@ -172,9 +173,7 @@ export function hasValidJSONContent(response: MCPToolResponseContract): boolean 
  * Helper: Extract error message from response
  * Returns error message if response is an error, undefined otherwise
  */
-export function extractErrorMessage(
-  response: MCPToolResponseContract
-): string | undefined {
+export function extractErrorMessage(response: MCPToolResponseContract): string | undefined {
   if (!response.isError) return undefined
 
   if (

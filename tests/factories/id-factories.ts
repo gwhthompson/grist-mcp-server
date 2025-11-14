@@ -5,7 +5,7 @@
  * Based on test-architecture-review.md Factory Pattern recommendations
  */
 
-import type { DocId, TableId, ColId, WorkspaceId } from '../../src/types/advanced.js'
+import type { ColId, DocId, TableId, WorkspaceId } from '../../src/types/advanced.js'
 
 /**
  * Configuration for ID generation
@@ -32,8 +32,9 @@ export function createDocId(config: IdFactoryConfig = {}): DocId {
   const base58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz'
 
   // Generate 22-character Base58 string
-  const id = Array.from({ length: 22 }, () =>
-    base58[Math.floor(Math.random() * base58.length)]
+  const id = Array.from(
+    { length: 22 },
+    () => base58[Math.floor(Math.random() * base58.length)]
   ).join('')
 
   return id as DocId

@@ -5,17 +5,21 @@
  * These tests catch upstream breaking changes early by validating response structure.
  */
 
-import { describe, it, expect, beforeAll } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { GristClient } from '../../src/services/grist-client.js'
-import {
-  WorkspaceDetailedContractSchema,
-  WorkspaceListContractSchema,
-  TableListContractSchema,
-  ColumnListContractSchema,
-  RecordsListContractSchema
-} from './schemas/workspace-contract.js'
-import { createTestClient, createFullTestContext, cleanupTestContext } from '../helpers/grist-api.js'
 import { ensureGristReady } from '../helpers/docker.js'
+import {
+  cleanupTestContext,
+  createFullTestContext,
+  createTestClient
+} from '../helpers/grist-api.js'
+import {
+  ColumnListContractSchema,
+  RecordsListContractSchema,
+  TableListContractSchema,
+  WorkspaceDetailedContractSchema,
+  WorkspaceListContractSchema
+} from './schemas/workspace-contract.js'
 
 describe('Grist API Contract Tests', () => {
   const client = createTestClient()
@@ -94,9 +98,7 @@ describe('Grist API Contract Tests', () => {
 
   describe('Column API Contract', () => {
     it('should validate columns list response structure', async () => {
-      const columns = await client.get(
-        `/docs/${context.docId}/tables/${context.tableId}/columns`
-      )
+      const columns = await client.get(`/docs/${context.docId}/tables/${context.tableId}/columns`)
 
       const result = ColumnListContractSchema.safeParse(columns)
 
@@ -104,9 +106,7 @@ describe('Grist API Contract Tests', () => {
     })
 
     it('should validate column metadata fields', async () => {
-      const response = await client.get(
-        `/docs/${context.docId}/tables/${context.tableId}/columns`
-      )
+      const response = await client.get(`/docs/${context.docId}/tables/${context.tableId}/columns`)
 
       expect(response).toHaveProperty('columns')
       expect(Array.isArray(response.columns)).toBe(true)
@@ -130,9 +130,7 @@ describe('Grist API Contract Tests', () => {
 
   describe('Records API Contract', () => {
     it('should validate records list response structure', async () => {
-      const records = await client.get(
-        `/docs/${context.docId}/tables/${context.tableId}/records`
-      )
+      const records = await client.get(`/docs/${context.docId}/tables/${context.tableId}/records`)
 
       const result = RecordsListContractSchema.safeParse(records)
 
@@ -140,9 +138,7 @@ describe('Grist API Contract Tests', () => {
     })
 
     it('should validate record structure', async () => {
-      const response = await client.get(
-        `/docs/${context.docId}/tables/${context.tableId}/records`
-      )
+      const response = await client.get(`/docs/${context.docId}/tables/${context.tableId}/records`)
 
       expect(response).toHaveProperty('records')
       expect(Array.isArray(response.records)).toBe(true)

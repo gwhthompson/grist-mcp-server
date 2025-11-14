@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { isValidTableId, getTableIdError } from '../../../src/utils/identifier-validation.js'
+import { describe, expect, it } from 'vitest'
+import { getTableIdError, isValidTableId } from '../../../src/utils/identifier-validation.js'
 
 describe('TableId Validation', () => {
   describe('isValidTableId', () => {
@@ -51,9 +51,9 @@ describe('TableId Validation', () => {
       it('should reject Python keywords with proper casing', () => {
         // Python keywords that can start with uppercase (for table IDs)
         const pythonKeywords = [
-          'True',  // Boolean literal
+          'True', // Boolean literal
           'False', // Boolean literal
-          'None'   // None literal
+          'None' // None literal
         ]
 
         for (const keyword of pythonKeywords) {

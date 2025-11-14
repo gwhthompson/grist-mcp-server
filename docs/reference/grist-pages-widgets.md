@@ -217,12 +217,19 @@ Create a page with two widgets arranged horizontally:
 ]
 ```
 
-**Notes:**
-- In multi-action requests, use zero-based indexing (0, 1, 2...) to reference newly created rows
-- First `CreateViewSection` creates widget with ID `0` (first action's return)
-- Second `CreateViewSection` creates widget with ID `1` (second action's return)
-- `UpdateRecord` uses `0` to reference the newly created view from the first action
-- `layoutSpec` must be a stringified JSON object
+**How this works:**
+- First `CreateViewSection` with `viewRef=0` creates a new page and adds a table widget
+  - Returns: `{viewRef: X, sectionRef: 0, ...}` where X is the new view ID
+- Second `CreateViewSection` with `viewRef=0` adds a card widget to the SAME page
+  - In multi-action requests, `viewRef=0` references the view created by the first action (zero-based indexing)
+  - Returns: `{viewRef: X, sectionRef: 1, ...}` - same view, different section
+- `UpdateRecord` uses `0` to reference the newly created view and set its layout
+  - The `layoutSpec` arranges both widgets (sections 0 and 1) horizontally with a 50/50 split
+
+**Key points:**
+- In multi-action requests, `viewRef=0` in subsequent `CreateViewSection` actions references the view created by the first action, not creating a new page
+- Section IDs (widgets) are indexed as 0, 1, 2... based on creation order within the batch
+- The `layoutSpec` must be a stringified JSON object referencing the section IDs
 
 ---
 

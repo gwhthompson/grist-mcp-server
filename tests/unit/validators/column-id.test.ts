@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest'
-import { isValidColId, getColIdError } from '../../../src/utils/identifier-validation.js'
+import { describe, expect, it } from 'vitest'
+import { getColIdError, isValidColId } from '../../../src/utils/identifier-validation.js'
 
 describe('ColumnId Validation', () => {
   describe('isValidColId', () => {
@@ -56,12 +56,39 @@ describe('ColumnId Validation', () => {
     describe('invalid column IDs - Python keywords', () => {
       it('should reject lowercase Python keywords', () => {
         const pythonKeywords = [
-          'for', 'class', 'if', 'def', 'return',
-          'import', 'from', 'while', 'with', 'try',
-          'except', 'finally', 'raise', 'assert', 'break',
-          'continue', 'pass', 'lambda', 'yield', 'global',
-          'nonlocal', 'del', 'True', 'False', 'None',
-          'and', 'or', 'not', 'in', 'is', 'as', 'elif', 'else'
+          'for',
+          'class',
+          'if',
+          'def',
+          'return',
+          'import',
+          'from',
+          'while',
+          'with',
+          'try',
+          'except',
+          'finally',
+          'raise',
+          'assert',
+          'break',
+          'continue',
+          'pass',
+          'lambda',
+          'yield',
+          'global',
+          'nonlocal',
+          'del',
+          'True',
+          'False',
+          'None',
+          'and',
+          'or',
+          'not',
+          'in',
+          'is',
+          'as',
+          'elif',
+          'else'
         ]
 
         for (const keyword of pythonKeywords) {

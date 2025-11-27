@@ -11,7 +11,7 @@ Model Context Protocol server with 22 tools for the Grist API.
 ### Claude Code (recommended)
 
 ```bash
-claude mcp add grist-mcp-server -e GRIST_API_KEY=your_api_key -e GRIST_BASE_URL=https://docs.getgrist.com
+claude mcp add grist -- npx -y grist-mcp-server -e GRIST_API_KEY=your_api_key -e GRIST_BASE_URL=https://docs.getgrist.com
 ```
 
 ### Claude Desktop (MCPB bundle)

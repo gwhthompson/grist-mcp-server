@@ -1,6 +1,6 @@
 # Grist MCP Server
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/gristlabs/grist-mcp-server)
+[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/gwhthompson/grist-mcp-server)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-1.0-purple.svg)](https://modelcontextprotocol.io)
 
@@ -16,7 +16,7 @@ claude mcp add grist-mcp-server -e GRIST_API_KEY=your_api_key -e GRIST_BASE_URL=
 
 ### Claude Desktop (MCPB bundle)
 
-1. Download `grist-mcp-server.mcpb` from [Releases](https://github.com/gristlabs/grist-mcp-server/releases)
+1. Download `grist-mcp-server.mcpb` from [Releases](https://github.com/gwhthompson/grist-mcp-server/releases)
 2. In Claude Desktop: Settings → Developer → MCP Servers → Install from MCPB
 3. Configure your Grist API key and base URL
 4. Restart Claude Desktop
@@ -43,7 +43,7 @@ Add to your `.mcp.json` file:
 ### Install from source
 
 ```bash
-git clone https://github.com/gristlabs/grist-mcp-server.git
+git clone https://github.com/gwhthompson/grist-mcp-server.git
 cd grist-mcp-server
 npm install && npm run build
 ```
@@ -149,4 +149,4 @@ See [CHANGELOG.md](CHANGELOG.md) for version history.
 - [Grist Documentation](https://support.getgrist.com)
 - [Grist Community](https://community.getgrist.com)
 - [MCP Protocol](https://modelcontextprotocol.io)
-- [Report Issues](https://github.com/gristlabs/grist-core/issues)
+- [Report Issues](https://github.com/gwhthompson/grist-mcp-server/issues)

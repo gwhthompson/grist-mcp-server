@@ -1,171 +1,387 @@
-/**
- * Action Builder - Helper functions for constructing Grist UserAction arrays
- *
- * Provides type-safe construction of Grist actions for the /apply endpoint.
- * Abstracts the internal UserAction format for cleaner tool implementations.
- */
+import { ValidationError } from '../errors/ValidationError.js'
+import type { ColId, RowId, TableId } from '../types/advanced.js'
+import type {
+  AddColumnAction,
+  AddHiddenColumnAction,
+  AddTableAction,
+  BulkAddRecordAction,
+  BulkColValues,
+  BulkRemoveRecordAction,
+  BulkUpdateRecordAction,
+  CellValue,
+  ColumnDefinition,
+  ColumnInfo,
+  ModifyColumnAction,
+  RemoveColumnAction,
+  RemoveTableAction,
+  RenameColumnAction,
+  RenameTableAction,
+  SetDisplayFormulaAction,
+  UpdateMetadataAction
+} from '../types.js'
+import { isReferenceType } from './column-resolver.js'
+import { validateAndSerializeWidgetOptions } from './widget-options-validator.js'
 
-import type { BulkColValues, ColumnDefinition, ColumnInfo, UserAction } from '../types.js'
+function isRecordLike(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
-/**
- * Build BulkAddRecord action
- * Converts array of record objects to Grist's columnar format
- *
- * @param tableId - Table identifier
- * @param records - Array of records (row-oriented format)
- * @returns UserAction for bulk adding records
- */
+export type GristRecordData = Record<string, CellValue>
+
+/** Builds a BulkAddRecord action for inserting multiple records. */
 export function buildBulkAddRecordAction(
-  tableId: string,
-  records: Record<string, any>[]
-): UserAction {
-  // Grist assigns row IDs automatically
-  const rowIds = records.map(() => null) as any as number[]
-
-  // Convert row-oriented to column-oriented format
-  const colValues: BulkColValues = {}
+  tableId: TableId,
+  records: GristRecordData[]
+): BulkAddRecordAction {
+  const rowIds = records.map(() => null)
+  const columns: BulkColValues = {}
 
   if (records.length > 0) {
-    // Get all columns from first record
-    const columns = Object.keys(records[0])
-
-    // Build columnar structure
-    columns.forEach((colId) => {
-      colValues[colId] = records.map((r) => r[colId] ?? null)
+    const colNames = Object.keys(records[0])
+    colNames.forEach((colId) => {
+      columns[colId] = records.map((r) => r[colId] ?? null)
     })
   }
 
-  return ['BulkAddRecord', tableId, rowIds, colValues]
+  return {
+    action: 'BulkAddRecord',
+    tableId,
+    rowIds,
+    columns
+  }
 }
 
-/**
- * Build BulkUpdateRecord action
- *
- * @param tableId - Table identifier
- * @param rowIds - Array of row IDs to update
- * @param updates - Object with column values to update
- * @returns UserAction for bulk updating records
- */
+/** Builds a BulkUpdateRecord action for updating multiple records. */
 export function buildBulkUpdateRecordAction(
-  tableId: string,
-  rowIds: number[],
-  updates: Record<string, any>
-): UserAction {
-  // Convert updates to column format (same value for all rows)
-  const colValues: BulkColValues = {}
+  tableId: TableId,
+  rowIds: RowId[],
+  updates: Partial<GristRecordData>
+): BulkUpdateRecordAction {
+  const columns: BulkColValues = {}
 
   Object.keys(updates).forEach((colId) => {
-    // Repeat the same value for each row
-    colValues[colId] = rowIds.map(() => updates[colId])
+    const value = updates[colId]
+    columns[colId] = rowIds.map(() => value ?? null)
   })
 
-  return ['BulkUpdateRecord', tableId, rowIds, colValues]
+  return {
+    action: 'BulkUpdateRecord',
+    tableId,
+    rowIds,
+    columns
+  }
 }
 
-/**
- * Build BulkRemoveRecord action
- *
- * @param tableId - Table identifier
- * @param rowIds - Array of row IDs to remove
- * @returns UserAction for bulk removing records
- */
-export function buildBulkRemoveRecordAction(tableId: string, rowIds: number[]): UserAction {
-  return ['BulkRemoveRecord', tableId, rowIds]
+/** Builds a BulkRemoveRecord action for deleting multiple records. */
+export function buildBulkRemoveRecordAction(
+  tableId: TableId,
+  rowIds: RowId[]
+): BulkRemoveRecordAction {
+  return {
+    action: 'BulkRemoveRecord',
+    tableId,
+    rowIds
+  }
 }
 
-/**
- * Build AddColumn action
- *
- * @param tableId - Table identifier
- * @param colId - Column identifier
- * @param colInfo - Column information (type, label, formula, etc.)
- * @returns UserAction for adding a column
- */
+/** Validates that visibleCol is not incorrectly nested inside widgetOptions */
+function extractAndValidateVisibleCol(
+  colInfo: Record<string, unknown> & {
+    widgetOptions?: string | Record<string, unknown>
+    visibleCol?: string | number
+  }
+): {
+  visibleCol?: string | number
+  cleanedWidgetOptions?: string | Record<string, unknown>
+} {
+  let optionsObj: Record<string, unknown> | undefined
+  if (typeof colInfo.widgetOptions === 'string') {
+    try {
+      optionsObj = JSON.parse(colInfo.widgetOptions)
+    } catch {
+      return { cleanedWidgetOptions: colInfo.widgetOptions }
+    }
+  } else if (
+    typeof colInfo.widgetOptions === 'object' &&
+    colInfo.widgetOptions !== null &&
+    !Array.isArray(colInfo.widgetOptions)
+  ) {
+    optionsObj = colInfo.widgetOptions
+  }
+
+  if (optionsObj && 'visibleCol' in optionsObj) {
+    throw new ValidationError(
+      'widgetOptions',
+      optionsObj,
+      'visibleCol must be set at the operation level, not inside widgetOptions. ' +
+        'Move visibleCol to the top-level column definition. ' +
+        'Example: {action: "add", colId: "Manager", type: "Ref:People", visibleCol: "Email", widgetOptions: {...}}',
+      { field: 'widgetOptions.visibleCol' }
+    )
+  }
+
+  return {
+    visibleCol: colInfo.visibleCol,
+    cleanedWidgetOptions: colInfo.widgetOptions
+  }
+}
+
+/** Builds an AddColumn action for adding a new column. */
 export function buildAddColumnAction(
-  tableId: string,
-  colId: string,
+  tableId: TableId,
+  colId: ColId,
   colInfo: ColumnInfo
-): UserAction {
-  return ['AddColumn', tableId, colId, colInfo]
+): AddColumnAction {
+  if (!isRecordLike(colInfo)) {
+    throw new TypeError(`Column info must be an object for column "${colId}"`)
+  }
+
+  const { cleanedWidgetOptions } = extractAndValidateVisibleCol(colInfo)
+  const colInfoToProcess = { ...colInfo, widgetOptions: cleanedWidgetOptions }
+
+  if (colInfoToProcess.visibleCol !== undefined) {
+    if (!colInfoToProcess.type) {
+      throw new Error(
+        `Column "${colId}" has visibleCol but no type specified. ` +
+          `When setting visibleCol, you must provide the column type (e.g., "Ref:People" or "RefList:Tags").`
+      )
+    }
+
+    if (!isReferenceType(colInfoToProcess.type)) {
+      throw new Error(
+        `Column "${colId}" has visibleCol but type "${colInfoToProcess.type}" is not a Ref or RefList type. ` +
+          `visibleCol can only be used with Ref:TableName or RefList:TableName types.`
+      )
+    }
+
+    if (typeof colInfoToProcess.visibleCol !== 'number') {
+      throw new Error(
+        `visibleCol for column "${colId}" must be a numeric column reference (colRef). ` +
+          `Use resolveVisibleCol() to convert string column names to numeric IDs. ` +
+          `Received: ${typeof colInfoToProcess.visibleCol}`
+      )
+    }
+  }
+
+  const columnType = colInfoToProcess.type || 'Text'
+  const serializedWidgetOptions = colInfoToProcess.widgetOptions
+    ? validateAndSerializeWidgetOptions(colInfoToProcess.widgetOptions, columnType)
+    : undefined
+
+  const processedColInfo = {
+    ...colInfoToProcess,
+    widgetOptions: serializedWidgetOptions
+  }
+
+  return {
+    action: 'AddColumn',
+    tableId,
+    colId,
+    colInfo: processedColInfo
+  }
 }
 
-/**
- * Build ModifyColumn action
- *
- * @param tableId - Table identifier
- * @param colId - Column identifier
- * @param updates - Partial column info with fields to update
- * @returns UserAction for modifying a column
- */
-export function buildModifyColumnAction(
-  tableId: string,
-  colId: string,
+function validateVisibleColForModify(colId: ColId, updates: Partial<ColumnInfo>): void {
+  if (updates.visibleCol === undefined) {
+    return
+  }
+
+  if (updates.type && !isReferenceType(updates.type)) {
+    throw new Error(
+      `Column "${colId}" is being updated with visibleCol but type "${updates.type}" is not a Ref or RefList type. ` +
+        `visibleCol can only be used with Ref:TableName or RefList:TableName types.`
+    )
+  }
+
+  if (typeof updates.visibleCol !== 'number') {
+    throw new Error(
+      `visibleCol for column "${colId}" must be a numeric column reference (colRef). ` +
+        `Use resolveVisibleCol() to convert string column names to numeric IDs. ` +
+        `Received: ${typeof updates.visibleCol}`
+    )
+  }
+}
+
+function validateAndSerializeWidgetOptionsForModify(
+  colId: ColId,
   updates: Partial<ColumnInfo>
-): UserAction {
-  return ['ModifyColumn', tableId, colId, updates]
+): string | undefined {
+  if (updates.widgetOptions === undefined) {
+    return undefined
+  }
+
+  if (!updates.type) {
+    throw new ValidationError(
+      'widgetOptions',
+      updates.widgetOptions,
+      'Column type must be provided when updating widgetOptions. ' +
+        'The type is required to validate widgetOptions against the correct schema. ' +
+        'Either include the type in your modify operation, or the tool layer will fetch it automatically.',
+      { operation: 'ModifyColumn', columnId: colId as string }
+    )
+  }
+
+  if (typeof updates.widgetOptions === 'string') {
+    try {
+      JSON.parse(updates.widgetOptions)
+    } catch (error) {
+      throw new ValidationError(
+        'widgetOptions',
+        updates.widgetOptions,
+        `Invalid JSON string: ${error instanceof Error ? error.message : 'Unable to parse'}`,
+        { operation: 'ModifyColumn', columnId: colId as string }
+      )
+    }
+  }
+
+  return validateAndSerializeWidgetOptions(updates.widgetOptions, updates.type)
 }
 
-/**
- * Build RemoveColumn action
- *
- * @param tableId - Table identifier
- * @param colId - Column identifier to remove
- * @returns UserAction for removing a column
- */
-export function buildRemoveColumnAction(tableId: string, colId: string): UserAction {
-  return ['RemoveColumn', tableId, colId]
+/** Builds a ModifyColumn action for updating an existing column. */
+export function buildModifyColumnAction(
+  tableId: TableId,
+  colId: ColId,
+  updates: Partial<ColumnInfo>
+): ModifyColumnAction {
+  if (!isRecordLike(updates)) {
+    throw new TypeError(`Column updates must be an object for column "${colId}"`)
+  }
+
+  const { cleanedWidgetOptions } = extractAndValidateVisibleCol(updates)
+  const updatesToProcess = { ...updates, widgetOptions: cleanedWidgetOptions }
+
+  validateVisibleColForModify(colId, updatesToProcess)
+  const serializedWidgetOptions = validateAndSerializeWidgetOptionsForModify(
+    colId,
+    updatesToProcess
+  )
+
+  const processedUpdates = {
+    ...updatesToProcess,
+    ...(updatesToProcess.widgetOptions !== undefined && { widgetOptions: serializedWidgetOptions })
+  }
+
+  return {
+    action: 'ModifyColumn',
+    tableId,
+    colId,
+    updates: processedUpdates
+  }
 }
 
-/**
- * Build RenameColumn action
- *
- * @param tableId - Table identifier
- * @param oldColId - Current column identifier
- * @param newColId - New column identifier
- * @returns UserAction for renaming a column
- */
+/** Builds a RemoveColumn action for deleting a column. */
+export function buildRemoveColumnAction(tableId: TableId, colId: ColId): RemoveColumnAction {
+  return {
+    action: 'RemoveColumn',
+    tableId,
+    colId
+  }
+}
+
+/** Builds a RenameColumn action for renaming a column. */
 export function buildRenameColumnAction(
-  tableId: string,
-  oldColId: string,
-  newColId: string
-): UserAction {
-  return ['RenameColumn', tableId, oldColId, newColId]
+  tableId: TableId,
+  oldColId: ColId,
+  newColId: ColId
+): RenameColumnAction {
+  return {
+    action: 'RenameColumn',
+    tableId,
+    oldColId,
+    newColId
+  }
 }
 
-/**
- * Build AddTable action
- *
- * @param tableName - Name for the new table
- * @param columns - Array of column definitions
- * @returns UserAction for creating a table
- */
-export function buildAddTableAction(tableName: string, columns: ColumnDefinition[]): UserAction {
-  // Transform columns to Grist API format (uses 'id' not 'colId')
-  const gristColumns = columns.map((col) => {
-    const { colId, ...rest } = col
-    return { id: colId, ...rest }
+/** Builds an AddTable action for creating a new table. */
+export function buildAddTableAction(tableName: TableId, columns: ColumnDefinition[]): AddTableAction {
+  const processedColumns = columns.map((col) => {
+    const { colId, widgetOptions, type, ...rest } = col
+
+    if (!isRecordLike(col)) {
+      throw new TypeError(`Column definition must be an object for column "${colId}"`)
+    }
+
+    const { cleanedWidgetOptions } = extractAndValidateVisibleCol(col)
+    const columnType = type || 'Text'
+    const serializedWidgetOptions = cleanedWidgetOptions
+      ? validateAndSerializeWidgetOptions(cleanedWidgetOptions, columnType)
+      : undefined
+
+    return {
+      id: colId, // Grist API expects 'id' not 'colId'
+      ...rest,
+      type: columnType,
+      ...(serializedWidgetOptions !== undefined && { widgetOptions: serializedWidgetOptions })
+    }
   })
 
-  return ['AddTable', tableName, gristColumns as any]
+  return {
+    action: 'AddTable',
+    tableName,
+    columns: processedColumns as unknown as ColumnDefinition[]
+  }
 }
 
-/**
- * Build RenameTable action
- *
- * @param tableId - Current table identifier
- * @param newTableId - New table identifier
- * @returns UserAction for renaming a table
- */
-export function buildRenameTableAction(tableId: string, newTableId: string): UserAction {
-  return ['RenameTable', tableId, newTableId]
+/** Builds a RenameTable action for renaming a table. */
+export function buildRenameTableAction(tableId: TableId, newTableId: TableId): RenameTableAction {
+  return {
+    action: 'RenameTable',
+    tableId,
+    newTableId
+  }
 }
 
-/**
- * Build RemoveTable action
- *
- * @param tableId - Table identifier to remove
- * @returns UserAction for removing a table
- */
-export function buildRemoveTableAction(tableId: string): UserAction {
-  return ['RemoveTable', tableId]
+/** Builds a RemoveTable action for deleting a table. */
+export function buildRemoveTableAction(tableId: TableId): RemoveTableAction {
+  return {
+    action: 'RemoveTable',
+    tableId
+  }
+}
+
+/** Builds an AddHiddenColumn action for creating a hidden formula column. */
+export function buildAddHiddenColumnAction(
+  tableId: TableId,
+  colId: string,
+  formula: string
+): AddHiddenColumnAction {
+  return {
+    action: 'AddHiddenColumn',
+    tableId,
+    colId,
+    colInfo: {
+      type: 'Any',
+      isFormula: true,
+      formula
+    }
+  }
+}
+
+/** Builds an UpdateMetadata action for updating Grist internal metadata tables. */
+export function buildUpdateColumnMetadataAction(
+  colRef: number,
+  updates: Record<string, unknown>
+): UpdateMetadataAction {
+  return {
+    action: 'UpdateMetadata',
+    metaTableId: '_grist_Tables_column',
+    rowId: colRef,
+    updates
+  }
+}
+
+/** Builds a SetDisplayFormula action for setting a display formula on a column. */
+export function buildSetDisplayFormulaAction(
+  tableId: TableId,
+  colId: string | null,
+  fieldRef: number | null,
+  formula: string
+): SetDisplayFormulaAction {
+  return {
+    action: 'SetDisplayFormula',
+    tableId,
+    colId,
+    fieldRef,
+    formula
+  }
 }

@@ -1,0 +1,657 @@
+# Grist REST API: Pages and Widgets Reference
+
+**Schema Version:** 44
+
+This document provides practical guidance for working with Grist pages (views) and widgets (view sections) via the REST API. For complete table schemas, see `grist-database-schema.md`. For action type definitions, see `grist-apply-actions.d.ts`.
+
+---
+
+## Overview
+
+Grist's page and widget system consists of:
+
+- **Pages** (`_grist_Pages`, `_grist_Views`) - Top-level navigation and layout containers
+- **Widgets** (`_grist_Views_section`) - Individual data visualizations (tables, cards, charts, forms)
+- **Widget Linking** - Filter widgets based on selections in other widgets
+- **Sorting** (`sortColRefs`) - Order records within widgets
+- **Filtering** (`_grist_Filters`) - Filter records by column values
+
+---
+
+## Metadata Tables Quick Reference
+
+### `_grist_Views`
+Represents pages/views.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | Int | Page identifier |
+| `name` | Text | Page name |
+| `type` | Text | View type (may be deprecated/unused) |
+| `layoutSpec` | Text | JSON layout structure |
+
+### `_grist_Views_section`
+Represents widgets within pages.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | Int | Widget identifier |
+| `tableRef` | Ref:_grist_Tables | Source table |
+| `parentId` | Ref:_grist_Views | Parent page |
+| `parentKey` | Text | Widget type |
+| `title` | Text | Widget title |
+| `description` | Text | Widget description |
+| `defaultWidth` | Int | Default width (100) |
+| `borderWidth` | Int | Border width (1) |
+| `theme` | Text | Theme settings (JSON) |
+| `options` | Text | Widget options (JSON) |
+| `chartType` | Text | Chart type |
+| `layoutSpec` | Text | Widget layout (JSON) |
+| `sortColRefs` | Text | Sort specification (JSON array) |
+| `linkSrcSectionRef` | Ref:_grist_Views_section | Link source widget |
+| `linkSrcColRef` | Ref:_grist_Tables_column | Link source column |
+| `linkTargetColRef` | Ref:_grist_Tables_column | Link target column |
+| `rules` | RefList:_grist_Tables_column | Conditional formatting rules |
+| `shareOptions` | Text | Share settings (JSON) |
+
+### `_grist_Pages`
+Page navigation structure.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | Int | Page entry identifier |
+| `viewRef` | Ref:_grist_Views | View reference |
+| `indentation` | Int | Tree indentation level |
+| `pagePos` | PositionNumber | Position in list |
+| `shareRef` | Ref:_grist_Shares | Share reference |
+| `options` | Text | Page options (JSON) |
+
+### `_grist_Filters`
+Widget filters.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | Int | Filter identifier |
+| `viewSectionRef` | Ref:_grist_Views_section | Widget reference |
+| `colRef` | Ref:_grist_Tables_column | Column reference |
+| `filter` | Text | Filter specification (JSON) |
+| `pinned` | Bool | Show in filter bar |
+
+---
+
+## Creating Widgets
+
+### CreateViewSection Action
+
+Creates a new widget, optionally creating a new page and/or table at the same time.
+
+**Endpoint:**
+```http
+POST /api/docs/{docId}/apply
+Content-Type: application/json
+
+[
+  ["CreateViewSection", tableRef, viewRef, sectionType, groupbyColRefs, tableId]
+]
+```
+
+**Parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `tableRef` | number | Table ID to display, or `0` to create new table |
+| `viewRef` | number | View ID to add widget to, or `0` to create new view/page |
+| `sectionType` | string | Widget type (see Widget Types below) |
+| `groupbyColRefs` | number[] \| null | Array of column IDs for summary grouping, or `null` for regular widget |
+| `tableId` | string \| null | Name for new table (when `tableRef=0`), or `null` |
+
+**Response:**
+```json
+{
+  "tableRef": number,
+  "viewRef": number,
+  "sectionRef": number
+}
+```
+
+**Examples:**
+
+**Create page with table widget:**
+```json
+["CreateViewSection", 1, 0, "record", null, null]
+```
+- `tableRef=1` - Display existing table with ID 1
+- `viewRef=0` - Create new page
+- `sectionType="record"` - Table widget
+- `groupbyColRefs=null` - Not a summary table
+- `tableId=null` - Not creating a new table
+
+**Create new table with page:**
+```json
+["CreateViewSection", 0, 0, "record", null, "Products"]
+```
+- `tableRef=0` - Create new table
+- `viewRef=0` - Create new page
+- `sectionType="record"` - Table widget
+- `groupbyColRefs=null` - Not a summary table
+- `tableId="Products"` - New table name
+
+**Add widget to existing page:**
+```json
+["CreateViewSection", 1, 5, "single", null, null]
+```
+- `tableRef=1` - Display existing table with ID 1
+- `viewRef=5` - Add to existing page with ID 5
+- `sectionType="single"` - Card widget
+- `groupbyColRefs=null` - Not a summary table
+- `tableId=null` - Not creating a new table
+
+**Create summary widget:**
+```json
+["CreateViewSection", 1, 5, "record", [2, 3], null]
+```
+- `tableRef=1` - Source table ID 1
+- `viewRef=5` - Add to existing page with ID 5
+- `sectionType="record"` - Table widget
+- `groupbyColRefs=[2, 3]` - Group by columns 2 and 3
+- `tableId=null` - Not creating a new table
+
+---
+
+## Layout Structure
+
+The `layoutSpec` field in `_grist_Views` uses a JSON tree structure to define how widgets are arranged on a page.
+
+### Single Widget
+
+```json
+{"type": "leaf", "leaf": 1}
+```
+- `type: "leaf"` - Single widget (leaf node)
+- `leaf: 1` - Widget section ID
+
+### Horizontal Split
+
+```json
+{
+  "type": "hsplit",
+  "children": [
+    {"type": "leaf", "leaf": 1},
+    {"type": "leaf", "leaf": 2}
+  ],
+  "splitRatio": 0.5
+}
+```
+- `type: "hsplit"` - Horizontal split (side by side)
+- `children` - Array of child layouts
+- `splitRatio: 0.5` - Left widget takes 50% of width
+
+### Vertical Split
+
+```json
+{
+  "type": "vsplit",
+  "children": [
+    {"type": "leaf", "leaf": 1},
+    {"type": "leaf", "leaf": 2}
+  ],
+  "splitRatio": 0.3
+}
+```
+- `type: "vsplit"` - Vertical split (stacked)
+- `children` - Array of child layouts
+- `splitRatio: 0.3` - Top widget takes 30% of height
+
+### Multi-Widget Layout (Current Limitation)
+
+**⚠️ Note:** Result indexing (using `0`, `1` to reference previous action results) is not supported in current Grist versions. Make separate requests instead.
+
+**Working approach:**
+
+```json
+// Request 1: Create widgets
+POST /api/docs/{docId}/apply
+[
+  ["CreateViewSection", 1, 0, "record", null, null],
+  ["CreateViewSection", 1, 0, "single", null, null]
+]
+// Returns: viewRef (e.g., 5), sectionRefs (e.g., 10, 11)
+
+// Request 2: Configure layout and name (use actual IDs from request 1)
+POST /api/docs/{docId}/apply
+[
+  ["UpdateRecord", "_grist_Views", 5, {
+    "name": "Dashboard",
+    "layoutSpec": "{\"type\":\"hsplit\",\"children\":[{\"type\":\"leaf\",\"leaf\":10},{\"type\":\"leaf\",\"leaf\":11}],\"splitRatio\":0.5}"
+  }]
+]
+```
+
+**Key points:**
+- Both CreateViewSection use `viewRef=0` to create widgets on same view
+- `layoutSpec` uses actual sectionRefs (10, 11) from first request
+- `layoutSpec` must be a stringified JSON object
+
+---
+
+## Widget Linking
+
+Configure one widget to filter based on another widget's selection. This creates master-detail relationships.
+
+### Link Configuration
+
+```json
+["UpdateRecord", "_grist_Views_section", targetWidgetId, {
+  "linkSrcSectionRef": sourceWidgetId,
+  "linkSrcColRef": sourceColumnId,
+  "linkTargetColRef": targetColumnId
+}]
+```
+
+**Field Values:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `linkSrcSectionRef` | number | Source widget ID (the "master") |
+| `linkSrcColRef` | number | Source column ID, or `0` for table-level link |
+| `linkTargetColRef` | number | Target column ID, or `0` for table-level link |
+
+**Column ID Special Values:**
+- `0` = Table-level link (entire record)
+- `>0` = Specific column ID
+
+### Table-to-Card Link
+
+Filter a card widget by the selected row in a table widget:
+
+```json
+["UpdateRecord", "_grist_Views_section", 2, {
+  "linkSrcSectionRef": 1,
+  "linkSrcColRef": 0,
+  "linkTargetColRef": 0
+}]
+```
+- When a row is selected in widget `1`, widget `2` shows only that record
+- Both `linkSrcColRef` and `linkTargetColRef` are `0` (table-level link)
+
+### Reference Column Link
+
+Filter by a reference column relationship:
+
+```json
+["UpdateRecord", "_grist_Views_section", 3, {
+  "linkSrcSectionRef": 2,
+  "linkSrcColRef": 5,
+  "linkTargetColRef": 8
+}]
+```
+- When a row is selected in widget `2`, widget `3` filters by column `8` matching column `5`'s value
+- Common pattern: Source column is a `Ref:TargetTable`, target column is the ID
+
+### Remove Link
+
+```json
+["UpdateRecord", "_grist_Views_section", 2, {
+  "linkSrcSectionRef": 0,
+  "linkSrcColRef": 0,
+  "linkTargetColRef": 0
+}]
+```
+- Set all link fields to `0` to remove widget linking
+
+---
+
+## Sorting
+
+The `sortColRefs` field in `_grist_Views_section` contains a JSON array of column references that determine sort order.
+
+### Format
+
+```json
+"[2]"           // Column 2 ascending
+"[-2]"          // Column 2 descending
+"[3, -5, 7]"    // Multiple columns: 3 asc, 5 desc, 7 asc
+```
+
+**Rules:**
+- Positive number = ascending order
+- Negative number = descending order
+- Array order determines sort priority (first column is primary sort)
+
+### Sort with Flags
+
+```json
+"[\"3:emptyLast\", \"-5:naturalSort\", \"7:orderByChoice\"]"
+```
+
+**Available Flags:**
+- `emptyLast` - Place empty values at the end (instead of beginning)
+- `naturalSort` - Use natural/human sorting (e.g., "2" before "10")
+- `orderByChoice` - Sort by choice order (for Choice/ChoiceList columns)
+
+### Set Sort Order
+
+```json
+["UpdateRecord", "_grist_Views_section", 1, {
+  "sortColRefs": "[3, -5]"
+}]
+```
+
+**Example:** Sort by column 3 ascending, then column 5 descending
+
+---
+
+## Filtering
+
+Use the `_grist_Filters` table to filter records displayed in a widget.
+
+### Create Filter
+
+```json
+["AddRecord", "_grist_Filters", null, {
+  "viewSectionRef": 1,
+  "colRef": 3,
+  "filter": "{\"included\": [\"Active\", \"Pending\"]}",
+  "pinned": true
+}]
+```
+
+**Fields:**
+- `viewSectionRef` - Widget ID to filter
+- `colRef` - Column ID to filter on
+- `filter` - JSON string with filter specification
+- `pinned` - If `true`, shows as button in filter bar
+
+### Filter Formats
+
+**Include values:**
+```json
+{"included": ["value1", "value2"]}
+```
+- Show only rows where the column matches these values
+
+**Exclude values:**
+```json
+{"excluded": ["value1", "value2"]}
+```
+- Hide rows where the column matches these values
+
+### Update Filter
+
+```json
+["UpdateRecord", "_grist_Filters", 5, {
+  "filter": "{\"included\": [\"Active\"]}",
+  "pinned": false
+}]
+```
+
+### Remove Filter
+
+```json
+["RemoveRecord", "_grist_Filters", 5]
+```
+
+---
+
+## Chart Configuration
+
+Chart widgets store configuration in two `_grist_Views_section` columns:
+- `chartType` - Chart type (text)
+- `options` - Chart options (JSON string)
+
+### Valid Chart Types
+
+| Chart Type | Value | Description |
+|------------|-------|-------------|
+| Bar Chart | `bar` | Vertical or horizontal bar chart |
+| Line Chart | `line` | Line chart with optional markers |
+| Area Chart | `area` | Filled area chart |
+| Pie Chart | `pie` | Circular pie chart |
+| Donut Chart | `donut` | Pie chart with center hole |
+| Scatter Plot | `scatter` | X-Y scatter plot |
+| Kaplan-Meier | `kaplan_meier` | Survival curve chart |
+
+### Chart Options
+
+Chart options are stored as a JSON string in the `options` column. Available options vary by chart type.
+
+#### Common Options (Bar, Line, Area, Scatter)
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `stacked` | boolean | Stack series | false |
+| `orientation` | 'v' \| 'h' | Vertical or horizontal | 'v' |
+| `invertYAxis` | boolean | Invert Y-axis direction | false |
+| `logYAxis` | boolean | Use logarithmic Y-axis | false |
+| `multiseries` | boolean | Split by first column | false |
+
+#### Line Chart Specific
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `lineMarkers` | boolean | Show data point markers | false |
+| `lineConnectGaps` | boolean | Connect across missing data | true |
+
+#### Donut Chart Specific
+
+| Option | Type | Description | Default |
+|--------|------|-------------|---------|
+| `donutHoleSize` | number | Hole size (0-1) | 0.5 |
+| `showTotal` | boolean | Show total in center | false |
+| `textSize` | number | Center text size (pixels) | 24 |
+
+### Chart Option Compatibility
+
+| Option | bar | line | area | scatter | pie | donut |
+|--------|-----|------|------|---------|-----|-------|
+| `stacked` | ✓ | ✓ | - | - | - | - |
+| `orientation` | ✓ | ✓ | ✓ | ✓ | - | - |
+| `invertYAxis` | ✓ | ✓ | ✓ | ✓ | - | - |
+| `logYAxis` | ✓ | ✓ | ✓ | ✓ | - | - |
+| `multiseries` | ✓ | ✓ | ✓ | ✓ | - | - |
+| `lineMarkers` | - | ✓ | - | - | - | - |
+| `lineConnectGaps` | - | ✓ | - | - | - | - |
+| `donutHoleSize` | - | - | - | - | - | ✓ |
+| `showTotal` | - | - | - | - | - | ✓ |
+| `textSize` | - | - | - | - | - | ✓ |
+
+### Set Chart Type and Options
+
+```json
+["UpdateRecord", "_grist_Views_section", 5, {
+  "chartType": "bar",
+  "options": "{\"stacked\": true, \"orientation\": \"v\"}"
+}]
+```
+
+**Important:** The `options` field MUST be a JSON string, not an object.
+
+### Examples
+
+#### Stacked Bar Chart
+
+```json
+["UpdateRecord", "_grist_Views_section", 5, {
+  "chartType": "bar",
+  "options": "{\"stacked\": true, \"orientation\": \"v\", \"invertYAxis\": false}"
+}]
+```
+
+#### Line Chart with Markers
+
+```json
+["UpdateRecord", "_grist_Views_section", 5, {
+  "chartType": "line",
+  "options": "{\"lineMarkers\": true, \"lineConnectGaps\": false, \"stacked\": false}"
+}]
+```
+
+#### Donut Chart
+
+```json
+["UpdateRecord", "_grist_Views_section", 5, {
+  "chartType": "donut",
+  "options": "{\"donutHoleSize\": 0.6, \"showTotal\": true, \"textSize\": 32}"
+}]
+```
+
+#### Update Options Only (Preserve Chart Type)
+
+```json
+["UpdateRecord", "_grist_Views_section", 5, {
+  "options": "{\"multiseries\": true}"
+}]
+```
+
+### Chart Axes Configuration
+
+Chart axes are defined by view fields in `_grist_Views_section_field`. The order determines axis assignment:
+
+- **Field 1** (or Field 2 if `multiseries: true`): X-axis
+- **Fields 2+**: Y-axis series (one series per field)
+
+Add Y-axis series:
+```json
+["AddRecord", "_grist_Views_section_field", null, {
+  "parentId": 5,
+  "colRef": 12,
+  "parentPos": 2.0
+}]
+```
+
+Remove series:
+```json
+["RemoveRecord", "_grist_Views_section_field", 8]
+```
+
+---
+
+## Widget Types
+
+| Display Name | `parentKey` Value | Description |
+|--------------|-------------------|-------------|
+| Table | `record` | Grid view with rows and columns |
+| Card | `single` | Single record card view |
+| Card List | `detail` | List of record cards |
+| Chart | `chart` | Chart visualization |
+| Form | `form` | Form for data entry |
+| Custom | `custom` | Custom widget plugin |
+| Calendar | `custom.calendar` | Calendar view |
+
+**Note:** Use the `parentKey` value when specifying `sectionType` in `CreateViewSection`.
+
+---
+
+## Querying Configuration
+
+Use SQL queries to retrieve page and widget configuration.
+
+### Get Widgets on a Page
+
+```sql
+GET /api/docs/{docId}/sql?q=
+SELECT * FROM _grist_Views_section WHERE parentId = 5
+```
+
+Returns all widgets on page (view) with ID 5.
+
+### Get Page Layout
+
+```sql
+GET /api/docs/{docId}/sql?q=
+SELECT id, name, layoutSpec FROM _grist_Views WHERE id = 5
+```
+
+Returns the layout structure for page 5.
+
+### Get Widget Links
+
+```sql
+GET /api/docs/{docId}/sql?q=
+SELECT vs.id, vs.title, vs.linkSrcSectionRef, vs.linkSrcColRef, vs.linkTargetColRef
+FROM _grist_Views_section vs
+WHERE vs.linkSrcSectionRef > 0
+```
+
+Returns all widgets that have incoming links configured.
+
+### Get Widget Filters
+
+```sql
+GET /api/docs/{docId}/sql?q=
+SELECT f.* FROM _grist_Filters f WHERE f.viewSectionRef = 1
+```
+
+Returns all filters applied to widget 1.
+
+### Get All Pages
+
+```sql
+GET /api/docs/{docId}/sql?q=
+SELECT p.id, p.pagePos, p.indentation, v.name
+FROM _grist_Pages p
+JOIN _grist_Views v ON p.viewRef = v.id
+ORDER BY p.pagePos
+```
+
+Returns all pages with their names and positions.
+
+---
+
+## Important Notes
+
+### Multi-Action Row References
+
+When sending multiple actions in a single request, use zero-based indexing to reference newly created rows:
+
+```json
+[
+  ["AddRecord", "Table1", null, {"Name": "Test"}],
+  ["UpdateRecord", "_grist_Tables", 0, {"primaryViewId": 5}]
+]
+```
+- First action creates a record - reference it as `0` in subsequent actions
+- Second action references the record created by the first action using zero-based index `0`
+
+### JSON Field Serialization
+
+All JSON fields must be stringified:
+- ✅ `"layoutSpec": "{\"type\":\"leaf\",\"leaf\":1}"`
+- ❌ `"layoutSpec": {"type":"leaf","leaf":1}`
+
+### CreateViewSection Initialization
+
+`CreateViewSection` automatically:
+- Creates necessary metadata records
+- Initializes default field configurations
+- Sets up reasonable defaults for widget display
+
+### Link Validation
+
+Grist validates that:
+- Source and target columns exist
+- Column types are compatible for linking
+- No circular link dependencies are created
+
+### Form Compatibility
+
+Forms have special restrictions:
+- Cannot be created on summary tables
+- May have limited linking capabilities
+- Designed for data entry workflows
+
+---
+
+## Additional Resources
+
+For more information, see:
+- `grist-database-schema.md` - Complete metadata table schemas
+- `grist-apply-actions.d.ts` - TypeScript type definitions for all actions
+- [Grist Help Center](https://support.getgrist.com/) - User documentation
+- [Grist GitHub](https://github.com/gristlabs/grist-core) - Source code and examples
+
+---
+
+**Document Status:** ✅ Complete and validated
+**Schema Version:** 44
+**Last Updated:** 2025-11-14

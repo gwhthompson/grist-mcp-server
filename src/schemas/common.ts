@@ -1,22 +1,10 @@
-/**
- * Common Zod schemas for reuse across all tools
- * Ensures consistent validation and reduces duplication
- */
-
 import { z } from 'zod'
-
-// ============================================================================
-// Response Format Schema
-// ============================================================================
+import { WidgetOptionsUnionSchema } from './widget-options.js'
 
 export const ResponseFormatSchema = z
   .enum(['json', 'markdown'])
   .default('markdown')
   .describe('Output format: "json" for structured data, "markdown" for human-readable text')
-
-// ============================================================================
-// Detail Level Schemas
-// ============================================================================
 
 export const DetailLevelWorkspaceSchema = z
   .enum(['summary', 'detailed'])
@@ -31,10 +19,6 @@ export const DetailLevelTableSchema = z
   .describe(
     '"names": Table names only. "columns": + column names. "full_schema": + types, formulas, widgetOptions'
   )
-
-// ============================================================================
-// Pagination Schema
-// ============================================================================
 
 export const PaginationSchema = z
   .object({
@@ -55,66 +39,262 @@ export const PaginationSchema = z
   })
   .strict()
 
-// Type inference for pagination params
 export type PaginationInput = z.infer<typeof PaginationSchema>
 
-// ============================================================================
-// Common ID Schemas
-// ============================================================================
+// Grist uses Python for formulas
+const PYTHON_KEYWORDS = new Set([
+  'False',
+  'None',
+  'True',
+  'and',
+  'as',
+  'assert',
+  'async',
+  'await',
+  'break',
+  'class',
+  'continue',
+  'def',
+  'del',
+  'elif',
+  'else',
+  'except',
+  'finally',
+  'for',
+  'from',
+  'global',
+  'if',
+  'import',
+  'in',
+  'is',
+  'lambda',
+  'nonlocal',
+  'not',
+  'or',
+  'pass',
+  'raise',
+  'return',
+  'try',
+  'while',
+  'with',
+  'yield'
+])
 
 export const DocIdSchema = z
   .string()
-  .min(1)
-  .describe('Document ID from grist_list_documents. Example: "aKt7TZe8YGLp3ak8bDL8TZ"')
+  .length(22, {
+    message: 'Document ID must be exactly 22 characters (Base58 format)'
+  })
+  .regex(/^[1-9A-HJ-NP-Za-km-z]{22}$/, {
+    message:
+      'Document ID must be Base58 format (22 chars, excludes 0OIl which are visually ambiguous)'
+  })
+  .describe(
+    'Document ID from grist_get_documents. Examples: "aKt7TZe8YGLp3ak8bDL8TZ", "qBbArddFDSrKd2jpv3uZTj", "xYz9123AbcDef456Ghi78J"'
+  )
 
 export const TableIdSchema = z
   .string()
-  .min(1)
-  .describe('Table ID from grist_get_tables. Example: "Contacts", "Sales_Data", "Projects"')
+  .min(1, { message: 'Table ID cannot be empty' })
+  .max(64, { message: 'Table ID cannot exceed 64 characters (Python identifier limit)' })
+  .regex(/^[A-Z_][A-Za-z0-9_]*$/, {
+    message:
+      'Table ID must start with uppercase letter or underscore, followed by letters, numbers, or underscores'
+  })
+  .refine((id) => !PYTHON_KEYWORDS.has(id), {
+    message:
+      'Table ID cannot be a Python keyword (for, class, if, def, etc.) because Grist uses Python for formulas'
+  })
+  .describe(
+    'Table name from grist_get_tables. Examples: "Contacts", "Sales_Data", "Projects", "Inventory", "Customers"'
+  )
 
-export const WorkspaceIdSchema = z
+export const WorkspaceIdSchema = z.coerce
+  .number()
+  .int()
+  .positive()
+  .describe('Workspace ID from grist_get_workspaces. Examples: 123, 456, 789 (numeric)')
+
+export const ColIdSchema = z
   .string()
-  .min(1)
-  .describe('Workspace ID from grist_list_workspaces. Example: "123" or "456"')
+  .min(1, { message: 'Column ID cannot be empty' })
+  .max(64, { message: 'Column ID cannot exceed 64 characters (Python identifier limit)' })
+  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, {
+    message:
+      'Column ID must be a valid Python identifier (start with letter or underscore, followed by letters, numbers, or underscores)'
+  })
+  .refine((id) => !PYTHON_KEYWORDS.has(id), {
+    message:
+      'Column ID cannot be a Python keyword (for, class, if, def, etc.) because Grist uses Python for formulas'
+  })
+  .refine((id) => !id.startsWith('gristHelper_'), {
+    message: 'Column ID cannot start with gristHelper_ (reserved prefix for Grist internal columns)'
+  })
+  .describe('Column identifier (e.g., "Email", "Phone_Number"). Use alphanumeric and underscores')
 
-// ============================================================================
-// Column Type Schema
-// ============================================================================
+const BaseColumnTypeSchema = z.enum([
+  'Text',
+  'Numeric',
+  'Int',
+  'Bool',
+  'Date',
+  'DateTime',
+  'Choice',
+  'ChoiceList',
+  'Attachments'
+])
+
+const RefColumnTypeSchema = z.string().regex(/^Ref(List)?:[A-Za-z_][A-Za-z0-9_]*$/, {
+  message: 'Reference type must be in format "Ref:TableName" or "RefList:TableName"'
+})
 
 export const ColumnTypeSchema = z
-  .enum([
-    'Text',
-    'Numeric',
-    'Int',
-    'Bool',
-    'Date',
-    'DateTime',
-    'Choice',
-    'ChoiceList',
-    'Ref',
-    'RefList',
-    'Attachments'
-  ])
-  .describe('Column data type in Grist')
+  .union([BaseColumnTypeSchema, RefColumnTypeSchema])
+  .describe('Column data type in Grist. Use "Ref:TableName" or "RefList:TableName" for references.')
 
-// ============================================================================
-// Column Definition Schema (for table creation)
-// ============================================================================
+// visibleCol is top-level, NOT in widgetOptions
+export const RefWidgetOptionsSchema = z
+  .object({
+    showColumn: z
+      .union([z.string(), z.boolean()])
+      .optional()
+      .describe('UI visibility control (hide/show in views).')
+  })
+  .strict()
+
+export const ChoiceWidgetOptionsSchema = z
+  .object({
+    choices: z
+      .array(z.string())
+      .optional()
+      .describe(
+        'Available options. Examples: ["Red", "Blue", "Green"], ["High", "Medium", "Low"], ["Yes", "No", "Maybe"]'
+      ),
+    choiceColors: z
+      .record(z.string(), z.string())
+      .optional()
+      .describe(
+        'Color each option. Example: {"High": "#FF0000", "Low": "#00FF00"} colors High priority red and Low priority green'
+      )
+  })
+  .strict()
+
+export const NumericWidgetOptionsSchema = z
+  .object({
+    numMode: z
+      .enum(['currency', 'decimal', 'percent', 'scientific'])
+      .optional()
+      .describe('Number display mode'),
+    numSign: z.enum(['parens']).optional().describe('Use parentheses for negative numbers'),
+    decimals: z
+      .number()
+      .int()
+      .min(0)
+      .max(20)
+      .optional()
+      .describe('Number of decimal places to display'),
+    maxDecimals: z
+      .number()
+      .int()
+      .min(0)
+      .max(20)
+      .optional()
+      .describe('Maximum number of decimal places'),
+    currency: z
+      .string()
+      .length(3)
+      .optional()
+      .describe('3-letter currency code like "USD", "EUR", "GBP", "JPY", "CAD"')
+  })
+  .strict()
+
+export const DateWidgetOptionsSchema = z
+  .object({
+    dateFormat: z.string().optional().describe('Date format string (e.g., "YYYY-MM-DD")'),
+    isCustomDateFormat: z.boolean().optional().describe('Whether using custom date format'),
+    timeFormat: z.string().optional().describe('Time format string (e.g., "h:mma")'),
+    isCustomTimeFormat: z.boolean().optional().describe('Whether using custom time format')
+  })
+  .strict()
+
+export const TextWidgetOptionsSchema = z
+  .object({
+    alignment: z.enum(['left', 'center', 'right']).optional().describe('Text alignment'),
+    wrap: z.boolean().optional().describe('Enable text wrapping'),
+    fontBold: z.boolean().optional().describe('Bold text'),
+    fontItalic: z.boolean().optional().describe('Italic text'),
+    fontUnderline: z.boolean().optional().describe('Underline text'),
+    fontStrikethrough: z.boolean().optional().describe('Strikethrough text')
+  })
+  .strict()
+
+export const BoolWidgetOptionsSchema = z
+  .object({
+    widget: z.enum(['TextBox', 'CheckBox']).optional().describe('Widget type for boolean display')
+  })
+  .strict()
+
+export const AttachmentsWidgetOptionsSchema = z
+  .object({
+    height: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe('Height of attachment preview in pixels')
+  })
+  .strict()
+
+export const EmptyWidgetOptionsSchema = z.object({}).strict()
+
+export const WidgetOptionsSchema = z.union([
+  RefWidgetOptionsSchema,
+  ChoiceWidgetOptionsSchema,
+  NumericWidgetOptionsSchema,
+  DateWidgetOptionsSchema,
+  TextWidgetOptionsSchema,
+  BoolWidgetOptionsSchema,
+  AttachmentsWidgetOptionsSchema,
+  EmptyWidgetOptionsSchema
+])
+
+export function createWidgetOptionsSchema(columnType: string): z.ZodTypeAny {
+  if (columnType === 'Ref' || columnType === 'RefList') {
+    return RefWidgetOptionsSchema
+  }
+  if (columnType === 'Choice' || columnType === 'ChoiceList') {
+    return ChoiceWidgetOptionsSchema
+  }
+  if (columnType === 'Numeric' || columnType === 'Int') {
+    return NumericWidgetOptionsSchema
+  }
+  if (columnType === 'Date' || columnType === 'DateTime') {
+    return DateWidgetOptionsSchema
+  }
+  if (columnType === 'Text') {
+    return TextWidgetOptionsSchema
+  }
+  if (columnType === 'Bool') {
+    return BoolWidgetOptionsSchema
+  }
+  if (columnType === 'Attachments') {
+    return AttachmentsWidgetOptionsSchema
+  }
+  return EmptyWidgetOptionsSchema
+}
 
 export const ColumnDefinitionSchema = z
   .object({
-    colId: z
-      .string()
-      .min(1)
-      .describe(
-        'Column identifier (e.g., "Email", "Phone_Number"). Use alphanumeric and underscores'
-      ),
+    colId: ColIdSchema,
 
     type: ColumnTypeSchema,
 
     label: z.string().optional().describe('Human-readable column label. If omitted, uses colId'),
 
-    isFormula: z.boolean().optional().describe('Set to true if this is a formula column'),
+    isFormula: z
+      .boolean()
+      .default(false)
+      .describe('Set to true if this is a formula column. Defaults to false (data column)'),
 
     formula: z
       .string()
@@ -122,17 +302,30 @@ export const ColumnDefinitionSchema = z
       .describe('Formula code (Python) if isFormula is true. Example: "$Price * $Quantity"'),
 
     widgetOptions: z
-      .any()
+      .union([
+        z.string(), // JSON string (will be parsed and validated by action builder)
+        WidgetOptionsUnionSchema // Strict validation of widget options object
+      ])
       .optional()
       .describe(
-        'Widget-specific options (JSON object). Example: {"choices": ["Red", "Blue", "Green"]} for Choice columns'
+        'Widget options validated by column type. Examples:\n' +
+          '- Numeric: {"numMode": "currency", "currency": "USD", "decimals": 2}\n' +
+          '- Choice: {"choices": ["Red", "Blue", "Green"]}\n' +
+          '- Date: {"dateFormat": "YYYY-MM-DD"}\n' +
+          '- Ref/RefList: Widget options for references (alignment, styles)\n' +
+          'Validation is enforced based on column type - unknown properties are rejected.'
+      ),
+
+    visibleCol: z
+      .union([z.string(), z.number()])
+      .optional()
+      .describe(
+        'Which column from referenced table to display (Ref/RefList only). ' +
+          'String column name (e.g., "Email") auto-resolves to numeric ID. ' +
+          'Numeric ID (e.g., 456) used directly.'
       )
   })
   .strict()
-
-// ============================================================================
-// Row IDs Schema (for bulk operations)
-// ============================================================================
 
 export const RowIdsSchema = z
   .array(z.number().int().positive())
@@ -142,23 +335,26 @@ export const RowIdsSchema = z
     'Array of row IDs to operate on (max 500 per request). Get row IDs from grist_get_records'
   )
 
-// ============================================================================
-// Filter Schema (for record queries)
-// ============================================================================
+const FilterValueSchema = z.union([
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.null(),
+  z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+])
 
 export const FilterSchema = z
-  .record(z.string(), z.any())
+  .record(z.string(), FilterValueSchema)
   .optional()
   .describe(
-    'Filters to apply (automatically converted to Grist format). ' +
-      'Simple format: {"ColumnName": value} - Example: {"Status": "Active", "Priority": 1}. ' +
-      'Multiple values: {"ColumnName": ["val1", "val2"]} for OR logic - Example: {"Status": ["Active", "Lead"]}. ' +
-      'Multiple columns use AND logic: {"Status": "Active", "Region": "West"} matches records with BOTH conditions.'
+    'Filters as key-value pairs. Examples:\n' +
+      '  • Text: {"Status": "Active"}\n' +
+      '  • Number: {"Priority": 1}\n' +
+      '  • Boolean: {"IsActive": true}\n' +
+      '  • Multiple values (OR): {"Status": ["Active", "Lead"]}\n' +
+      '  • Multiple columns (AND): {"Status": "Active", "Region": "West"}\n' +
+      'Note: For boolean columns use true/false (not strings like "Yes" or "__YES__")'
   )
-
-// ============================================================================
-// Column Selection Schema
-// ============================================================================
 
 export const ColumnSelectionSchema = z
   .array(z.string())
@@ -167,20 +363,8 @@ export const ColumnSelectionSchema = z
     'List of column IDs to return. Omit to return all columns. Example: ["Name", "Email", "Phone"]'
   )
 
-// ============================================================================
-// Helper: Create standard tool response with validation
-// ============================================================================
-
-/**
- * Standard parameters that most tools should include
- */
 export const StandardToolParams = z.object({
   response_format: ResponseFormatSchema
 })
 
-/**
- * Standard parameters for list-based tools
- */
-export const ListToolParams = StandardToolParams.extend({
-  ...PaginationSchema.shape
-})
+export const ListToolParams = StandardToolParams.merge(PaginationSchema)

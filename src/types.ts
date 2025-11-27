@@ -1,20 +1,11 @@
-/**
- * Type definitions for Grist MCP Server
- * These types are based on grist-core/app/common but adapted for MCP use
- */
-
-// ============================================================================
-// MCP-Specific Types
-// ============================================================================
-
 export type ResponseFormat = 'json' | 'markdown'
 
 export type DetailLevelWorkspace = 'summary' | 'detailed'
 export type DetailLevelTable = 'names' | 'columns' | 'full_schema'
 
 export interface PaginationParams {
-  offset?: number // Default: 0
-  limit?: number // Default: 100, Max: 1000
+  offset?: number
+  limit?: number
 }
 
 export interface PaginationMetadata {
@@ -23,16 +14,19 @@ export interface PaginationMetadata {
   limit: number
   has_more: boolean
   next_offset: number | null
+  page_number: number
+  total_pages: number
+  items_in_page: number
 }
 
 export interface MCPToolResponse {
   content: Array<{
     type: 'text'
-    text: string // Markdown or JSON string based on response_format
+    text: string
   }>
-  structuredContent?: any // Always include - machine-readable data
-  isError?: boolean // True for error responses
-  [key: string]: unknown // Index signature for MCP SDK compatibility
+  structuredContent?: { [x: string]: unknown }
+  isError?: boolean
+  [key: string]: unknown
 }
 
 export interface TruncationInfo {
@@ -43,47 +37,227 @@ export interface TruncationInfo {
   suggestions: string[]
 }
 
-// ============================================================================
-// Grist API Types (based on grist-core/app/common)
-// ============================================================================
+export interface StandardErrorResponse {
+  success: false
+  error: string
+  error_code?: string
+  context?: Record<string, unknown>
+  retryable?: boolean
+  suggestions?: string[]
+  [key: string]: unknown
+}
 
-/**
- * Cell value types from Grist
- */
-export type CellValue = null | string | number | boolean | [string, ...unknown[]] // Grist encoded values
+export type CellValue = null | string | number | boolean | [string, ...unknown[]]
 
-/**
- * Column values in columnar format
- */
 export type ColValues = { [colId: string]: CellValue[] }
 
-/**
- * Bulk column values for bulk operations
- */
 export type BulkColValues = { [colId: string]: CellValue[] }
 
+export type SingleColValues = { [colId: string]: CellValue }
+
+// ============================================================================
+// UserAction Interfaces (Type-Safe)
+// ============================================================================
+// These interfaces provide compile-time safety for building user actions.
+// They are converted to tuple format by serializeUserAction() before API calls.
+
+/** Base interface for all user actions with discriminant */
+interface UserActionBase {
+  readonly action: string
+}
+
+// --- Record Operations ---
+
+export interface BulkAddRecordAction extends UserActionBase {
+  readonly action: 'BulkAddRecord'
+  readonly tableId: string
+  readonly rowIds: (number | null)[]
+  readonly columns: BulkColValues
+}
+
+export interface BulkUpdateRecordAction extends UserActionBase {
+  readonly action: 'BulkUpdateRecord'
+  readonly tableId: string
+  readonly rowIds: number[]
+  readonly columns: BulkColValues
+}
+
+export interface BulkRemoveRecordAction extends UserActionBase {
+  readonly action: 'BulkRemoveRecord'
+  readonly tableId: string
+  readonly rowIds: number[]
+}
+
+export interface UpdateRecordAction extends UserActionBase {
+  readonly action: 'UpdateRecord'
+  readonly tableId: string
+  readonly rowId: number
+  readonly fields: SingleColValues
+}
+
+export interface AddRecordAction extends UserActionBase {
+  readonly action: 'AddRecord'
+  readonly tableId: string
+  readonly rowId: number | null
+  readonly fields: SingleColValues
+}
+
+// --- Table Operations ---
+
+export interface AddTableAction extends UserActionBase {
+  readonly action: 'AddTable'
+  readonly tableName: string
+  readonly columns: ColumnDefinition[]
+}
+
+export interface RenameTableAction extends UserActionBase {
+  readonly action: 'RenameTable'
+  readonly tableId: string
+  readonly newTableId: string
+}
+
+export interface RemoveTableAction extends UserActionBase {
+  readonly action: 'RemoveTable'
+  readonly tableId: string
+}
+
+// --- Column Operations ---
+
+export interface AddColumnAction extends UserActionBase {
+  readonly action: 'AddColumn'
+  readonly tableId: string
+  readonly colId: string
+  readonly colInfo: ColumnInfo
+}
+
+export interface AddHiddenColumnAction extends UserActionBase {
+  readonly action: 'AddHiddenColumn'
+  readonly tableId: string
+  readonly colId: string
+  readonly colInfo: ColumnInfo
+}
+
+export interface ModifyColumnAction extends UserActionBase {
+  readonly action: 'ModifyColumn'
+  readonly tableId: string
+  readonly colId: string
+  readonly updates: Partial<ColumnInfo>
+}
+
+export interface RemoveColumnAction extends UserActionBase {
+  readonly action: 'RemoveColumn'
+  readonly tableId: string
+  readonly colId: string
+}
+
+export interface RenameColumnAction extends UserActionBase {
+  readonly action: 'RenameColumn'
+  readonly tableId: string
+  readonly oldColId: string
+  readonly newColId: string
+}
+
+// --- Display Formula Operations ---
+
+export interface SetDisplayFormulaAction extends UserActionBase {
+  readonly action: 'SetDisplayFormula'
+  readonly tableId: string
+  readonly colId: string | null
+  readonly fieldRef: number | null
+  readonly formula: string
+}
+
+// --- Conditional Formatting Operations ---
+
+export interface AddEmptyRuleAction extends UserActionBase {
+  readonly action: 'AddEmptyRule'
+  readonly tableId: string
+  readonly fieldRef: number | null
+  readonly colRef: number | null
+}
+
+// --- Page/Widget Operations ---
+
+export interface CreateViewSectionAction extends UserActionBase {
+  readonly action: 'CreateViewSection'
+  readonly tableRef: number
+  readonly viewRef: number
+  readonly widgetType: string
+  readonly visibleCols: number[] | null
+  readonly title: string | null
+}
+
+// --- Metadata Table Updates ---
+
+export interface UpdateMetadataAction extends UserActionBase {
+  readonly action: 'UpdateMetadata'
+  readonly metaTableId: string
+  readonly rowId: number
+  readonly updates: Record<string, unknown>
+}
+
 /**
- * UserAction types for document mutations
- * Format: [actionType, ...args]
+ * Union of all typed user action interfaces.
+ * Use this type for building actions in a type-safe way.
  */
-export type UserAction =
+export type UserActionObject =
+  | BulkAddRecordAction
+  | BulkUpdateRecordAction
+  | BulkRemoveRecordAction
+  | UpdateRecordAction
+  | AddRecordAction
+  | AddTableAction
+  | RenameTableAction
+  | RemoveTableAction
+  | AddColumnAction
+  | AddHiddenColumnAction
+  | ModifyColumnAction
+  | RemoveColumnAction
+  | RenameColumnAction
+  | SetDisplayFormulaAction
+  | AddEmptyRuleAction
+  | CreateViewSectionAction
+  | UpdateMetadataAction
+
+// ============================================================================
+// UserAction Tuple Format (Wire Format for Grist API)
+// ============================================================================
+// This is the tuple format expected by the Grist API.
+// Use serializeUserAction() to convert UserActionObject → UserActionTuple.
+
+export type UserActionTuple =
   // Record operations
-  | ['BulkAddRecord', string, number[], BulkColValues]
+  | ['BulkAddRecord', string, (number | null)[], BulkColValues]
   | ['BulkUpdateRecord', string, number[], BulkColValues]
   | ['BulkRemoveRecord', string, number[]]
+  | ['UpdateRecord', string, number, SingleColValues]
+  | ['AddRecord', string, number | null, SingleColValues]
   // Table operations
   | ['AddTable', string, ColumnDefinition[]]
   | ['RenameTable', string, string]
   | ['RemoveTable', string]
   // Column operations
   | ['AddColumn', string, string, ColumnInfo]
+  | ['AddHiddenColumn', string, string, ColumnInfo]
   | ['ModifyColumn', string, string, Partial<ColumnInfo>]
   | ['RemoveColumn', string, string]
   | ['RenameColumn', string, string, string]
+  // Display formula operations
+  | ['SetDisplayFormula', string, string | null, number | null, string]
+  // Conditional formatting operations
+  | ['AddEmptyRule', string, number | null, number | null]
+  // Page/Widget operations
+  | ['CreateViewSection', number, number, string, number[] | null, string | null]
+  | ['RemoveView', number] // Removes page/view without deleting underlying tables
+  // Metadata table updates
+  | ['UpdateRecord', string, number, Record<string, unknown>]
 
 /**
- * Column type definitions
+ * @deprecated Use UserActionObject for type-safe action building.
+ * This alias is kept for backward compatibility with existing code.
  */
+export type UserAction = UserActionTuple
+
 export type ColumnType =
   | 'Text'
   | 'Numeric'
@@ -97,32 +271,37 @@ export type ColumnType =
   | 'RefList'
   | 'Attachments'
 
-/**
- * Column information structure
- */
 export interface ColumnInfo {
   type: string
+
   label?: string
+
   isFormula?: boolean
+
   formula?: string
-  widgetOptions?: any
+
+  // GOTCHA: visibleCol is NOT part of widgetOptions - it's a separate DB column
+  // Reference: ./docs/reference/grist-database-schema.md line 130
+  widgetOptions?: string | { [key: string]: unknown }
+
+  // Stored separately from widgetOptions - not inside the JSON
+  // Reference: ./docs/reference/grist-database-schema.md line 138
+  visibleCol?: string | number
+
+  // Reference: ./docs/reference/grist-database-schema.md line 181
+  rules?: string
 }
 
-/**
- * Column definition for table creation
- */
 export interface ColumnDefinition {
   colId: string
   type: string
   label?: string
   isFormula?: boolean
   formula?: string
-  widgetOptions?: any
+  widgetOptions?: string | { [key: string]: unknown }
+  visibleCol?: string | number
 }
 
-/**
- * Workspace information from API
- */
 export interface WorkspaceInfo {
   id: number
   name: string
@@ -135,9 +314,6 @@ export interface WorkspaceInfo {
   updatedAt?: string
 }
 
-/**
- * Document information from API
- */
 export interface DocumentInfo {
   id: string
   name: string
@@ -155,9 +331,6 @@ export interface DocumentInfo {
   public?: boolean
 }
 
-/**
- * Table information from API
- */
 export interface TableInfo {
   id: string
   fields: {
@@ -167,59 +340,89 @@ export interface TableInfo {
     type: string
     isFormula: boolean
     formula?: string
-    widgetOptions?: any
+    widgetOptions?: string | Record<string, unknown>
   }[]
 }
 
-/**
- * Record structure for API operations
- */
-export interface Record {
-  id: number
-  fields: { [colId: string]: CellValue }
+export interface TablesApiResponse {
+  tables: TableInfo[]
 }
 
-/**
- * Upsert record format for PUT /records endpoint
- */
+export interface GristRecord {
+  id: number
+  fields: { [colId: string]: CellValue }
+  errors?: { [colId: string]: string }
+}
+
 export interface UpsertRecord {
   require: { [colId: string]: CellValue }
   fields: { [colId: string]: CellValue }
 }
 
-/**
- * Apply endpoint request
- */
 export interface ApplyRequest {
   actions: UserAction[]
 }
 
-/**
- * Apply endpoint response
- */
 export interface ApplyResponse {
   actionNum: number
-  retValues: any[]
+  actionHash: string | null
+  retValues: unknown[]
+  isModification: boolean
 }
 
-/**
- * Query SQL response
- */
 export interface SQLQueryResponse {
   records: Array<{ [key: string]: CellValue }>
   tableId?: string
 }
 
-/**
- * Records response from GET /tables/{tableId}/records
- */
 export interface RecordsResponse {
-  records: Record[]
+  records: GristRecord[]
 }
 
-/**
- * Upsert response from PUT /tables/{tableId}/records
- */
 export interface UpsertResponse {
-  records: number[] // Array of record IDs
+  records: number[]
+}
+
+export type WidgetType =
+  | 'record'
+  | 'single'
+  | 'detail'
+  | 'chart'
+  | 'form'
+  | 'custom'
+  | 'custom.calendar'
+
+export type LayoutSpec =
+  | { type: 'leaf'; leaf: number }
+  | { type: 'hsplit'; children: LayoutSpec[]; splitRatio: number }
+  | { type: 'vsplit'; children: LayoutSpec[]; splitRatio: number }
+
+export type PagePattern =
+  | 'master_detail'
+  | 'hierarchical'
+  | 'chart_dashboard'
+  | 'form_table'
+  | 'custom'
+
+export type ChartType = 'bar' | 'pie' | 'donut' | 'area' | 'line' | 'scatter' | 'kaplan_meier'
+
+export interface ChartOptions {
+  multiseries?: boolean
+  lineConnectGaps?: boolean
+  lineMarkers?: boolean
+  stacked?: boolean
+  errorBars?: boolean
+  invertYAxis?: boolean
+  logYAxis?: boolean
+  orientation?: 'h' | 'v'
+  donutHoleSize?: number
+  showTotal?: boolean
+  textSize?: number
+  aggregate?: string
+}
+
+export interface CreateViewSectionResult {
+  tableRef: number
+  viewRef: number
+  sectionRef: number
 }

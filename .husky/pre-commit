@@ -1,0 +1,5 @@
+# Sync manifest.json version with package.json
+node scripts/sync-version.mjs
+
+# Stage manifest.json if it was modified
+git diff --quiet manifest.json || git add manifest.json

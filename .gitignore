@@ -31,3 +31,27 @@ yarn-error.log*
 # Testing
 coverage/
 .nyc_output/
+
+# MCP bundles (build artifacts)
+*.mcpb
+
+# MCP configuration with API keys
+.mcp.json
+inspector-config.json
+
+# Claude Code local settings
+.claude/settings.local.json
+
+# Grist files
+.grist/
+*.grist
+
+# Temporary test scripts (prevent future additions)
+/test-*.mjs
+/test-*.ts
+/verify-*.js
+/fix-*.py
+
+# Local development files (not needed in repo)
+evaluations/
+examples/

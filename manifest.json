@@ -1,0 +1,178 @@
+{
+  "manifest_version": "0.3",
+  "name": "grist-mcp-server",
+  "version": "1.0.0",
+  "display_name": "Grist Database Integration",
+  "description": "22 tools for managing Grist documents with AI",
+  "long_description": "Read and write tables, records, pages, and widgets. Works with Grist Cloud or self-hosted instances.",
+  "author": {
+    "name": "George Thompson"
+  },
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "grist",
+    "database",
+    "spreadsheet",
+    "ai",
+    "llm",
+    "api",
+    "automation",
+    "productivity"
+  ],
+  "homepage": "https://github.com/yourusername/grist-mcp-server",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/grist-mcp-server.git"
+  },
+  "documentation": "https://github.com/yourusername/grist-mcp-server#readme",
+  "server": {
+    "type": "node",
+    "entry_point": "dist/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": [
+        "${__dirname}/dist/index.js"
+      ],
+      "env": {
+        "GRIST_API_KEY": "${user_config.grist_api_key}",
+        "GRIST_BASE_URL": "${user_config.grist_base_url}",
+        "GRIST_MCP_DEBUG_MODE": "${user_config.enable_debug_mode}",
+        "GRIST_MCP_ENABLE_METRICS": "${user_config.enable_metrics}"
+      }
+    }
+  },
+  "user_config": {
+    "grist_api_key": {
+      "type": "string",
+      "title": "Grist API Key",
+      "description": "Your Grist API key. Visit https://docs.getgrist.com/settings/keys to create one.",
+      "required": true,
+      "sensitive": true
+    },
+    "grist_base_url": {
+      "type": "string",
+      "title": "Grist Base URL",
+      "description": "Base URL for your Grist instance. Use https://docs.getgrist.com for Grist Cloud or your self-hosted URL.",
+      "required": false,
+      "default": "https://docs.getgrist.com"
+    },
+    "enable_debug_mode": {
+      "type": "boolean",
+      "title": "Debug Mode",
+      "description": "Enable detailed logging and diagnostics. Automatically sets log level to 'debug' and enables tool call logging.",
+      "required": false,
+      "default": false
+    },
+    "enable_metrics": {
+      "type": "boolean",
+      "title": "Performance Metrics",
+      "description": "Collect and log performance statistics every 60 seconds.",
+      "required": false,
+      "default": false
+    }
+  },
+  "compatibility": {
+    "claude_desktop": ">=0.10.0",
+    "platforms": [
+      "darwin",
+      "win32",
+      "linux"
+    ],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  },
+  "tools": [
+    {
+      "name": "grist_get_workspaces",
+      "description": "List and filter workspaces"
+    },
+    {
+      "name": "grist_get_documents",
+      "description": "Find documents by ID, name, or workspace"
+    },
+    {
+      "name": "grist_get_tables",
+      "description": "Get table structure and schema"
+    },
+    {
+      "name": "grist_query_sql",
+      "description": "Run SQL queries with JOINs and aggregations"
+    },
+    {
+      "name": "grist_get_records",
+      "description": "Fetch records with filters"
+    },
+    {
+      "name": "grist_add_records",
+      "description": "Insert new records"
+    },
+    {
+      "name": "grist_update_records",
+      "description": "Modify records by row ID"
+    },
+    {
+      "name": "grist_upsert_records",
+      "description": "Add or update by unique key (sync)"
+    },
+    {
+      "name": "grist_delete_records",
+      "description": "Delete records permanently"
+    },
+    {
+      "name": "grist_create_table",
+      "description": "Create table with columns"
+    },
+    {
+      "name": "grist_rename_table",
+      "description": "Rename table"
+    },
+    {
+      "name": "grist_delete_table",
+      "description": "Delete table permanently"
+    },
+    {
+      "name": "grist_create_summary_table",
+      "description": "Create summary tables for aggregations and chart data sources"
+    },
+    {
+      "name": "grist_manage_columns",
+      "description": "Add, modify, delete, rename columns"
+    },
+    {
+      "name": "grist_manage_conditional_rules",
+      "description": "Add visual formatting rules that highlight cells based on conditions"
+    },
+    {
+      "name": "grist_create_document",
+      "description": "Create new Grist documents or copy existing ones"
+    },
+    {
+      "name": "grist_get_pages",
+      "description": "Introspect document structure including pages, widgets, and summary tables"
+    },
+    {
+      "name": "grist_build_page",
+      "description": "Create pages with pre-configured widget layouts and linking"
+    },
+    {
+      "name": "grist_configure_widget",
+      "description": "Configure widget properties, linking, sorting, and filtering"
+    },
+    {
+      "name": "grist_update_page",
+      "description": "Rename, reorder, or delete existing pages"
+    },
+    {
+      "name": "grist_manage_webhooks",
+      "description": "Create and manage webhooks for real-time event notifications"
+    },
+    {
+      "name": "grist_help",
+      "description": "Get detailed documentation and examples for any tool"
+    }
+  ],
+  "tools_generated": true
+}

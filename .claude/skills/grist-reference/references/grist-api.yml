@@ -1,0 +1,2090 @@
+openapi: 3.0.0
+info:
+  title: Grist REST API
+  version: 1.0.0
+  description: |
+    Machine-readable OpenAPI 3.0 specification of the Grist REST API.
+
+    Grist is a modern relational spreadsheet with a powerful API for programmatic access.
+    This API allows you to manage organizations, workspaces, documents, and perform CRUD
+    operations on tables, records, and columns.
+
+    ## Key Features
+
+    - **Document Management**: Create, read, update, and delete documents and their metadata
+    - **Data Operations**: Full CRUD on tables, records, and columns
+    - **User Actions**: Apply arbitrary user actions for complex document modifications
+    - **SQL Interface**: Query documents using SQL
+    - **Webhooks**: Subscribe to document changes
+    - **Attachments**: Upload and manage file attachments
+    - **Access Control**: Manage permissions for organizations, workspaces, and documents
+
+    ## Authentication
+
+    The API uses API key authentication. Generate an API key from your Grist profile settings.
+
+    ## Rate Limiting
+
+    API requests are rate-limited per document to ensure system stability.
+
+servers:
+  - url: https://docs.getgrist.com/api
+    description: Grist SaaS production server
+  - url: http://localhost:8484/api
+    description: Local development server
+
+security:
+  - ApiKey: []
+
+paths:
+  # =============================================================================
+  # Organization Endpoints
+  # =============================================================================
+
+  /orgs:
+    get:
+      summary: List organizations
+      description: Returns all organizations accessible to the current user
+      operationId: listOrgs
+      tags:
+        - Organizations
+      parameters:
+        - name: merged
+          in: query
+          description: Whether to merge personal organizations
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: List of organizations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Organization'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Create organization
+      description: Creates a new organization
+      operationId: createOrg
+      tags:
+        - Organizations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationProperties'
+      responses:
+        '200':
+          description: ID of the created organization
+          content:
+            application/json:
+              schema:
+                type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /orgs/{orgId}:
+    get:
+      summary: Get organization
+      description: Returns details of a specific organization
+      operationId: getOrg
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/orgId'
+      responses:
+        '200':
+          description: Organization details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update organization
+      description: Updates organization properties
+      operationId: updateOrg
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/orgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationProperties'
+      responses:
+        '200':
+          description: Organization updated successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /orgs/{orgId}/workspaces:
+    get:
+      summary: List workspaces in organization
+      description: Returns all workspaces in the specified organization
+      operationId: listOrgWorkspaces
+      tags:
+        - Workspaces
+      parameters:
+        - $ref: '#/components/parameters/orgId'
+        - name: includeSupport
+          in: query
+          description: Whether to include support workspaces
+          schema:
+            type: boolean
+            default: true
+      responses:
+        '200':
+          description: List of workspaces
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Workspace'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Create workspace
+      description: Creates a new workspace in the organization
+      operationId: createWorkspace
+      tags:
+        - Workspaces
+      parameters:
+        - $ref: '#/components/parameters/orgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceProperties'
+      responses:
+        '200':
+          description: ID of the created workspace
+          content:
+            application/json:
+              schema:
+                type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /orgs/{orgId}/usage:
+    get:
+      summary: Get organization usage
+      description: Returns usage summary for the organization
+      operationId: getOrgUsage
+      tags:
+        - Organizations
+      parameters:
+        - $ref: '#/components/parameters/orgId'
+      responses:
+        '200':
+          description: Usage summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrgUsageSummary'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /orgs/{orgId}/access:
+    get:
+      summary: Get organization access permissions
+      description: Returns access control information for the organization
+      operationId: getOrgAccess
+      tags:
+        - Access Control
+      parameters:
+        - $ref: '#/components/parameters/orgId'
+      responses:
+        '200':
+          description: Permission data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionData'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    patch:
+      summary: Update organization permissions
+      description: Updates access permissions for the organization
+      operationId: updateOrgAccess
+      tags:
+        - Access Control
+      parameters:
+        - $ref: '#/components/parameters/orgId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - delta
+              properties:
+                delta:
+                  $ref: '#/components/schemas/PermissionDelta'
+      responses:
+        '200':
+          description: Permissions updated successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # =============================================================================
+  # Workspace Endpoints
+  # =============================================================================
+
+  /workspaces/{workspaceId}:
+    get:
+      summary: Get workspace
+      description: Returns details of a specific workspace
+      operationId: getWorkspace
+      tags:
+        - Workspaces
+      parameters:
+        - $ref: '#/components/parameters/workspaceId'
+      responses:
+        '200':
+          description: Workspace details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Workspace'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update workspace
+      description: Updates workspace properties
+      operationId: updateWorkspace
+      tags:
+        - Workspaces
+      parameters:
+        - $ref: '#/components/parameters/workspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorkspaceProperties'
+      responses:
+        '200':
+          description: Workspace updated successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      summary: Delete workspace permanently
+      description: Permanently deletes the workspace and all its documents
+      operationId: deleteWorkspace
+      tags:
+        - Workspaces
+      parameters:
+        - $ref: '#/components/parameters/workspaceId'
+      responses:
+        '200':
+          description: Workspace deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /workspaces/{workspaceId}/docs:
+    post:
+      summary: Create document in workspace
+      description: Creates a new document in the specified workspace
+      operationId: createDoc
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/components/parameters/workspaceId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentProperties'
+      responses:
+        '200':
+          description: ID of the created document
+          content:
+            application/json:
+              schema:
+                type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # =============================================================================
+  # Document Endpoints
+  # =============================================================================
+
+  /docs/{docId}:
+    get:
+      summary: Get document metadata
+      description: Returns metadata and properties of a document
+      operationId: getDoc
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/components/parameters/docId'
+      responses:
+        '200':
+          description: Document details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Document'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      summary: Update document metadata
+      description: Updates document properties and metadata
+      operationId: updateDoc
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/components/parameters/docId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DocumentProperties'
+      responses:
+        '200':
+          description: Document updated successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      summary: Delete document permanently
+      description: Permanently deletes the document and all its data
+      operationId: deleteDoc
+      tags:
+        - Documents
+      parameters:
+        - $ref: '#/components/parameters/docId'
+      responses:
+        '200':
+          description: Document deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # =============================================================================
+  # Table Endpoints
+  # =============================================================================
+
+  /docs/{docId}/tables:
+    get:
+      summary: List tables
+      description: Returns all tables in the document
+      operationId: listTables
+      tags:
+        - Tables
+      parameters:
+        - $ref: '#/components/parameters/docId'
+      responses:
+        '200':
+          description: List of tables
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tables:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/TableInfo'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Create tables
+      description: Creates one or more new tables in the document
+      operationId: createTables
+      tags:
+        - Tables
+      parameters:
+        - $ref: '#/components/parameters/docId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TablesPost'
+      responses:
+        '200':
+          description: Tables created successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                description: Array of created table IDs
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    patch:
+      summary: Update tables
+      description: Updates metadata for one or more tables
+      operationId: updateTables
+      tags:
+        - Tables
+      parameters:
+        - $ref: '#/components/parameters/docId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TablesPatch'
+      responses:
+        '200':
+          description: Tables updated successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /docs/{docId}/tables/{tableId}/data:
+    get:
+      summary: Get table data (column format)
+      description: |
+        Returns table data in column-oriented format where each column is an array of values.
+        This format is efficient for bulk operations.
+      operationId: getTableData
+      tags:
+        - Tables
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+        - $ref: '#/components/parameters/filter'
+        - $ref: '#/components/parameters/sort'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: Table data in column format
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TableColValues'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Add records (column format)
+      description: Adds records to the table using column-oriented format
+      operationId: addTableData
+      tags:
+        - Tables
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkColValues'
+      responses:
+        '200':
+          description: Array of created record IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    patch:
+      summary: Update records (column format)
+      description: Updates records in the table using column-oriented format
+      operationId: updateTableData
+      tags:
+        - Tables
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TableColValues'
+      responses:
+        '200':
+          description: Array of updated record IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /docs/{docId}/tables/{tableId}/data/delete:
+    post:
+      summary: Delete records
+      description: Deletes records from the table by their IDs
+      operationId: deleteTableData
+      tags:
+        - Tables
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                type: integer
+              description: Array of record IDs to delete
+      responses:
+        '200':
+          description: Array of deleted record IDs
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # =============================================================================
+  # Records Endpoints
+  # =============================================================================
+
+  /docs/{docId}/tables/{tableId}/records:
+    get:
+      summary: Get records (record format)
+      description: |
+        Returns records in record-oriented format where each record is an object with id and fields.
+        This format is more intuitive for individual record operations.
+      operationId: getRecords
+      tags:
+        - Records
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+        - $ref: '#/components/parameters/filter'
+        - $ref: '#/components/parameters/sort'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: List of records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordsList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Add records (record format)
+      description: Adds one or more records to the table
+      operationId: addRecords
+      tags:
+        - Records
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+        - $ref: '#/components/parameters/noparse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordsPost'
+      responses:
+        '200':
+          description: Created records with their IDs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordsList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    patch:
+      summary: Update records (record format)
+      description: Updates one or more existing records
+      operationId: updateRecords
+      tags:
+        - Records
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+        - $ref: '#/components/parameters/noparse'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordsPatch'
+      responses:
+        '200':
+          description: Records updated successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      summary: Upsert records
+      description: |
+        Adds or updates records based on matching criteria.
+        If a record matching the 'require' fields exists, it will be updated.
+        Otherwise, a new record will be created.
+      operationId: upsertRecords
+      tags:
+        - Records
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+        - $ref: '#/components/parameters/noparse'
+        - $ref: '#/components/parameters/noadd'
+        - $ref: '#/components/parameters/noupdate'
+        - $ref: '#/components/parameters/onmany'
+        - $ref: '#/components/parameters/allow_empty_require'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordsPut'
+      responses:
+        '200':
+          description: Upserted records
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordsList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # =============================================================================
+  # Columns Endpoints
+  # =============================================================================
+
+  /docs/{docId}/tables/{tableId}/columns:
+    get:
+      summary: List columns
+      description: Returns all columns in the specified table
+      operationId: listColumns
+      tags:
+        - Columns
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+      responses:
+        '200':
+          description: List of columns
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ColumnsList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Create columns
+      description: Creates one or more new columns in the table
+      operationId: createColumns
+      tags:
+        - Columns
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ColumnsPost'
+      responses:
+        '200':
+          description: Columns created successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                description: Array of created column IDs
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    patch:
+      summary: Update columns
+      description: Updates properties of one or more columns
+      operationId: updateColumns
+      tags:
+        - Columns
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ColumnsPatch'
+      responses:
+        '200':
+          description: Columns updated successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      summary: Upsert columns
+      description: Creates or updates columns based on column ID
+      operationId: upsertColumns
+      tags:
+        - Columns
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ColumnsPut'
+      responses:
+        '200':
+          description: Columns upserted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /docs/{docId}/tables/{tableId}/columns/{colId}:
+    delete:
+      summary: Delete column
+      description: Deletes a column from the table
+      operationId: deleteColumn
+      tags:
+        - Columns
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/tableId'
+        - $ref: '#/components/parameters/colId'
+      responses:
+        '200':
+          description: Column deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # =============================================================================
+  # User Actions Endpoint (Critical)
+  # =============================================================================
+
+  /docs/{docId}/apply:
+    post:
+      summary: Apply user actions
+      description: |
+        **Critical endpoint** for applying arbitrary user actions to the document.
+
+        User actions are low-level operations that modify the document structure and data.
+        This is the most powerful and flexible way to modify a Grist document, allowing
+        operations like:
+        - AddTable, RemoveTable
+        - AddColumn, RemoveColumn, RenameColumn, ModifyColumn
+        - AddRecord, UpdateRecord, RemoveRecord, BulkAddRecord, BulkUpdateRecord
+        - And many more complex operations
+
+        Actions are applied transactionally and can be bundled together.
+      operationId: applyUserActions
+      tags:
+        - User Actions
+      parameters:
+        - $ref: '#/components/parameters/docId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UserAction'
+              description: Array of user actions to apply
+      responses:
+        '200':
+          description: Actions applied successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplyUAResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # =============================================================================
+  # SQL Query Endpoint
+  # =============================================================================
+
+  /docs/{docId}/sql:
+    get:
+      summary: Execute SQL query (GET)
+      description: Executes a SQL query against the document using query parameters
+      operationId: sqlQueryGet
+      tags:
+        - SQL
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - name: q
+          in: query
+          required: true
+          description: SQL query to execute
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SqlResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Execute SQL query (POST)
+      description: |
+        Executes a SQL query against the document with optional parameters.
+        Supports parameterized queries for security and performance.
+      operationId: sqlQueryPost
+      tags:
+        - SQL
+      parameters:
+        - $ref: '#/components/parameters/docId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SqlPost'
+      responses:
+        '200':
+          description: Query results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SqlResult'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # =============================================================================
+  # Attachments Endpoints
+  # =============================================================================
+
+  /docs/{docId}/attachments:
+    get:
+      summary: List attachments
+      description: Returns metadata for all attachments in the document
+      operationId: listAttachments
+      tags:
+        - Attachments
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/limit'
+      responses:
+        '200':
+          description: List of attachment metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecordsList'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Upload attachment
+      description: Uploads a single file attachment to the document
+      operationId: uploadAttachment
+      tags:
+        - Attachments
+      parameters:
+        - $ref: '#/components/parameters/docId'
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                upload:
+                  type: string
+                  format: binary
+                  description: File to upload
+      responses:
+        '200':
+          description: Attachment uploaded successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: integer
+                description: Array containing the attachment metadata row ID
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /docs/{docId}/attachments/{attId}:
+    get:
+      summary: Get attachment metadata
+      description: Returns metadata for a specific attachment
+      operationId: getAttachment
+      tags:
+        - Attachments
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/attId'
+      responses:
+        '200':
+          description: Attachment metadata
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachmentMetadata'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /docs/{docId}/attachments/{attId}/download:
+    get:
+      summary: Download attachment
+      description: Downloads the attachment file
+      operationId: downloadAttachment
+      tags:
+        - Attachments
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/attId'
+      responses:
+        '200':
+          description: Attachment file
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # =============================================================================
+  # Webhooks Endpoints
+  # =============================================================================
+
+  /docs/{docId}/webhooks:
+    get:
+      summary: List webhooks
+      description: Returns all webhooks configured for this document
+      operationId: listWebhooks
+      tags:
+        - Webhooks
+      parameters:
+        - $ref: '#/components/parameters/docId'
+      responses:
+        '200':
+          description: List of webhooks
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WebhookSummaryCollection'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: Create webhook
+      description: Creates a new webhook subscription for table changes
+      operationId: createWebhook
+      tags:
+        - Webhooks
+      parameters:
+        - $ref: '#/components/parameters/docId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookFields'
+      responses:
+        '200':
+          description: Webhook created successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhookId:
+                    type: string
+                    description: ID of the created webhook
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /docs/{docId}/webhooks/{webhookId}:
+    patch:
+      summary: Update webhook
+      description: Updates an existing webhook configuration
+      operationId: updateWebhook
+      tags:
+        - Webhooks
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/webhookId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookPatch'
+      responses:
+        '200':
+          description: Webhook updated successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    delete:
+      summary: Delete webhook
+      description: Deletes a webhook subscription
+      operationId: deleteWebhook
+      tags:
+        - Webhooks
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/webhookId'
+      responses:
+        '200':
+          description: Webhook deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /docs/{docId}/webhooks/queue:
+    delete:
+      summary: Clear all webhook queues
+      description: Clears the event queue for all webhooks in this document
+      operationId: clearAllWebhookQueues
+      tags:
+        - Webhooks
+      parameters:
+        - $ref: '#/components/parameters/docId'
+      responses:
+        '200':
+          description: All webhook queues cleared
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /docs/{docId}/webhooks/queue/{webhookId}:
+    delete:
+      summary: Clear webhook queue
+      description: Clears the event queue for a specific webhook
+      operationId: clearWebhookQueue
+      tags:
+        - Webhooks
+      parameters:
+        - $ref: '#/components/parameters/docId'
+        - $ref: '#/components/parameters/webhookId'
+      responses:
+        '200':
+          description: Webhook queue cleared
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+components:
+  # =============================================================================
+  # Security Schemes
+  # =============================================================================
+
+  securitySchemes:
+    ApiKey:
+      type: http
+      scheme: bearer
+      bearerFormat: API Key
+      description: |
+        API key authentication. Generate an API key from your Grist profile settings
+        at https://docs.getgrist.com/account and include it in the Authorization header
+        as `Bearer YOUR_API_KEY`.
+
+  # =============================================================================
+  # Reusable Parameters
+  # =============================================================================
+
+  parameters:
+    docId:
+      name: docId
+      in: path
+      required: true
+      description: Document ID
+      schema:
+        type: string
+
+    orgId:
+      name: orgId
+      in: path
+      required: true
+      description: Organization ID (numeric ID or string identifier)
+      schema:
+        oneOf:
+          - type: integer
+          - type: string
+
+    workspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      description: Workspace ID
+      schema:
+        type: integer
+
+    tableId:
+      name: tableId
+      in: path
+      required: true
+      description: Table ID
+      schema:
+        type: string
+
+    colId:
+      name: colId
+      in: path
+      required: true
+      description: Column ID
+      schema:
+        type: string
+
+    attId:
+      name: attId
+      in: path
+      required: true
+      description: Attachment ID (row ID from _grist_Attachments table)
+      schema:
+        type: integer
+
+    webhookId:
+      name: webhookId
+      in: path
+      required: true
+      description: Webhook ID
+      schema:
+        type: string
+
+    filter:
+      name: filter
+      in: query
+      description: |
+        Filter records by column values. JSON object mapping column IDs to arrays of values.
+        Example: `{"Status": ["Active"], "Department": ["Sales", "Marketing"]}`
+      schema:
+        type: string
+        format: json
+
+    sort:
+      name: sort
+      in: query
+      description: |
+        Sort order for results. Array of column IDs, prefix with "-" for descending.
+        Example: `["-CreatedAt", "Name"]`
+      schema:
+        type: array
+        items:
+          type: string
+
+    limit:
+      name: limit
+      in: query
+      description: Maximum number of records to return
+      schema:
+        type: integer
+        minimum: 1
+
+    noparse:
+      name: noparse
+      in: query
+      description: If true, string values are not parsed based on column type
+      schema:
+        type: boolean
+        default: false
+
+    noadd:
+      name: noadd
+      in: query
+      description: If true, prevents adding new records in upsert operations
+      schema:
+        type: boolean
+        default: false
+
+    noupdate:
+      name: noupdate
+      in: query
+      description: If true, prevents updating existing records in upsert operations
+      schema:
+        type: boolean
+        default: false
+
+    onmany:
+      name: onmany
+      in: query
+      description: |
+        How to handle multiple matches in upsert operations:
+        - "first": Update only the first match
+        - "none": Error if multiple matches
+        - "all": Update all matches
+      schema:
+        type: string
+        enum: [first, none, all]
+        default: first
+
+    allow_empty_require:
+      name: allow_empty_require
+      in: query
+      description: If true, allows empty require fields in upsert operations
+      schema:
+        type: boolean
+        default: false
+
+  # =============================================================================
+  # Schemas
+  # =============================================================================
+
+  schemas:
+    # -------------------------------------------------------------------------
+    # CellValue - Core Data Type
+    # -------------------------------------------------------------------------
+
+    CellValue:
+      description: |
+        A cell value in Grist can be a primitive or a Grist object encoded as an array.
+
+        **Primitive values:**
+        - `null` - Empty cell
+        - `boolean` - True/false
+        - `number` - Numeric value
+        - `string` - Text value
+
+        **Grist object encoding:**
+        Grist objects are encoded as arrays where the first element is a single-character code:
+
+        | Code | Type | Format | Example |
+        |------|------|--------|---------|
+        | `L` | List | `["L", item1, item2, ...]` | `["L", "apple", "banana"]` |
+        | `l` | LookUp | `["l", value, options]` | `["l", 42, {...}]` |
+        | `O` | Dict | `["O", {key: value, ...}]` | `["O", {"name": "John"}]` |
+        | `D` | DateTime | `["D", timestamp, timezone]` | `["D", 1704945919, "America/New_York"]` |
+        | `d` | Date | `["d", timestamp]` | `["d", 1704844800]` |
+        | `C` | Censored | `["C"]` | `["C"]` (hidden value) |
+        | `R` | Reference | `["R", table_id, row_id]` | `["R", "People", 17]` |
+        | `r` | ReferenceList | `["r", table_id, [row_ids]]` | `["r", "People", [1, 2, 3]]` |
+        | `E` | Exception | `["E", error_type, ...]` | `["E", "ValueError", "Invalid input"]` |
+        | `P` | Pending | `["P"]` | `["P"]` (calculation pending) |
+        | `U` | Unmarshallable | `["U", text_repr]` | `["U", "<unprintable>"]` |
+        | `V` | Versions | `["V", version_obj]` | `["V", {...}]` |
+
+        **DateTime encoding:**
+        - Timestamps are in seconds since Unix epoch (not milliseconds)
+        - Timezone is a standard IANA timezone name
+
+        **Reference encoding:**
+        - References point to rows in other tables
+        - ReferenceList contains an array of row IDs
+      oneOf:
+        - type: 'null'
+        - type: boolean
+        - type: number
+        - type: string
+        - type: array
+          items: {}
+          description: Grist object encoded as [code, ...args]
+
+    # -------------------------------------------------------------------------
+    # Record Schemas
+    # -------------------------------------------------------------------------
+
+    NewRecord:
+      type: object
+      description: A new record to be created (without ID)
+      properties:
+        fields:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CellValue'
+          description: Map of column IDs to cell values
+
+    Record:
+      type: object
+      required:
+        - id
+        - fields
+      description: An existing record with ID and fields
+      properties:
+        id:
+          type: integer
+          description: Record ID (row ID)
+        fields:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CellValue'
+          description: Map of column IDs to cell values
+
+    AddOrUpdateRecord:
+      type: object
+      required:
+        - require
+      description: Record for upsert operations
+      properties:
+        require:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CellValue'
+          description: |
+            Fields to match against existing records. If a record with these values exists,
+            it will be updated. Otherwise, a new record will be created.
+            Can include 'id' to match by row ID.
+        fields:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CellValue'
+          description: Fields to update in matched record or set in new record
+
+    RecordsPost:
+      type: object
+      required:
+        - records
+      description: Request body for adding records
+      properties:
+        records:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/NewRecord'
+
+    RecordsPatch:
+      type: object
+      required:
+        - records
+      description: Request body for updating records
+      properties:
+        records:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/Record'
+
+    RecordsPut:
+      type: object
+      required:
+        - records
+      description: Request body for upserting records
+      properties:
+        records:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/AddOrUpdateRecord'
+
+    RecordsList:
+      type: object
+      description: List of records returned by the API
+      properties:
+        records:
+          type: array
+          items:
+            $ref: '#/components/schemas/Record'
+
+    # -------------------------------------------------------------------------
+    # Table Data Schemas
+    # -------------------------------------------------------------------------
+
+    TableColValues:
+      type: object
+      required:
+        - id
+      description: |
+        Table data in column-oriented format. Each property is a column,
+        and its value is an array of cell values. The 'id' column contains row IDs.
+      properties:
+        id:
+          type: array
+          items:
+            type: integer
+          description: Array of row IDs
+      additionalProperties:
+        type: array
+        items:
+          $ref: '#/components/schemas/CellValue'
+        description: Array of cell values for this column
+
+    BulkColValues:
+      type: object
+      description: |
+        Bulk column values for adding records (without IDs).
+        Each property is a column ID, and its value is an array of cell values.
+      additionalProperties:
+        type: array
+        items:
+          $ref: '#/components/schemas/CellValue'
+
+    TableInfo:
+      type: object
+      description: Basic information about a table
+      properties:
+        id:
+          type: string
+          description: Table ID
+        fields:
+          type: object
+          description: Table metadata fields
+
+    # -------------------------------------------------------------------------
+    # Column Schemas
+    # -------------------------------------------------------------------------
+
+    NewRecordWithStringId:
+      type: object
+      description: A new column or table with optional string ID
+      properties:
+        id:
+          type: string
+          description: Column or table ID
+        fields:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CellValue'
+          description: Metadata fields
+
+    RecordWithStringId:
+      type: object
+      required:
+        - id
+        - fields
+      description: An existing column or table with string ID
+      properties:
+        id:
+          type: string
+          description: Column or table ID
+        fields:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/CellValue'
+          description: Metadata fields
+
+    ColumnsPost:
+      type: object
+      required:
+        - columns
+      description: Request body for creating columns
+      properties:
+        columns:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/NewRecordWithStringId'
+
+    ColumnsPatch:
+      type: object
+      required:
+        - columns
+      description: Request body for updating columns
+      properties:
+        columns:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RecordWithStringId'
+
+    ColumnsPut:
+      type: object
+      required:
+        - columns
+      description: Request body for upserting columns
+      properties:
+        columns:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RecordWithStringId'
+
+    ColumnsList:
+      type: object
+      description: List of columns
+      properties:
+        columns:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecordWithStringId'
+
+    # -------------------------------------------------------------------------
+    # Table Schemas
+    # -------------------------------------------------------------------------
+
+    TablePost:
+      type: object
+      required:
+        - columns
+      description: New table definition
+      properties:
+        id:
+          type: string
+          description: Table ID
+        columns:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/NewRecordWithStringId'
+
+    TablesPost:
+      type: object
+      required:
+        - tables
+      description: Request body for creating tables
+      properties:
+        tables:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/TablePost'
+
+    TablesPatch:
+      type: object
+      required:
+        - tables
+      description: Request body for updating tables
+      properties:
+        tables:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/RecordWithStringId'
+
+    # -------------------------------------------------------------------------
+    # User Actions
+    # -------------------------------------------------------------------------
+
+    UserAction:
+      type: array
+      description: |
+        A user action is an array where the first element is the action name,
+        followed by action-specific parameters.
+
+        Common actions:
+        - `["AddTable", tableId, columns]`
+        - `["RemoveTable", tableId]`
+        - `["RenameTable", oldTableId, newTableId]`
+        - `["AddColumn", tableId, colId, colInfo]`
+        - `["RemoveColumn", tableId, colId]`
+        - `["RenameColumn", tableId, oldColId, newColId]`
+        - `["ModifyColumn", tableId, colId, colInfo]`
+        - `["AddRecord", tableId, recordId, columnValues]`
+        - `["UpdateRecord", tableId, recordId, columnValues]`
+        - `["RemoveRecord", tableId, recordId]`
+        - `["BulkAddRecord", tableId, recordIds, columnValues]`
+        - `["BulkUpdateRecord", tableId, recordIds, columnValues]`
+        - `["BulkRemoveRecord", tableId, recordIds]`
+      items: {}
+      minItems: 1
+
+    ApplyUAResult:
+      type: object
+      description: Result of applying user actions
+      properties:
+        actionNum:
+          type: integer
+          description: Action number in the document history
+        actionHash:
+          type: string
+          nullable: true
+          description: Hash of the applied action
+        retValues:
+          type: array
+          items: {}
+          description: Return values from each applied action
+        isModification:
+          type: boolean
+          description: True if the document was modified
+
+    # -------------------------------------------------------------------------
+    # SQL Query
+    # -------------------------------------------------------------------------
+
+    SqlPost:
+      type: object
+      required:
+        - sql
+      description: SQL query request body
+      properties:
+        sql:
+          type: string
+          description: SQL query to execute
+        args:
+          type: array
+          items: {}
+          nullable: true
+          description: Query parameters (positional)
+        timeout:
+          type: integer
+          description: Query timeout in milliseconds
+
+    SqlResult:
+      type: object
+      description: SQL query result
+      properties:
+        statement:
+          type: string
+          description: The executed SQL statement
+      additionalProperties:
+        type: array
+        items:
+          $ref: '#/components/schemas/CellValue'
+        description: Result columns (same format as TableColValues)
+
+    # -------------------------------------------------------------------------
+    # Webhooks
+    # -------------------------------------------------------------------------
+
+    WebhookFields:
+      type: object
+      required:
+        - url
+        - eventTypes
+        - tableId
+      description: Webhook configuration
+      properties:
+        url:
+          type: string
+          format: uri
+          description: URL to send webhook events to
+        authorization:
+          type: string
+          description: Optional Authorization header value
+        eventTypes:
+          type: array
+          items:
+            type: string
+            enum: [add, update]
+          description: Events to trigger the webhook
+        tableId:
+          type: string
+          description: Table to watch for changes
+        watchedColIds:
+          type: array
+          items:
+            type: string
+          description: Specific columns to watch (all if not specified)
+        enabled:
+          type: boolean
+          default: true
+          description: Whether the webhook is enabled
+        isReadyColumn:
+          type: string
+          nullable: true
+          description: Column to check before sending events
+        name:
+          type: string
+          description: Human-readable webhook name
+        memo:
+          type: string
+          description: Notes about the webhook
+
+    WebhookPatch:
+      type: object
+      description: Partial webhook update
+      properties:
+        url:
+          type: string
+          format: uri
+        authorization:
+          type: string
+        eventTypes:
+          type: array
+          items:
+            type: string
+            enum: [add, update]
+        tableId:
+          type: string
+        watchedColIds:
+          type: array
+          items:
+            type: string
+        enabled:
+          type: boolean
+        isReadyColumn:
+          type: string
+          nullable: true
+        name:
+          type: string
+        memo:
+          type: string
+
+    WebhookSummary:
+      type: object
+      description: Webhook summary with status and usage
+      properties:
+        id:
+          type: string
+          description: Webhook ID
+        fields:
+          allOf:
+            - $ref: '#/components/schemas/WebhookFields'
+            - type: object
+              properties:
+                unsubscribeKey:
+                  type: string
+                  description: Key for unsubscribing
+        usage:
+          $ref: '#/components/schemas/WebhookUsage'
+          nullable: true
+
+    WebhookUsage:
+      type: object
+      description: Webhook usage and status information
+      properties:
+        numWaiting:
+          type: integer
+          description: Number of events waiting to be sent
+        status:
+          type: string
+          enum: [idle, sending, retrying, postponed, error, invalid]
+          description: Current webhook status
+        updatedTime:
+          type: integer
+          nullable: true
+          description: Last update timestamp
+        lastSuccessTime:
+          type: integer
+          nullable: true
+          description: Last successful delivery timestamp
+        lastFailureTime:
+          type: integer
+          nullable: true
+          description: Last failure timestamp
+        lastErrorMessage:
+          type: string
+          nullable: true
+          description: Last error message
+        lastHttpStatus:
+          type: integer
+          nullable: true
+          description: Last HTTP status code
+
+    WebhookSummaryCollection:
+      type: object
+      description: Collection of webhook summaries
+      properties:
+        webhooks:
+          type: array
+          items:
+            $ref: '#/components/schemas/WebhookSummary'
+
+    # -------------------------------------------------------------------------
+    # Organizations, Workspaces, Documents
+    # -------------------------------------------------------------------------
+
+    CommonProperties:
+      type: object
+      description: Properties shared by organizations, workspaces, and documents
+      properties:
+        name:
+          type: string
+          description: Resource name
+        createdAt:
+          type: string
+          format: date-time
+          description: Creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          description: Last update timestamp
+        removedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Deletion timestamp (for soft-deleted resources)
+        public:
+          type: boolean
+          description: Whether the resource is publicly accessible
+
+    OrganizationProperties:
+      allOf:
+        - $ref: '#/components/schemas/CommonProperties'
+        - type: object
+          properties:
+            domain:
+              type: string
+              nullable: true
+              description: Organization domain
+
+    Organization:
+      allOf:
+        - $ref: '#/components/schemas/OrganizationProperties'
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              type: integer
+              description: Organization ID
+            access:
+              type: string
+              enum: [owners, editors, viewers]
+              description: Current user's access level
+            owner:
+              $ref: '#/components/schemas/FullUser'
+              nullable: true
+              description: Organization owner (for personal orgs)
+
+    WorkspaceProperties:
+      $ref: '#/components/schemas/CommonProperties'
+
+    Workspace:
+      allOf:
+        - $ref: '#/components/schemas/WorkspaceProperties'
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              type: integer
+              description: Workspace ID
+            access:
+              type: string
+              enum: [owners, editors, viewers]
+              description: Current user's access level
+            docs:
+              type: array
+              items:
+                $ref: '#/components/schemas/Document'
+              description: Documents in the workspace
+
+    DocumentProperties:
+      allOf:
+        - $ref: '#/components/schemas/CommonProperties'
+        - type: object
+          properties:
+            isPinned:
+              type: boolean
+              description: Whether the document is pinned
+            urlId:
+              type: string
+              nullable: true
+              description: URL-friendly document ID
+            type:
+              type: string
+              nullable: true
+              enum: [null, template, tutorial]
+              description: Document type
+
+    Document:
+      allOf:
+        - $ref: '#/components/schemas/DocumentProperties'
+        - type: object
+          required:
+            - id
+          properties:
+            id:
+              type: string
+              description: Document ID
+            access:
+              type: string
+              enum: [owners, editors, viewers]
+              description: Current user's access level
+
+    FullUser:
+      type: object
+      description: User information
+      properties:
+        id:
+          type: integer
+          description: User ID
+        email:
+          type: string
+          format: email
+          description: User email
+        name:
+          type: string
+          description: User name
+        picture:
+          type: string
+          format: uri
+          nullable: true
+          description: User profile picture URL
+
+    # -------------------------------------------------------------------------
+    # Permissions
+    # -------------------------------------------------------------------------
+
+    PermissionDelta:
+      type: object
+      description: Changes to apply to permissions
+      properties:
+        maxInheritedRole:
+          type: string
+          enum: [owners, editors, viewers]
+          nullable: true
+          description: Maximum role that can be inherited
+        users:
+          type: object
+          additionalProperties:
+            type: string
+            enum: [owners, editors, viewers]
+            nullable: true
+          description: Map of email to role (null to remove)
+
+    PermissionData:
+      type: object
+      description: Permission information for a resource
+      properties:
+        personal:
+          type: boolean
+          description: True if restricted to current user
+        public:
+          type: boolean
+          description: True if current user is a public member
+        maxInheritedRole:
+          type: string
+          enum: [owners, editors, viewers]
+          nullable: true
+          description: Maximum inheritable role
+        users:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserAccessData'
+          description: Users with access
+
+    UserAccessData:
+      type: object
+      description: User access information
+      properties:
+        id:
+          type: integer
+          description: User ID
+        name:
+          type: string
+          description: User name
+        email:
+          type: string
+          format: email
+          description: User email
+        access:
+          type: string
+          enum: [owners, editors, viewers]
+          nullable: true
+          description: User's direct access level
+        parentAccess:
+          type: string
+          enum: [owners, editors, viewers]
+          nullable: true
+          description: User's inherited access level
+
+    # -------------------------------------------------------------------------
+    # Attachments
+    # -------------------------------------------------------------------------
+
+    AttachmentMetadata:
+      type: object
+      description: Attachment metadata from _grist_Attachments table
+      properties:
+        id:
+          type: integer
+          description: Attachment row ID
+        fields:
+          type: object
+          properties:
+            fileName:
+              type: string
+              description: Original filename
+            fileSize:
+              type: integer
+              description: File size in bytes
+            fileType:
+              type: string
+              description: MIME type
+            timeUploaded:
+              type: number
+              description: Upload timestamp
+
+    # -------------------------------------------------------------------------
+    # Usage
+    # -------------------------------------------------------------------------
+
+    OrgUsageSummary:
+      type: object
+      description: Organization usage summary
+      properties:
+        rows:
+          type: integer
+          description: Total number of rows across all documents
+        docs:
+          type: integer
+          description: Total number of documents
+        attachmentSize:
+          type: integer
+          description: Total attachment size in bytes
+
+  # =============================================================================
+  # Reusable Responses
+  # =============================================================================
+
+  responses:
+    Unauthorized:
+      description: Authentication required or invalid API key
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Unauthorized
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: Resource not found
+
+tags:
+  - name: Organizations
+    description: Organization management endpoints
+  - name: Workspaces
+    description: Workspace management endpoints
+  - name: Documents
+    description: Document management endpoints
+  - name: Tables
+    description: Table operations (column-oriented format)
+  - name: Records
+    description: Record operations (record-oriented format)
+  - name: Columns
+    description: Column schema operations
+  - name: User Actions
+    description: Low-level document modification operations
+  - name: SQL
+    description: SQL query interface
+  - name: Attachments
+    description: File attachment operations
+  - name: Webhooks
+    description: Webhook subscription management
+  - name: Access Control
+    description: Permission management

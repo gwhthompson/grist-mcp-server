@@ -1,0 +1,335 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, master, develop]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [main, master, develop]
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  # ========================================
+  # Version Synchronization Check
+  # ========================================
+  version-sync-check:
+    name: Version Sync Check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Check version consistency
+        run: |
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+
+          echo "📦 package.json version: $PACKAGE_VERSION"
+          echo "📋 manifest.json version: $MANIFEST_VERSION"
+
+          if [ "$PACKAGE_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "❌ ERROR: Version mismatch detected!"
+            echo "   package.json: $PACKAGE_VERSION"
+            echo "   manifest.json: $MANIFEST_VERSION"
+            echo ""
+            echo "💡 Fix: Update both versions to match before committing."
+            echo "   See CLAUDE.md for release checklist."
+            exit 1
+          fi
+
+          echo "✅ Version sync check passed: $PACKAGE_VERSION"
+
+  # ========================================
+  # Lint and Type Check
+  # ========================================
+  lint-and-typecheck:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    needs: version-sync-check
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Biome linting
+        run: npm run lint
+
+      - name: Run TypeScript type checking
+        run: npx tsc --noEmit
+
+      - name: Build project
+        run: npm run build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: dist/
+          retention-days: 7
+
+  # ========================================
+  # Unit Tests (Fast, No Docker)
+  # ========================================
+  test-unit:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm run test:unit
+
+  # ========================================
+  # Integration Tests (Docker via Vitest globalSetup)
+  # ========================================
+  test-integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run integration tests
+        run: npm run test:integration
+
+  # ========================================
+  # Contract Tests (Docker via Vitest globalSetup)
+  # ========================================
+  contract-tests:
+    name: Contract Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-typecheck
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run contract tests
+        run: npm run test:contract
+
+  # ========================================
+  # Bundle and Package (MCPB)
+  # ========================================
+  bundle-and-package:
+    name: Bundle & Package
+    runs-on: ubuntu-latest
+    needs: [test-unit, test-integration, contract-tests]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build project
+        run: npm run build
+
+      - name: Install production dependencies only
+        run: npm ci --omit=dev
+
+      - name: Create MCPB bundle
+        run: npx @anthropic-ai/mcpb pack
+
+      - name: Verify bundle was created
+        run: |
+          if [ ! -f grist-mcp-server.mcpb ]; then
+            echo "❌ ERROR: MCPB bundle was not created!"
+            exit 1
+          fi
+
+          BUNDLE_SIZE=$(du -h grist-mcp-server.mcpb | cut -f1)
+          echo "✅ MCPB bundle created successfully"
+          echo "📦 Bundle size: $BUNDLE_SIZE"
+          ls -lh grist-mcp-server.mcpb
+
+      - name: Upload MCPB bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcpb-bundle
+          path: grist-mcp-server.mcpb
+          retention-days: 30
+
+  # ========================================
+  # Quality Gates (Final Verification)
+  # ========================================
+  quality-gates:
+    name: Quality Gates
+    runs-on: ubuntu-latest
+    needs: [test-unit, test-integration, contract-tests, bundle-and-package]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Download MCPB bundle
+        uses: actions/download-artifact@v5
+        with:
+          name: mcpb-bundle
+
+      - name: Extract version info
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📌 Version: $VERSION"
+        id: version
+
+      - name: Quality gate summary
+        run: |
+          echo "## ✅ All Quality Gates Passed!"
+          echo ""
+          echo "### Build Information"
+          echo "- **Version:** ${{ steps.version.outputs.version }}"
+          echo "- **Node Version:** ${{ env.NODE_VERSION }}"
+          echo "- **Commit:** ${{ github.sha }}"
+          echo "- **Branch:** ${{ github.ref_name }}"
+          echo ""
+          echo "### Completed Checks"
+          echo "- ✅ Version synchronization (package.json ↔ manifest.json)"
+          echo "- ✅ Biome linting and formatting"
+          echo "- ✅ TypeScript type checking"
+          echo "- ✅ Build compilation"
+          echo "- ✅ Unit tests"
+          echo "- ✅ Integration tests (Docker)"
+          echo "- ✅ Contract tests (Grist API compatibility)"
+          echo "- ✅ MCPB bundle generation"
+          echo ""
+          echo "### Artifacts"
+          echo "- 📦 MCPB Bundle: \`grist-mcp-server.mcpb\`"
+          echo "- 📁 Build Output: \`dist/\`"
+          echo ""
+          echo "**Ready for deployment!** 🚀"
+
+  # ========================================
+  # Automated Release (Tag-triggered)
+  # ========================================
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [quality-gates]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Download MCPB bundle
+        uses: actions/download-artifact@v5
+        with:
+          name: mcpb-bundle
+
+      - name: Extract version from tag
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "📌 Release version: $VERSION"
+        id: version
+
+      - name: Extract changelog for this version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+
+          if [ -f docs/CHANGELOG.md ]; then
+            # Extract changelog section for this version
+            awk "/## \[$VERSION\]/,/## \[/" docs/CHANGELOG.md | grep -v "^## \[" | tail -n +1 > release-notes.md
+
+            if [ -s release-notes.md ]; then
+              echo "✅ Extracted changelog for version $VERSION"
+              cat release-notes.md
+            else
+              echo "⚠️ No changelog entry found for version $VERSION"
+              echo "Release for Grist MCP Server v$VERSION" > release-notes.md
+            fi
+          else
+            echo "⚠️ CHANGELOG.md not found"
+            echo "Release for Grist MCP Server v$VERSION" > release-notes.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: v${{ steps.version.outputs.version }}
+          body_path: release-notes.md
+          files: |
+            grist-mcp-server.mcpb
+          draft: false
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Release summary
+        run: |
+          echo "## 🎉 Release Created Successfully!"
+          echo ""
+          echo "- **Version:** v${{ steps.version.outputs.version }}"
+          echo "- **Tag:** ${{ github.ref_name }}"
+          echo "- **Bundle:** grist-mcp-server.mcpb"
+          echo ""
+          echo "🔗 View release: ${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ github.ref_name }}"

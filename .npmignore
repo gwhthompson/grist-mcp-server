@@ -1,0 +1,30 @@
+# Source and config
+src/
+scripts/
+tsconfig.json
+biome.json
+vitest.config.ts
+
+# Claude Code
+.claude/
+CLAUDE.md
+
+# GitHub
+.github/
+.husky/
+
+# Tests
+tests/
+
+# MCPB bundle
+manifest.json
+.mcpbignore
+*.mcpb
+
+# Development
+.gitignore
+.mcp.json
+*.grist
+logs/
+inspector-config.json
+tsconfig.tsbuildinfo

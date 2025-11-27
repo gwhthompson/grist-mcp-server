@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "grist-mcp-server",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "display_name": "Grist Database Integration",
   "description": "22 tools for managing Grist documents with AI",
   "long_description": "Read and write tables, records, pages, and widgets. Works with Grist Cloud or self-hosted instances.",
@@ -21,12 +21,12 @@
     "automation",
     "productivity"
   ],
-  "homepage": "https://github.com/yourusername/grist-mcp-server",
+  "homepage": "https://github.com/gwhthompson/grist-mcp-server",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourusername/grist-mcp-server.git"
+    "url": "https://github.com/gwhthompson/grist-mcp-server.git"
   },
-  "documentation": "https://github.com/yourusername/grist-mcp-server#readme",
+  "documentation": "https://github.com/gwhthompson/grist-mcp-server#readme",
   "server": {
     "type": "node",
     "entry_point": "dist/index.js",

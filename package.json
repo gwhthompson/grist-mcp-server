@@ -1,7 +1,11 @@
 {
   "name": "grist-mcp-server",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "22 tools for managing Grist documents with AI",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gwhthompson/grist-mcp-server.git"
+  },
   "type": "module",
   "main": "dist/index.js",
   "bin": {

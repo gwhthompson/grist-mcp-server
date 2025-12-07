@@ -1193,7 +1193,9 @@ describe('visibleCol - Column Name Resolution', () => {
       })
 
       // Tool should return error response (not throw)
-      expect(result).toHaveErrorResponse(/visibleCol must be set at the operation level, not inside widgetOptions/i)
+      expect(result).toHaveErrorResponse(
+        /visibleCol must be set at the operation level, not inside widgetOptions/i
+      )
       expect(result.structuredContent.success).toBe(false)
 
       console.log('✓ visibleCol in widgetOptions is rejected with actionable error')

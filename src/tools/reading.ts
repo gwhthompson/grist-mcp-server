@@ -14,6 +14,7 @@ import {
   ResponseFormatSchema,
   TableIdSchema
 } from '../schemas/common.js'
+import { GetRecordsOutputSchema, QuerySqlOutputSchema } from '../schemas/output-schemas.js'
 import { truncateIfNeeded } from '../services/formatter.js'
 import type { CellValue, RecordsResponse, SQLQueryResponse } from '../types.js'
 import { GristTool } from './base/GristTool.js'
@@ -351,11 +352,11 @@ export const READING_TOOLS: ReadonlyArray<ToolDefinition> = [
     description: `Execute SQL for JOINs, aggregations, complex filtering.
 NOT FOR: Simple single-table queries -> use grist_get_records
 Params: docId, sql, parameters (? placeholders)
-Ex: {sql:"SELECT Region,AVG(Sales) FROM Data GROUP BY Region"}
-->grist_help`,
+Ex: {sql:"SELECT Region,AVG(Sales) FROM Data GROUP BY Region"}`,
     purpose: 'Run SQL queries with JOINs and aggregations',
     category: 'reading',
     inputSchema: QuerySQLSchema,
+    outputSchema: QuerySqlOutputSchema,
     annotations: SLOW_READ_ANNOTATIONS,
     handler: querySql,
     docs: {
@@ -397,11 +398,11 @@ Ex: {sql:"SELECT Region,AVG(Sales) FROM Data GROUP BY Region"}
     description: `Fetch records with filters (no SQL needed).
 NOT FOR: JOINs, aggregations -> use grist_query_sql
 Params: docId, tableId, filters, columns, limit, offset
-Ex: {tableId:"Contacts",filters:{"Status":"Active"}}
-->grist_help`,
+Ex: {tableId:"Contacts",filters:{"Status":"Active"}}`,
     purpose: 'Fetch records with filters',
     category: 'reading',
     inputSchema: GetRecordsSchema,
+    outputSchema: GetRecordsOutputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
     handler: getRecords,
     docs: {

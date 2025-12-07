@@ -13,11 +13,7 @@ import type { ApplyResponse, SQLQueryResponse } from '../../types.js'
 import { extractFields } from '../../utils/grist-field-extractor.js'
 import { validateRetValues } from '../../validators/apply-response.js'
 import type { GristClient } from '../grist-client.js'
-import {
-  encodeGristList,
-  parseGristJson,
-  parseGristList
-} from '../rule-utilities.js'
+import { encodeGristList, parseGristJson, parseGristList } from '../rule-utilities.js'
 import { RuleOwner } from './rule-owner.js'
 import type {
   OwnerLookupParams,
@@ -64,8 +60,7 @@ export class RowRuleOwner extends RuleOwner {
 
     if (response.records.length === 0) {
       throw new Error(
-        `Table "${params.tableId}" not found. ` +
-          `Use grist_get_tables to list available tables.`
+        `Table "${params.tableId}" not found. Use grist_get_tables to list available tables.`
       )
     }
 
@@ -186,9 +181,6 @@ export class RowRuleOwner extends RuleOwner {
       return {}
     }
 
-    return parseGristJson<Record<string, unknown>>(
-      extractFields(response.records[0]).options,
-      {}
-    )
+    return parseGristJson<Record<string, unknown>>(extractFields(response.records[0]).options, {})
   }
 }

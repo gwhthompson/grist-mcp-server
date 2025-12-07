@@ -5,6 +5,7 @@ import {
   WRITE_SAFE_ANNOTATIONS
 } from '../../registry/types.js'
 import { ApplyResponseSchema } from '../../schemas/api-responses.js'
+import { ConfigureWidgetOutputSchema } from '../../schemas/output-schemas.js'
 import {
   type ConfigureWidgetInput,
   ConfigureWidgetSchema,
@@ -537,11 +538,11 @@ export const CONFIGURE_WIDGET_DEFINITION: ToolDefinition = {
     'Modify widgets on existing pages.\n' +
     'Actions: add, modify, link, sort, filter, delete\n' +
     'Params: docId, operations (array)\n' +
-    'Ex: {operations:[{action:"link",page_name:"Dashboard",target_widget:"Orders",link_config:{source_widget:"Customers",target_col:"CustomerRef"}}]}\n' +
-    '->grist_help',
+    'Ex: {operations:[{action:"link",page_name:"Dashboard",target_widget:"Orders",link_config:{source_widget:"Customers",target_col:"CustomerRef"}}]}',
   purpose: 'Configure widget properties, linking, sorting, and filtering',
   category: 'document_structure',
   inputSchema: ConfigureWidgetSchema,
+  outputSchema: ConfigureWidgetOutputSchema,
   annotations: WRITE_SAFE_ANNOTATIONS,
   handler: configureWidget,
   docs: {

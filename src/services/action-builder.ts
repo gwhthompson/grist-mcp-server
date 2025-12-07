@@ -293,7 +293,10 @@ export function buildRenameColumnAction(
 }
 
 /** Builds an AddTable action for creating a new table. */
-export function buildAddTableAction(tableName: TableId, columns: ColumnDefinition[]): AddTableAction {
+export function buildAddTableAction(
+  tableName: TableId,
+  columns: ColumnDefinition[]
+): AddTableAction {
   const processedColumns = columns.map((col) => {
     const { colId, widgetOptions, type, ...rest } = col
 

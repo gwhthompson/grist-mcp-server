@@ -1,7 +1,10 @@
 import { z } from 'zod'
+import { log } from '../utils/shared-logger.js'
 import { WidgetOptionsSchema, WidgetOptionsStringSchema } from './widget-options.js'
 
-const _GRIST_OBJ_CODES = ['L', 'l', 'O', 'D', 'd', 'S', 'C', 'R', 'r', 'E', 'P', 'U', 'V'] as const
+const KNOWN_OBJ_CODES = new Set(['L', 'l', 'O', 'D', 'd', 'S', 'C', 'R', 'r', 'E', 'P', 'U', 'V'])
+// Track unknown codes we've warned about (avoid log spam)
+const warnedCellValueCodes = new Set<string>()
 
 // Idempotent: encoded values pass through unchanged
 function preprocessCellValue(val: unknown): unknown {
@@ -79,6 +82,18 @@ export function decodeCellValue(val: unknown): unknown {
       return new Date(val[1] * 1000).toISOString()
     }
     if (first === 'O' && val.length === 2 && typeof val[1] === 'object') return val[1]
+
+    // Graceful degradation: warn about unknown codes but return raw value
+    if (typeof first === 'string' && first.length === 1 && !KNOWN_OBJ_CODES.has(first)) {
+      if (!warnedCellValueCodes.has(first)) {
+        warnedCellValueCodes.add(first)
+        log.warn('Unknown CellValue encoding code encountered, returning raw value', {
+          code: first,
+          value: JSON.stringify(val),
+          hint: 'This may indicate a new Grist encoding type. The raw value will be passed through.'
+        })
+      }
+    }
   }
 
   return val

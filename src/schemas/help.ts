@@ -1,40 +1,9 @@
 import { z } from 'zod'
 import { ResponseFormatSchema } from './common.js'
+// TOOL_NAMES is auto-generated from ALL_TOOLS at build time
+import { TOOL_NAMES, type ToolName } from './tool-names.generated.js'
 
-export const TOOL_NAMES = [
-  // Discovery tools
-  'grist_get_workspaces',
-  'grist_get_documents',
-  'grist_get_tables',
-  // Reading tools
-  'grist_query_sql',
-  'grist_get_records',
-  // Record tools
-  'grist_add_records',
-  'grist_update_records',
-  'grist_upsert_records',
-  'grist_delete_records',
-  // Table tools
-  'grist_create_table',
-  'grist_rename_table',
-  'grist_delete_table',
-  // Column tools
-  'grist_manage_columns',
-  'grist_manage_conditional_rules',
-  // Summary table tools
-  'grist_create_summary_table',
-  // Page tools
-  'grist_get_pages',
-  'grist_build_page',
-  'grist_configure_widget',
-  'grist_update_page',
-  // Document tools
-  'grist_create_document',
-  // Webhook tools
-  'grist_manage_webhooks'
-] as const
-
-export type ToolName = (typeof TOOL_NAMES)[number]
+export { TOOL_NAMES, type ToolName }
 
 export const HELP_TOPICS = ['overview', 'examples', 'errors', 'parameters', 'full'] as const
 

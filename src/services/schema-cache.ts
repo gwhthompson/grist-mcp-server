@@ -196,7 +196,6 @@ export class SchemaCache {
     }
   }
 
-  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: Called in constructor
   private startAutoCleanup(): void {
     this.cleanupTimer = setInterval(() => {
       this.pruneExpired()

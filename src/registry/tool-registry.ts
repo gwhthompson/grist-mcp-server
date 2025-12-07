@@ -7,6 +7,7 @@ interface McpToolOptions {
   readonly title: string
   readonly description: string
   readonly inputSchema: z.ZodRawShape
+  readonly outputSchema?: z.ZodRawShape
   readonly annotations?: {
     readonly readOnlyHint?: boolean
     readonly destructiveHint?: boolean
@@ -51,6 +52,9 @@ export async function registerTool<TSchema extends z.ZodTypeAny>(
       title: definition.title,
       description: definition.description,
       inputSchema: definition.inputSchema as unknown as z.ZodRawShape,
+      ...(definition.outputSchema && {
+        outputSchema: definition.outputSchema as unknown as z.ZodRawShape
+      }),
       annotations: definition.annotations
     }
 

@@ -16,6 +16,7 @@ import {
   isFieldScope,
   isRowScope
 } from '../schemas/conditional-rules.js'
+import { ManageConditionalRulesOutputSchema } from '../schemas/output-schemas.js'
 import {
   ConditionalFormattingService,
   type OwnerLookupParams,
@@ -263,11 +264,11 @@ export const CONDITIONAL_TOOLS: ReadonlyArray<ToolDefinition> = [
       'Add, update, remove, or list conditional formatting rules.\n' +
       'Scopes: column (all views), row (entire rows), field (specific widget).\n' +
       'Formulas: Python syntax with $ColumnName. Colors: hex #RRGGBB.\n' +
-      'Ex: {scope:"column",colId:"Price",operation:{action:"add",rule:{formula:"$Price>1000",style:{fillColor:"#FF0000"}}}}\n' +
-      '->grist_help',
+      'Ex: {scope:"column",colId:"Price",operation:{action:"add",rule:{formula:"$Price>1000",style:{fillColor:"#FF0000"}}}}',
     purpose: 'Add visual formatting rules that highlight cells based on conditions',
     category: 'columns',
     inputSchema: ConditionalRulesInputSchema,
+    outputSchema: ManageConditionalRulesOutputSchema,
     annotations: WRITE_SAFE_ANNOTATIONS,
     handler: manageConditionalRules,
     docs: {

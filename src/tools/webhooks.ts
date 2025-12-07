@@ -1,4 +1,5 @@
 import { type ToolContext, type ToolDefinition, WRITE_SAFE_ANNOTATIONS } from '../registry/types.js'
+import { ManageWebhooksOutputSchema } from '../schemas/output-schemas.js'
 import {
   type ManageWebhooksInput,
   ManageWebhooksSchema,
@@ -455,11 +456,11 @@ export const WEBHOOK_TOOLS: ReadonlyArray<ToolDefinition> = [
       'Manage webhooks for real-time notifications.\n' +
       'Actions: list, create, update, delete, clear_queue\n' +
       'Params: docId, operation (action + fields)\n' +
-      'Ex: {operation:{action:"create",fields:{url:"https://x.com/hook",tableId:"Contacts",eventTypes:["add","update"]}}}\n' +
-      '->grist_help',
+      'Ex: {operation:{action:"create",fields:{url:"https://x.com/hook",tableId:"Contacts",eventTypes:["add","update"]}}}',
     purpose: 'Create and manage webhooks for real-time event notifications',
     category: 'webhooks',
     inputSchema: ManageWebhooksSchema,
+    outputSchema: ManageWebhooksOutputSchema,
     annotations: WRITE_SAFE_ANNOTATIONS,
     handler: manageWebhooks,
     docs: {

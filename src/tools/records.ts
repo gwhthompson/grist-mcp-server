@@ -16,6 +16,12 @@ import {
   TableIdSchema
 } from '../schemas/common.js'
 import {
+  AddRecordsOutputSchema,
+  DeleteRecordsOutputSchema,
+  UpdateRecordsOutputSchema,
+  UpsertRecordsOutputSchema
+} from '../schemas/output-schemas.js'
+import {
   buildBulkAddRecordAction,
   buildBulkRemoveRecordAction,
   buildBulkUpdateRecordAction
@@ -326,11 +332,11 @@ export const RECORD_TOOLS: ReadonlyArray<ToolDefinition> = [
     description: `Insert new records (fastest, no duplicate check).
 NOT FOR: CSV imports, sync -> use grist_upsert_records
 Params: docId, tableId, records (array, max 500)
-Ex: {records:[{"Name":"John","Email":"j@x.com"}]}
-->grist_help`,
+Ex: {records:[{"Name":"John","Email":"j@x.com"}]}`,
     purpose: 'Insert new records',
     category: 'records',
     inputSchema: AddRecordsSchema,
+    outputSchema: AddRecordsOutputSchema,
     annotations: SLOW_OPERATION_ANNOTATIONS,
     handler: addRecords,
     docs: {
@@ -378,11 +384,11 @@ Ex: {records:[{"Name":"John","Email":"j@x.com"}]}
     description: `Update existing records by row ID.
 NOT FOR: Sync by unique key -> use grist_upsert_records
 Params: docId, tableId, rowIds (array), updates (object)
-Ex: {rowIds:[1,2],updates:{"Status":"Complete"}}
-->grist_help`,
+Ex: {rowIds:[1,2],updates:{"Status":"Complete"}}`,
     purpose: 'Modify records by row ID',
     category: 'records',
     inputSchema: UpdateRecordsSchema,
+    outputSchema: UpdateRecordsOutputSchema,
     annotations: WRITE_IDEMPOTENT_ANNOTATIONS,
     handler: updateRecords,
     docs: {
@@ -411,11 +417,11 @@ Ex: {rowIds:[1,2],updates:{"Status":"Complete"}}
     description: `Add or update by unique key (idempotent sync).
 USE FOR: CSV imports, API syncs, deduplication
 Params: docId, tableId, records:[{require:{key},fields:{}}]
-Ex: {records:[{require:{"Email":"j@x.com"},fields:{"Name":"John"}}]}
-->grist_help`,
+Ex: {records:[{require:{"Email":"j@x.com"},fields:{"Name":"John"}}]}`,
     purpose: 'Add or update by unique key (sync)',
     category: 'records',
     inputSchema: UpsertRecordsSchema,
+    outputSchema: UpsertRecordsOutputSchema,
     annotations: SLOW_IDEMPOTENT_ANNOTATIONS,
     handler: upsertRecords,
     docs: {
@@ -456,11 +462,11 @@ Ex: {records:[{require:{"Email":"j@x.com"},fields:{"Name":"John"}}]}
     description: `Permanently delete records by row ID (CANNOT be undone).
 NOT FOR: Archiving -> use grist_update_records with Status="Archived"
 Params: docId, tableId, rowIds (array, max 500)
-Ex: {rowIds:[1,2,3]}
-->grist_help`,
+Ex: {rowIds:[1,2,3]}`,
     purpose: 'Delete records permanently',
     category: 'records',
     inputSchema: DeleteRecordsSchema,
+    outputSchema: DeleteRecordsOutputSchema,
     annotations: DESTRUCTIVE_ANNOTATIONS,
     handler: deleteRecords,
     docs: {

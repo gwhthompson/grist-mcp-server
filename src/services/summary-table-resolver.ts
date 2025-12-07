@@ -202,12 +202,7 @@ export async function canLinkSummaryTables(
     }
   }
 
-  const sharedColumns = await getSharedGroupByColumns(
-    client,
-    docId,
-    sourceTableRef,
-    targetTableRef
-  )
+  const sharedColumns = await getSharedGroupByColumns(client, docId, sourceTableRef, targetTableRef)
 
   if (sharedColumns.length === 0) {
     return {

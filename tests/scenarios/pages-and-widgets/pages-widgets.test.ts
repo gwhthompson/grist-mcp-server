@@ -538,17 +538,14 @@ describe('Pages & Widgets - Integration Tests', () => {
       // SQL returns records with { fields: { colId: ... } } wrapper
       const fieldsResp = await client.post<{
         records: Array<{ fields: Record<string, unknown> }>
-      }>(
-        `/docs/${docId}/sql`,
-        {
-          sql: `SELECT c.colId
+      }>(`/docs/${docId}/sql`, {
+        sql: `SELECT c.colId
                 FROM _grist_Views_section_field f
                 JOIN _grist_Tables_column c ON f.colRef = c.id
                 WHERE f.parentId = ?
                 ORDER BY f.parentPos`,
-          args: [sectionId]
-        }
-      )
+        args: [sectionId]
+      })
 
       const chartColumns = fieldsResp.records.map((r) => r.fields.colId as string)
       expect(chartColumns).toEqual(['OrderID', 'Amount'])

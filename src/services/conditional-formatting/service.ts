@@ -9,11 +9,7 @@ import { ApplyResponseSchema } from '../../schemas/api-responses.js'
 import type { ApplyResponse, SQLQueryResponse } from '../../types.js'
 import { extractFields } from '../../utils/grist-field-extractor.js'
 import type { GristClient } from '../grist-client.js'
-import {
-  parseGristJson,
-  parseStyleOptions,
-  validatePythonFormula
-} from '../rule-utilities.js'
+import { parseGristJson, parseStyleOptions, validatePythonFormula } from '../rule-utilities.js'
 import { ColumnRuleOwner } from './column-rule-owner.js'
 import { FieldRuleOwner } from './field-rule-owner.js'
 import { RowRuleOwner } from './row-rule-owner.js'
@@ -137,11 +133,7 @@ export class ConditionalFormattingService {
         // Wait for rules RefList to propagate before returning
         const expectedCount = currentState.helperColRefs.length + 1
         for (let waitAttempt = 0; waitAttempt < 20; waitAttempt++) {
-          const updatedState = await this.ruleOwner.getRulesAndStyles(
-            this.client,
-            docId,
-            ownerRef
-          )
+          const updatedState = await this.ruleOwner.getRulesAndStyles(this.client, docId, ownerRef)
           if (updatedState.helperColRefs.length >= expectedCount) {
             break
           }
@@ -204,14 +196,7 @@ export class ConditionalFormattingService {
     const helperColRef = currentState.helperColRefs[ruleIndex]
     await this.client.post<ApplyResponse>(
       `/docs/${docId}/apply`,
-      [
-        [
-          'UpdateRecord',
-          '_grist_Tables_column',
-          helperColRef,
-          { formula: rule.formula }
-        ]
-      ],
+      [['UpdateRecord', '_grist_Tables_column', helperColRef, { formula: rule.formula }]],
       {
         schema: ApplyResponseSchema,
         context: `Updating ${this.scope} rule ${ruleIndex} formula`
@@ -312,10 +297,7 @@ export class ConditionalFormattingService {
   /**
    * Get owner's current options/widgetOptions
    */
-  private async getOwnerOptions(
-    docId: string,
-    ownerRef: number
-  ): Promise<Record<string, unknown>> {
+  private async getOwnerOptions(docId: string, ownerRef: number): Promise<Record<string, unknown>> {
     const styleProperty = this.ruleOwner.config.styleProperty
 
     const response = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {

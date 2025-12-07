@@ -4,6 +4,7 @@ import {
   WRITE_SAFE_ANNOTATIONS
 } from '../../registry/types.js'
 import { ApplyResponseSchema } from '../../schemas/api-responses.js'
+import { UpdatePageOutputSchema } from '../../schemas/output-schemas.js'
 import { type UpdatePageInput, UpdatePageSchema } from '../../schemas/pages-widgets.js'
 import { getPageByName } from '../../services/widget-resolver.js'
 import type { ApplyResponse, SQLQueryResponse, UserAction } from '../../types.js'
@@ -189,11 +190,11 @@ export const UPDATE_PAGE_DEFINITION: ToolDefinition = {
     'Rename, reorder, or delete pages.\n' +
     'NOT FOR: New pages -> use grist_build_page; widgets -> use grist_configure_widget\n' +
     'Params: docId, operations (action: rename/reorder/delete)\n' +
-    'Ex: {operations:[{action:"rename",page_name:"Old",new_name:"New"}]}\n' +
-    '->grist_help',
+    'Ex: {operations:[{action:"rename",page_name:"Old",new_name:"New"}]}',
   purpose: 'Rename, reorder, or delete existing pages',
   category: 'document_structure',
   inputSchema: UpdatePageSchema,
+  outputSchema: UpdatePageOutputSchema,
   annotations: WRITE_SAFE_ANNOTATIONS,
   handler: updatePage,
   docs: {

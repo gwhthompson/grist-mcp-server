@@ -123,16 +123,8 @@ export abstract class GristTool<TInput extends z.ZodTypeAny, TOutput = unknown> 
   }
 }
 
-export type ToolInput<T extends GristTool<z.ZodTypeAny, unknown>> = T extends GristTool<
-  infer TInput,
-  unknown
->
-  ? z.infer<TInput>
-  : never
+export type ToolInput<T extends GristTool<z.ZodTypeAny, unknown>> =
+  T extends GristTool<infer TInput, unknown> ? z.infer<TInput> : never
 
-export type ToolOutput<T extends GristTool<z.ZodTypeAny, unknown>> = T extends GristTool<
-  z.ZodTypeAny,
-  infer TOutput
->
-  ? TOutput
-  : never
+export type ToolOutput<T extends GristTool<z.ZodTypeAny, unknown>> =
+  T extends GristTool<z.ZodTypeAny, infer TOutput> ? TOutput : never

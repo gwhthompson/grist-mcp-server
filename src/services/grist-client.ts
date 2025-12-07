@@ -1,6 +1,6 @@
 import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios'
 import type { z } from 'zod'
-import { API_TIMEOUT } from '../constants.js'
+import { API_TIMEOUT, CLIENT_IDENTIFIER } from '../constants.js'
 import { safeValidate, validateApiResponse } from '../schemas/api-responses.js'
 import type { ApiPath } from '../types/advanced.js'
 import type { UserActionObject, UserActionTuple } from '../types.js'
@@ -70,7 +70,8 @@ export class GristClient {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         'Content-Type': 'application/json',
-        Accept: 'application/json'
+        Accept: 'application/json',
+        'X-Grist-Client': CLIENT_IDENTIFIER
       },
       timeout: API_TIMEOUT
     })

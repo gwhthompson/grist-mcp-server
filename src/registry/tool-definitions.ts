@@ -7,6 +7,7 @@
 
 import type { z } from 'zod'
 import { HelpSchema } from '../schemas/help.js'
+import { HelpOutputSchema } from '../schemas/output-schemas.js'
 import { COLUMN_TOOLS } from '../tools/columns.js'
 import { CONDITIONAL_TOOLS } from '../tools/conditional-formatting.js'
 import { DISCOVERY_TOOLS } from '../tools/discovery.js'
@@ -56,6 +57,7 @@ export const UTILITY_TOOLS: ReadonlyArray<ToolDefinition> = [
     purpose: 'Get detailed documentation and examples for any tool',
     category: 'utility',
     inputSchema: HelpSchema,
+    outputSchema: HelpOutputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
     handler: getHelp,
     docs: {
@@ -133,12 +135,12 @@ export type ToolName = (typeof ALL_TOOLS)[number]['name']
 /**
  * Extract input type for a specific tool.
  */
-export type ToolInputType<T extends ToolName> = Extract<
-  (typeof ALL_TOOLS)[number],
-  { name: T }
-> extends { inputSchema: infer S extends z.ZodTypeAny }
-  ? z.infer<S>
-  : never
+export type ToolInputType<T extends ToolName> =
+  Extract<(typeof ALL_TOOLS)[number], { name: T }> extends {
+    inputSchema: infer S extends z.ZodTypeAny
+  }
+    ? z.infer<S>
+    : never
 
 /**
  * Extract handler type for a specific tool.
@@ -148,7 +150,5 @@ export type ToolHandlerType<T extends ToolName> = Extract<
   { name: T }
 >['handler']
 
-/**
- * Tool names array for schema validation.
- */
-export const TOOL_NAMES = ALL_TOOLS.map((t) => t.name) as readonly string[]
+// Note: TOOL_NAMES for schema validation is auto-generated at build time
+// in src/schemas/tool-names.generated.ts and exported from src/schemas/help.ts

@@ -5,6 +5,7 @@ import {
   WRITE_SAFE_ANNOTATIONS
 } from '../../registry/types.js'
 import { ApplyResponseSchema } from '../../schemas/api-responses.js'
+import { BuildPageOutputSchema } from '../../schemas/output-schemas.js'
 import {
   type BuildPageInput,
   BuildPageSchema,
@@ -734,14 +735,10 @@ ${(pageData.widgets as Array<{ section_id: number; table_ref: number }>).map((w,
         linkActions.push(buildWidgetLinkAction(sectionRefs[i + 1], sectionRefs[i], 0, 0))
       }
 
-      const linkResp = await this.client.post<ApplyResponse>(
-        `/docs/${docId}/apply`,
-        linkActions,
-        {
-          schema: ApplyResponseSchema,
-          context: 'Linking hierarchical levels'
-        }
-      )
+      const linkResp = await this.client.post<ApplyResponse>(`/docs/${docId}/apply`, linkActions, {
+        schema: ApplyResponseSchema,
+        context: 'Linking hierarchical levels'
+      })
 
       validateRetValues(linkResp, { context: 'Linking hierarchical levels' })
     }
@@ -758,14 +755,10 @@ ${(pageData.widgets as Array<{ section_id: number; table_ref: number }>).map((w,
       { title: titles[i] }
     ])
 
-    const titleResp = await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      titleActions,
-      {
-        schema: ApplyResponseSchema,
-        context: 'Setting widget titles for hierarchical page'
-      }
-    )
+    const titleResp = await this.client.post<ApplyResponse>(`/docs/${docId}/apply`, titleActions, {
+      schema: ApplyResponseSchema,
+      context: 'Setting widget titles for hierarchical page'
+    })
 
     validateRetValues(titleResp, { context: 'Setting widget titles' })
 
@@ -1053,14 +1046,10 @@ ${(pageData.widgets as Array<{ section_id: number; table_ref: number }>).map((w,
         return buildWidgetLinkAction(sectionRefs[chartSectionIndex], selectorSectionRef, 0, 0)
       })
 
-      const linkResp = await this.client.post<ApplyResponse>(
-        `/docs/${docId}/apply`,
-        linkActions,
-        {
-          schema: ApplyResponseSchema,
-          context: 'Linking charts to selector'
-        }
-      )
+      const linkResp = await this.client.post<ApplyResponse>(`/docs/${docId}/apply`, linkActions, {
+        schema: ApplyResponseSchema,
+        context: 'Linking charts to selector'
+      })
 
       validateRetValues(linkResp, { context: 'Linking charts to selector' })
     }
@@ -1203,11 +1192,11 @@ export const BUILD_PAGE_DEFINITION: ToolDefinition = {
     'Patterns: master_detail, hierarchical, chart_dashboard, form_table, custom\n' +
     'Widgets: grid, card, card_list, chart, form, custom\n' +
     'Params: docId, page_name, config\n' +
-    'Ex: {page_name:"Dashboard",config:{pattern:"master_detail",master:{table:"Customers"},detail:{table:"Orders",link_field:"CustomerRef"}}}\n' +
-    '->grist_help',
+    'Ex: {page_name:"Dashboard",config:{pattern:"master_detail",master:{table:"Customers"},detail:{table:"Orders",link_field:"CustomerRef"}}}',
   purpose: 'Create pages with pre-configured widget layouts and linking',
   category: 'document_structure',
   inputSchema: BuildPageSchema,
+  outputSchema: BuildPageOutputSchema,
   annotations: { ...WRITE_SAFE_ANNOTATIONS, ...SLOW_OPERATION_ANNOTATIONS },
   handler: buildPage,
   docs: {

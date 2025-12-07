@@ -141,9 +141,7 @@ describe('buildAddTableAction', () => {
   })
 
   it('serializes to tuple format correctly', () => {
-    const action = buildAddTableAction(toTableId('Orders'), [
-      { colId: 'Name', type: 'Text' }
-    ])
+    const action = buildAddTableAction(toTableId('Orders'), [{ colId: 'Name', type: 'Text' }])
 
     const tuple = serializeUserAction(action)
     expect(tuple[0]).toBe('AddTable')
@@ -210,11 +208,9 @@ describe('buildBulkAddRecordAction', () => {
 
 describe('buildBulkUpdateRecordAction', () => {
   it('builds action with correct structure', () => {
-    const action = buildBulkUpdateRecordAction(
-      toTableId('Contacts'),
-      [toRowId(1), toRowId(2)],
-      { Status: 'Active' }
-    )
+    const action = buildBulkUpdateRecordAction(toTableId('Contacts'), [toRowId(1), toRowId(2)], {
+      Status: 'Active'
+    })
 
     expect(action.action).toBe('BulkUpdateRecord')
     expect(action.tableId).toBe('Contacts')
@@ -275,11 +271,7 @@ describe('buildRenameColumnAction', () => {
   })
 
   it('serializes to tuple format correctly', () => {
-    const action = buildRenameColumnAction(
-      toTableId('Test'),
-      toColId('Old'),
-      toColId('New')
-    )
+    const action = buildRenameColumnAction(toTableId('Test'), toColId('Old'), toColId('New'))
 
     const tuple = serializeUserAction(action)
     expect(tuple[0]).toBe('RenameColumn')

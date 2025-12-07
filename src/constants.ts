@@ -56,6 +56,13 @@ export const MAX_COLUMN_OPERATIONS = 50 satisfies number
 export const DEFAULT_BASE_URL = 'https://docs.getgrist.com' satisfies string
 export const API_TIMEOUT = 30000 satisfies number // 30 seconds
 
+/**
+ * Client identification header sent with all Grist API requests.
+ * Helps with debugging and allows Grist to track MCP usage.
+ * Version is manually updated on releases.
+ */
+export const CLIENT_IDENTIFIER = 'grist-mcp-server/1.0' satisfies string
+
 // ============================================================================
 // HTTP Status Codes (as const object with readonly properties)
 // ============================================================================

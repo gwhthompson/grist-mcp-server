@@ -1,4 +1,9 @@
-import { READ_ONLY_ANNOTATIONS, type ToolContext, type ToolDefinition } from '../../registry/types.js'
+import {
+  READ_ONLY_ANNOTATIONS,
+  type ToolContext,
+  type ToolDefinition
+} from '../../registry/types.js'
+import { GetPagesOutputSchema } from '../../schemas/output-schemas.js'
 import { type GetPagesInput, GetPagesSchema } from '../../schemas/pages-widgets.js'
 import { getAllPages, getAllWidgetsOnPage } from '../../services/widget-resolver.js'
 import type { SQLQueryResponse } from '../../types.js'
@@ -95,8 +100,7 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
       detail_level === 'detailed' ? await this.getWidgetLinking(docId) : new Map()
 
     // Get chart configs if detailed
-    const chartConfigs =
-      detail_level === 'detailed' ? await this.getChartConfigs(docId) : new Map()
+    const chartConfigs = detail_level === 'detailed' ? await this.getChartConfigs(docId) : new Map()
 
     // Build page details with widgets
     const pageDetails: PageDetail[] = []
@@ -191,9 +195,7 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
   /**
    * Get table metadata including summary table info
    */
-  private async getTableMetadata(
-    docId: string
-  ): Promise<
+  private async getTableMetadata(docId: string): Promise<
     Map<
       number,
       {
@@ -323,9 +325,7 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
   /**
    * Get chart configurations
    */
-  private async getChartConfigs(
-    docId: string
-  ): Promise<Map<number, { chart_type: string }>> {
+  private async getChartConfigs(docId: string): Promise<Map<number, { chart_type: string }>> {
     const response = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
       sql: `
         SELECT id, chartType
@@ -378,11 +378,11 @@ export const GET_PAGES_DEFINITION: ToolDefinition = {
     'List pages, widgets, and tables in a document.\n' +
     'Shows page structure, widget linking, summary tables, and Raw Data tables.\n' +
     'Params: docId, detail_level (summary/detailed), limit, offset\n' +
-    'Ex: {docId:"abc123",detail_level:"detailed"}\n' +
-    '->grist_help',
+    'Ex: {docId:"abc123",detail_level:"detailed"}',
   purpose: 'Introspect document structure including pages, widgets, and summary tables',
   category: 'document_structure',
   inputSchema: GetPagesSchema,
+  outputSchema: GetPagesOutputSchema,
   annotations: READ_ONLY_ANNOTATIONS,
   handler: getPages,
   docs: {

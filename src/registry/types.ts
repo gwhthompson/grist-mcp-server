@@ -72,7 +72,10 @@ export type ToolCategory =
  * Complete tool definition with all metadata.
  * Single source of truth for MCP manifest, README, and help.
  */
-export interface ToolDefinition<TSchema extends z.ZodTypeAny = z.ZodTypeAny> {
+export interface ToolDefinition<
+  TSchema extends z.ZodTypeAny = z.ZodTypeAny,
+  TOutputSchema extends z.ZodTypeAny = z.ZodTypeAny
+> {
   /** Tool name (grist_verb_noun) */
   readonly name: string
   /** Human-readable title */
@@ -85,6 +88,8 @@ export interface ToolDefinition<TSchema extends z.ZodTypeAny = z.ZodTypeAny> {
   readonly category: ToolCategory
   /** Zod schema for input validation */
   readonly inputSchema: TSchema
+  /** Zod schema for output validation (MCP spec 2025-11-25) */
+  readonly outputSchema?: TOutputSchema
   /** MCP behavior annotations */
   readonly annotations: ToolAnnotations
   /** Tool implementation */

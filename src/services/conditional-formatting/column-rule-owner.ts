@@ -11,11 +11,7 @@ import type { ApplyResponse, SQLQueryResponse } from '../../types.js'
 import { extractFields } from '../../utils/grist-field-extractor.js'
 import { validateRetValues } from '../../validators/apply-response.js'
 import type { GristClient } from '../grist-client.js'
-import {
-  encodeGristList,
-  parseGristJson,
-  parseGristList
-} from '../rule-utilities.js'
+import { encodeGristList, parseGristJson, parseGristList } from '../rule-utilities.js'
 import { RuleOwner } from './rule-owner.js'
 import type {
   OwnerLookupParams,

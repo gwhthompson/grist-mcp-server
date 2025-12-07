@@ -4,6 +4,7 @@ import {
   WRITE_SAFE_ANNOTATIONS
 } from '../../registry/types.js'
 import { ApplyResponseSchema } from '../../schemas/api-responses.js'
+import { CreateSummaryTableOutputSchema } from '../../schemas/output-schemas.js'
 import {
   type CreateSummaryTableInput,
   CreateSummaryTableSchema
@@ -52,10 +53,14 @@ class CreateSummaryTableTool extends GristTool<
       ['CreateViewSection', sourceTableRef, 0, 'record', groupByColRefs, null]
     ]
 
-    const createResponse = await this.client.post<ApplyResponse>(`/docs/${docId}/apply`, createActions, {
-      schema: ApplyResponseSchema,
-      context: `Creating summary table for ${sourceTable}`
-    })
+    const createResponse = await this.client.post<ApplyResponse>(
+      `/docs/${docId}/apply`,
+      createActions,
+      {
+        schema: ApplyResponseSchema,
+        context: `Creating summary table for ${sourceTable}`
+      }
+    )
 
     validateRetValues(createResponse, {
       context: `Creating summary table for ${sourceTable}`
@@ -105,8 +110,7 @@ class CreateSummaryTableTool extends GristTool<
     const tableRef = await this.schemaCache.getTableRef(docId as never, tableName)
     if (tableRef === null) {
       throw new Error(
-        `Source table "${tableName}" not found. ` +
-          `Use grist_get_tables to list available tables.`
+        `Source table "${tableName}" not found. Use grist_get_tables to list available tables.`
       )
     }
     return tableRef
@@ -258,11 +262,11 @@ export const CREATE_SUMMARY_TABLE_DEFINITION: ToolDefinition = {
     'Create aggregated summary table from source table.\n' +
     'Groups data by specified columns, auto-generates count and SUM columns.\n' +
     'Params: docId, sourceTable, groupByColumns\n' +
-    'Ex: {sourceTable:"Sales",groupByColumns:["Region","Year"]}\n' +
-    '->grist_help',
+    'Ex: {sourceTable:"Sales",groupByColumns:["Region","Year"]}',
   purpose: 'Create summary tables for aggregations and chart data sources',
   category: 'tables',
   inputSchema: CreateSummaryTableSchema,
+  outputSchema: CreateSummaryTableOutputSchema,
   annotations: WRITE_SAFE_ANNOTATIONS,
   handler: createSummaryTable,
   docs: {

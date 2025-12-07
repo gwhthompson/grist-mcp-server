@@ -8,6 +8,7 @@ import {
   ResponseFormatSchema,
   TableIdSchema
 } from '../schemas/common.js'
+import { ManageColumnsOutputSchema } from '../schemas/output-schemas.js'
 import { WidgetOptionsUnionSchema } from '../schemas/widget-options.js'
 import {
   buildAddColumnAction,
@@ -532,11 +533,11 @@ export const COLUMN_TOOLS: ReadonlyArray<ToolDefinition> = [
     description: `Add, modify, delete, or rename columns (atomic, rollback on error).
 Actions: add (colId,type), modify (colId,changes), delete, rename
 Params: docId, tableId, operations (array)
-Ex: {operations:[{action:"add",colId:"Phone",type:"Text"}]}
-->grist_help`,
+Ex: {operations:[{action:"add",colId:"Phone",type:"Text"}]}`,
     purpose: 'Add, modify, delete, rename columns',
     category: 'columns',
     inputSchema: ManageColumnsSchema,
+    outputSchema: ManageColumnsOutputSchema,
     annotations: WRITE_SAFE_ANNOTATIONS,
     handler: manageColumns,
     docs: {

@@ -1,0 +1,165 @@
+name: Grist Compatibility
+
+on:
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+  workflow_dispatch:
+    inputs:
+      grist_version:
+        description: 'Grist Docker image tag (default: latest)'
+        required: false
+        default: 'latest'
+
+env:
+  NODE_VERSION: '20.x'
+
+jobs:
+  compatibility-test:
+    name: Test Against Grist Latest
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      issues: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Get Grist version to test
+        id: grist-version
+        run: |
+          VERSION="${{ github.event.inputs.grist_version || 'latest' }}"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Testing against gristlabs/grist:$VERSION"
+
+      - name: Pull Grist image
+        run: docker pull gristlabs/grist:${{ steps.grist-version.outputs.version }}
+
+      - name: Get actual Grist version
+        id: actual-version
+        run: |
+          # Run container briefly to get version info
+          VERSION=$(docker run --rm gristlabs/grist:${{ steps.grist-version.outputs.version }} \
+            node -e "console.log(require('/grist/core/package.json').version)" 2>/dev/null || echo "unknown")
+          echo "actual=$VERSION" >> $GITHUB_OUTPUT
+          echo "Actual Grist version: $VERSION"
+
+      - name: Start Grist container
+        run: |
+          docker run -d --name grist-compat-test -p 8989:8484 \
+            -e GRIST_BOOT_KEY=test_boot_key \
+            -e GRIST_FORCE_LOGIN=true \
+            -e GRIST_DEFAULT_EMAIL=test@example.com \
+            -e GRIST_SINGLE_ORG=example \
+            gristlabs/grist:${{ steps.grist-version.outputs.version }}
+
+      - name: Wait for Grist to be ready
+        run: |
+          echo "Waiting for Grist to start..."
+          for i in {1..60}; do
+            if curl -sf http://localhost:8989/api/profile -H "x-boot-key: test_boot_key" > /dev/null 2>&1; then
+              echo "Grist is ready!"
+              break
+            fi
+            echo "Attempt $i/60: Grist not ready yet..."
+            sleep 2
+          done
+
+      - name: Get API key
+        id: api-key
+        run: |
+          API_KEY=$(curl -sf http://localhost:8989/api/profile/apiKey -H "x-boot-key: test_boot_key" | tr -d '"')
+          echo "::add-mask::$API_KEY"
+          echo "key=$API_KEY" >> $GITHUB_OUTPUT
+
+      - name: Build project
+        run: npm run build
+
+      - name: Run tests
+        id: tests
+        env:
+          GRIST_API_KEY: ${{ steps.api-key.outputs.key }}
+          GRIST_BASE_URL: http://localhost:8989
+        run: |
+          npm test 2>&1 | tee test-output.txt
+          echo "result=success" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Check test result
+        id: check-result
+        run: |
+          if [ "${{ steps.tests.outputs.result }}" = "success" ] && [ ${{ steps.tests.outcome }} = "success" ]; then
+            echo "status=passed" >> $GITHUB_OUTPUT
+          else
+            echo "status=failed" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Update COMPATIBILITY.md on success
+        if: steps.check-result.outputs.status == 'passed'
+        run: |
+          GRIST_VERSION="${{ steps.actual-version.outputs.actual }}"
+          DATE=$(date -u +"%Y-%m-%d")
+
+          if [ ! -f COMPATIBILITY.md ]; then
+            cat > COMPATIBILITY.md << 'EOF'
+          # Grist Compatibility
+
+          This file documents tested Grist versions.
+
+          ## Tested Versions
+
+          | Grist Version | Test Date | Status |
+          |---------------|-----------|--------|
+          EOF
+          fi
+
+          # Add new row (avoid duplicates)
+          if ! grep -q "$GRIST_VERSION" COMPATIBILITY.md; then
+            echo "| $GRIST_VERSION | $DATE | ✅ Passed |" >> COMPATIBILITY.md
+            git config --local user.email "github-actions[bot]@users.noreply.github.com"
+            git config --local user.name "github-actions[bot]"
+            git add COMPATIBILITY.md
+            git commit -m "docs: add Grist $GRIST_VERSION to compatibility list" || echo "No changes to commit"
+            git push || echo "Push failed (may need permissions)"
+          fi
+
+      - name: Create issue on failure
+        if: steps.check-result.outputs.status == 'failed'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const testOutput = fs.existsSync('test-output.txt')
+              ? fs.readFileSync('test-output.txt', 'utf8').slice(-2000)
+              : 'No test output available';
+
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Compatibility test failed with Grist ${{ steps.actual-version.outputs.actual }}`,
+              body: `## Compatibility Test Failure\n\n` +
+                `**Grist Version:** ${{ steps.actual-version.outputs.actual }}\n` +
+                `**Test Date:** ${new Date().toISOString().split('T')[0]}\n` +
+                `**Docker Tag:** ${{ steps.grist-version.outputs.version }}\n\n` +
+                `### Test Output (last 2000 chars)\n\`\`\`\n${testOutput}\n\`\`\`\n\n` +
+                `### Next Steps\n` +
+                `1. Review test failures to determine if this is a Grist breaking change or test issue\n` +
+                `2. Update MCP server if needed to handle new Grist behavior\n` +
+                `3. Close this issue once resolved\n\n` +
+                `*This issue was automatically created by the weekly compatibility test.*`,
+              labels: ['compatibility', 'automated']
+            });
+
+      - name: Cleanup
+        if: always()
+        run: docker rm -f grist-compat-test || true

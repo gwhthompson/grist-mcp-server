@@ -193,10 +193,10 @@ export function parseStyleOptions(
 
 // Re-export from grist-cell-formats for backwards compatibility
 export {
-  parseRefList as parseGristList,
   encodeRefList as encodeGristList,
-  parseGristJson,
   type NaturalRefList,
+  parseGristJson,
+  parseRefList as parseGristList,
   type WireRefList
 } from '../types/grist-cell-formats.js'
 

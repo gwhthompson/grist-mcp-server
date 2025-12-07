@@ -38,7 +38,9 @@ export class ValidationError extends GristError {
     // Document ID suggestions
     if (fieldLower === 'docid' || fieldLower.includes('documentid')) {
       suggestions.push('Use grist_get_documents to find valid document IDs')
-      suggestions.push('Document IDs are 22-character Base58 strings (e.g., "aKt7TZe8YGLp3ak8bDL8TZ")')
+      suggestions.push(
+        'Document IDs are 22-character Base58 strings (e.g., "aKt7TZe8YGLp3ak8bDL8TZ")'
+      )
     }
 
     // Table ID suggestions
@@ -48,9 +50,15 @@ export class ValidationError extends GristError {
     }
 
     // Column ID suggestions
-    if (fieldLower === 'colid' || fieldLower.includes('columnid') || fieldLower.includes('column')) {
+    if (
+      fieldLower === 'colid' ||
+      fieldLower.includes('columnid') ||
+      fieldLower.includes('column')
+    ) {
       suggestions.push('Use grist_get_tables with detail_level="columns" to see column names')
-      suggestions.push('Column names follow Python identifier rules (letters, numbers, underscores)')
+      suggestions.push(
+        'Column names follow Python identifier rules (letters, numbers, underscores)'
+      )
     }
 
     // Row ID suggestions
@@ -67,8 +75,12 @@ export class ValidationError extends GristError {
 
     // Widget options suggestions
     if (fieldLower.includes('widgetoptions')) {
-      suggestions.push('Use grist_get_tables with detail_level="full_schema" to see existing widget options')
-      suggestions.push('Call grist_help with tool_name="grist_manage_columns" for widget options examples')
+      suggestions.push(
+        'Use grist_get_tables with detail_level="full_schema" to see existing widget options'
+      )
+      suggestions.push(
+        'Call grist_help with tool_name="grist_manage_columns" for widget options examples'
+      )
     }
 
     // Type-related suggestions

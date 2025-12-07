@@ -10,6 +10,11 @@ import {
   WorkspaceIdSchema
 } from '../schemas/common.js'
 import {
+  GetDocumentsOutputSchema,
+  GetTablesOutputSchema,
+  GetWorkspacesOutputSchema
+} from '../schemas/output-schemas.js'
+import {
   extractForeignTable,
   getColumnNameFromId,
   isReferenceType
@@ -502,11 +507,11 @@ export const DISCOVERY_TOOLS: ReadonlyArray<ToolDefinition> = [
     description: `List workspaces accessible to the user.
 NOT FOR: Finding documents -> use grist_get_documents
 Params: name_contains, detail_level (summary/detailed), limit, offset
-Ex: {name_contains:"Sales",limit:10}
-->grist_help`,
+Ex: {name_contains:"Sales",limit:10}`,
     purpose: 'List and filter workspaces',
     category: 'discovery',
     inputSchema: GetWorkspacesSchema,
+    outputSchema: GetWorkspacesOutputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
     handler: getWorkspaces,
     docs: {
@@ -530,11 +535,11 @@ Ex: {name_contains:"Sales",limit:10}
     description: `Find documents by ID, name, or workspace.
 NOT FOR: Getting document data -> use grist_get_records
 Params: docId (exact), name_contains (search), workspaceId, limit
-Ex: {name_contains:"CRM",limit:5}
-->grist_help`,
+Ex: {name_contains:"CRM",limit:5}`,
     purpose: 'Find documents by ID, name, or workspace',
     category: 'discovery',
     inputSchema: GetDocumentsSchema,
+    outputSchema: GetDocumentsOutputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
     handler: getDocuments,
     docs: {
@@ -557,11 +562,11 @@ Ex: {name_contains:"CRM",limit:5}
     description: `Get table/column schema. Run before reading/writing data.
 Params: docId, tableId (optional), detail_level (names/columns/full_schema)
 Ex: {docId:"abc123",tableId:"Contacts",detail_level:"columns"}
-Use full_schema for widgetOptions.
-->grist_help`,
+Use full_schema for widgetOptions.`,
     purpose: 'Get table structure and schema',
     category: 'discovery',
     inputSchema: GetTablesSchema,
+    outputSchema: GetTablesOutputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
     handler: getTables,
     docs: {

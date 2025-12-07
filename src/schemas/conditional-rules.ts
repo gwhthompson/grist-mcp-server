@@ -137,11 +137,7 @@ const FieldScopeBaseSchema = z
       .min(1)
       .optional()
       .describe('Page name containing the widget. Case-sensitive.'),
-    widgetTitle: z
-      .string()
-      .min(1)
-      .optional()
-      .describe('Widget title on the page. Case-sensitive.'),
+    widgetTitle: z.string().min(1).optional().describe('Widget title on the page. Case-sensitive.'),
     operation: RuleOperationSchema,
     response_format: ResponseFormatSchema
   })

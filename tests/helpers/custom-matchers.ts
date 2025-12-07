@@ -6,7 +6,11 @@
 
 import { expect } from 'vitest'
 import type { MCPToolResponse } from '../../src/types.js'
-import { isValidColumnId, isValidDocId, isValidTableId } from '../../src/utils/identifier-validation.js'
+import {
+  isValidColumnId,
+  isValidDocId,
+  isValidTableId
+} from '../../src/utils/identifier-validation.js'
 
 declare module 'vitest' {
   interface Assertion<T = unknown> {

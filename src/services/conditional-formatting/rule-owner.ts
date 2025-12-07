@@ -161,7 +161,11 @@ export abstract class RuleOwner {
     for (let attempt = 0; attempt < 20; attempt++) {
       // Add cache-busting parameter
       response = await client.get<{
-        records: Array<{ id: number; fields?: { formula?: string | null }; formula?: string | null }>
+        records: Array<{
+          id: number
+          fields?: { formula?: string | null }
+          formula?: string | null
+        }>
       }>(`/docs/${docId}/tables/_grist_Tables_column/records`, {
         params: { _: Date.now().toString() }
       })

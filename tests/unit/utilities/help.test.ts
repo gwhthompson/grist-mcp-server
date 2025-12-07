@@ -12,9 +12,9 @@ import { HELP_TOPICS, HelpSchema, TOOL_NAMES } from '../../../src/schemas/help.j
 
 describe('Help Tool - Schema Validation', () => {
   describe('TOOL_NAMES constant', () => {
-    it('should contain all 21 Grist tool names', () => {
-      // 21 tools (not counting grist_help itself)
-      expect(TOOL_NAMES.length).toBe(21)
+    it('should contain all 22 Grist tool names', () => {
+      // 22 tools (including grist_help, auto-generated from ALL_TOOLS)
+      expect(TOOL_NAMES.length).toBe(22)
     })
 
     it('should contain all discovery tools', () => {
@@ -197,7 +197,10 @@ describe('Help Tool - Documentation Content', () => {
       // All tool names should start with 'grist_'
       expect(toolName).toMatch(/^grist_/)
 
-      // Tool names should follow verb_noun pattern
+      // Utility tools (grist_help) don't follow verb_noun pattern
+      if (toolName === 'grist_help') continue
+
+      // Data tools should follow verb_noun pattern
       expect(toolName).toMatch(
         /^grist_(get|add|update|upsert|delete|create|rename|manage|query|build|configure)_/
       )

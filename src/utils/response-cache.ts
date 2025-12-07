@@ -119,7 +119,6 @@ export class ResponseCache<T = unknown> {
     return removed
   }
 
-  // biome-ignore lint/correctness/noUnusedPrivateClassMembers: Called in constructor
   private startCleanup(): void {
     if (this.cleanupTimer) {
       return

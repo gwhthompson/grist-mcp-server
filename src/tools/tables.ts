@@ -14,17 +14,22 @@ import {
   TableIdSchema
 } from '../schemas/common.js'
 import {
+  CreateTableOutputSchema,
+  DeleteTableOutputSchema,
+  RenameTableOutputSchema
+} from '../schemas/output-schemas.js'
+import {
   buildAddTableAction,
   buildRemoveTableAction,
   buildRenameTableAction
 } from '../services/action-builder.js'
-import { serializeUserAction } from '../services/grist-client.js'
 import {
   extractForeignTable,
   getColumnNameFromId,
   isReferenceType,
   resolveVisibleCol
 } from '../services/column-resolver.js'
+import { serializeUserAction } from '../services/grist-client.js'
 import { toTableId } from '../types/advanced.js'
 import type { ApplyResponse, ColumnDefinition, UserAction } from '../types.js'
 import { validateRetValues } from '../validators/apply-response.js'
@@ -411,11 +416,11 @@ export const TABLE_TOOLS: ReadonlyArray<ToolDefinition> = [
     description: `Create table with column definitions.
 Types: Text, Numeric, Int, Bool, Date, DateTime, Choice, ChoiceList, Ref:Table, RefList:Table
 Params: docId, tableName, columns:[{colId,type,label,widgetOptions}]
-Ex: {tableName:"Contacts",columns:[{colId:"Name",type:"Text"}]}
-->grist_help`,
+Ex: {tableName:"Contacts",columns:[{colId:"Name",type:"Text"}]}`,
     purpose: 'Create table with columns',
     category: 'tables',
     inputSchema: CreateTableSchema,
+    outputSchema: CreateTableOutputSchema,
     annotations: WRITE_SAFE_ANNOTATIONS,
     handler: createTable,
     docs: {
@@ -464,11 +469,11 @@ Ex: {tableName:"Contacts",columns:[{colId:"Name",type:"Text"}]}
     title: 'Rename Grist Table',
     description: `Rename table (updates references automatically).
 Params: docId, tableId (current), newTableId
-Ex: {tableId:"OldName",newTableId:"NewName"}
-->grist_help`,
+Ex: {tableId:"OldName",newTableId:"NewName"}`,
     purpose: 'Rename table',
     category: 'tables',
     inputSchema: RenameTableSchema,
+    outputSchema: RenameTableOutputSchema,
     annotations: WRITE_IDEMPOTENT_ANNOTATIONS,
     handler: renameTable,
     docs: {
@@ -490,11 +495,11 @@ Ex: {tableId:"OldName",newTableId:"NewName"}
     title: 'Delete Grist Table',
     description: `Permanently delete table and all data (CANNOT be undone).
 Params: docId, tableId
-Ex: {tableId:"ObsoleteTable"}
-->grist_help`,
+Ex: {tableId:"ObsoleteTable"}`,
     purpose: 'Delete table permanently',
     category: 'tables',
     inputSchema: DeleteTableSchema,
+    outputSchema: DeleteTableOutputSchema,
     annotations: DESTRUCTIVE_ANNOTATIONS,
     handler: deleteTable,
     docs: {

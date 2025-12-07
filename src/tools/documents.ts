@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { type ToolContext, type ToolDefinition, WRITE_SAFE_ANNOTATIONS } from '../registry/types.js'
 import { DocIdSchema, ResponseFormatSchema, WorkspaceIdSchema } from '../schemas/common.js'
+import { CreateDocumentOutputSchema } from '../schemas/output-schemas.js'
 import { GristTool } from './base/GristTool.js'
 
 export const CreateDocumentSchema = z
@@ -92,11 +93,11 @@ export const DOCUMENT_TOOLS: ReadonlyArray<ToolDefinition> = [
     description:
       'Create new document or fork existing one.\n' +
       'Params: name, workspaceId, forkFromDocId (optional - copies data)\n' +
-      'Ex: {name:"Customer CRM",workspaceId:123}\n' +
-      '->grist_help',
+      'Ex: {name:"Customer CRM",workspaceId:123}',
     purpose: 'Create new Grist documents or copy existing ones',
     category: 'documents',
     inputSchema: CreateDocumentSchema,
+    outputSchema: CreateDocumentOutputSchema,
     annotations: WRITE_SAFE_ANNOTATIONS,
     handler: createDocument,
     docs: {

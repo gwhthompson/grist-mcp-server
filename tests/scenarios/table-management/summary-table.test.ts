@@ -78,9 +78,7 @@ describe('grist_create_summary_table - Persistence Tests', () => {
         response_format: 'json'
       })
 
-      const tableIds = tablesResult.structuredContent.items.map(
-        (t: { id: string }) => t.id
-      )
+      const tableIds = tablesResult.structuredContent.items.map((t: { id: string }) => t.id)
       expect(tableIds).toContain(summaryTableId)
     })
 

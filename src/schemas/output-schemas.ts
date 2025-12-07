@@ -323,19 +323,28 @@ export const CreateDocumentOutputSchema = z.object({
 
 /** Widget info in page structure */
 const PageWidgetSchema = z.object({
-  section_id: z.number().describe('Widget section ID'),
-  type: z.string().describe('Widget type'),
+  widget_id: z.number().describe('Widget section ID'),
+  title: z.string().describe('Widget title'),
+  widget_type: z.string().describe('Widget type (grid, card, card_list, chart, form, custom)'),
   table_id: z.string().describe('Data source table'),
-  title: z.string().optional().describe('Widget title'),
-  is_summary: z.boolean().optional().describe('Whether showing summary data'),
-  group_by: z.array(z.string()).optional().describe('Group-by columns for summary'),
+  table_ref: z.number().describe('Table reference ID'),
+  is_summary_table: z.boolean().describe('Whether showing summary data'),
+  summary_source_table: z.string().optional().describe('Source table for summary'),
+  group_by_columns: z.array(z.string()).optional().describe('Group-by columns for summary'),
   linked_to: z
     .object({
-      section_id: z.number().describe('Linked widget section ID'),
-      link_type: z.string().describe('Type of link')
+      source_widget_id: z.number().describe('Source widget section ID'),
+      source_col_ref: z.number().describe('Source column reference'),
+      target_col_ref: z.number().describe('Target column reference')
     })
     .optional()
-    .describe('Link configuration')
+    .describe('Link configuration'),
+  chart_config: z
+    .object({
+      chart_type: z.string().describe('Chart type')
+    })
+    .optional()
+    .describe('Chart configuration if applicable')
 })
 
 /** grist_get_pages output */
@@ -344,8 +353,8 @@ export const GetPagesOutputSchema = z.object({
   doc_id: z.string().describe('Document ID'),
   pages: z.array(
     z.object({
-      id: z.number().describe('Page ID'),
-      name: z.string().describe('Page name'),
+      page_id: z.number().describe('Page ID'),
+      page_name: z.string().describe('Page name'),
       widgets: z.array(PageWidgetSchema).describe('Widgets on this page')
     })
   ),
@@ -353,10 +362,13 @@ export const GetPagesOutputSchema = z.object({
     .array(
       z.object({
         table_id: z.string().describe('Table ID'),
-        has_page: z.boolean().describe('Whether table has a page')
+        table_ref: z.number().describe('Table reference ID'),
+        is_summary_table: z.boolean().describe('Whether this is a summary table'),
+        summary_source_table: z.string().optional().describe('Source table for summary'),
+        group_by_columns: z.array(z.string()).optional().describe('Group-by columns'),
+        referenced_on_pages: z.array(z.number()).describe('Page IDs referencing this table')
       })
     )
-    .optional()
     .describe('Tables in Raw Data section'),
   summary: z.object({
     total_pages: z.number().describe('Total page count'),

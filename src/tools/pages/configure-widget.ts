@@ -4,6 +4,7 @@ import {
   type ToolDefinition,
   WRITE_SAFE_ANNOTATIONS
 } from '../../registry/types.js'
+import { first } from '../../utils/array-helpers.js'
 import { ApplyResponseSchema } from '../../schemas/api-responses.js'
 import { ConfigureWidgetOutputSchema } from '../../schemas/output-schemas.js'
 import {
@@ -206,7 +207,10 @@ class ConfigureWidgetTool extends GristTool<typeof ConfigureWidgetSchema, unknow
           })
 
           // Extract tableRef from response - handle both nested and flat structures
-          const tableRecord = tableResp.records[0] as Record<string, unknown>
+          const tableRecord = first(tableResp.records, `Widget ${op.widget} table query`) as Record<
+            string,
+            unknown
+          >
           const fields = tableRecord?.fields as Record<string, unknown> | undefined
           const tableRef = (fields?.tableRef || tableRecord?.tableRef) as number
 
@@ -221,7 +225,10 @@ class ConfigureWidgetTool extends GristTool<typeof ConfigureWidgetSchema, unknow
           })
 
           // Extract tableId from response - handle both nested and flat structures
-          const tableNameRecord = tableNameResp.records[0] as Record<string, unknown>
+          const tableNameRecord = first(
+            tableNameResp.records,
+            `Table name for tableRef ${tableRef}`
+          ) as Record<string, unknown>
           const tableNameFields = tableNameRecord?.fields as Record<string, unknown> | undefined
           const tableName = (tableNameFields?.tableId || tableNameRecord?.tableId) as string
 
@@ -262,7 +269,7 @@ class ConfigureWidgetTool extends GristTool<typeof ConfigureWidgetSchema, unknow
             )
           }
 
-          const tableRef = tableResp.records[0].id as number
+          const tableRef = (first(tableResp.records, `Table "${op.table}"`) as { id: number }).id
 
           // Get current layout with Zod validation
           const service = new ViewSectionService(this.client)
@@ -295,7 +302,8 @@ class ConfigureWidgetTool extends GristTool<typeof ConfigureWidgetSchema, unknow
             throw new Error('Failed to create widget - no results returned from CreateViewSection')
           }
 
-          const newSectionId = results[0].sectionRef
+          // Safe: length check above guarantees results[0] exists
+          const newSectionId = (results[0] as { sectionRef: number }).sectionRef
 
           // Build new layout based on position
           let newLayout: LayoutSpec
@@ -366,7 +374,9 @@ class ConfigureWidgetTool extends GristTool<typeof ConfigureWidgetSchema, unknow
               )
             }
 
-            partialUpdate.tableRef = tableResp.records[0].id as number
+            partialUpdate.tableRef = (
+              first(tableResp.records, `Table "${op.table}"`) as { id: number }
+            ).id
           }
 
           if (op.title !== undefined) {
@@ -421,7 +431,9 @@ class ConfigureWidgetTool extends GristTool<typeof ConfigureWidgetSchema, unknow
           })
 
           if (remainingWidgets.records.length > 0) {
-            const remainingSectionId = remainingWidgets.records[0].id as number
+            const remainingSectionId = (
+              first(remainingWidgets.records, 'Remaining widget') as { id: number }
+            ).id
             const newLayout = buildLeafLayout(remainingSectionId)
             actions.push(buildUpdateLayoutAction(page.viewRef, newLayout))
           }

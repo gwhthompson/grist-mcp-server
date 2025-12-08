@@ -25,13 +25,16 @@ import {
 } from '../services/action-builder.js'
 import {
   extractForeignTable,
-  getColumnNameFromId,
   isReferenceType,
   resolveVisibleCol
 } from '../services/column-resolver.js'
 import { serializeUserAction } from '../services/grist-client.js'
+import {
+  VisibleColService,
+  type VisibleColSetupParams
+} from '../services/visiblecol-service.js'
 import { toTableId } from '../types/advanced.js'
-import type { ApplyResponse, ColumnDefinition, UserAction } from '../types.js'
+import type { ApplyResponse, ColumnDefinition } from '../types.js'
 import { validateRetValues } from '../validators/apply-response.js'
 import { GristTool } from './base/GristTool.js'
 
@@ -139,14 +142,14 @@ export class CreateTableTool extends GristTool<typeof CreateTableSchema, unknown
     }
 
     // Check if any columns have visibleCol that needs SetDisplayFormula
-    const hasVisibleColColumns = resolvedColumns.some(
+    const visibleColColumns = resolvedColumns.filter(
       (col) => col.visibleCol && col.type && isReferenceType(col.type)
     )
 
-    // Only process SetDisplayFormula if needed
+    // Track errors from visibleCol setup
     const displayFormulaErrors: Array<{ colId: string; error: string }> = []
 
-    if (hasVisibleColColumns) {
+    if (visibleColColumns.length > 0) {
       // Query table columns to get colRefs (AddTable response doesn't include them)
       const columnsResponse = await this.client.get<{
         columns: Array<{ id: string; fields: { colRef: number } }>
@@ -154,135 +157,39 @@ export class CreateTableTool extends GristTool<typeof CreateTableSchema, unknown
 
       const columns = columnsResponse.columns || []
 
-      // CRITICAL FIX: Explicitly set visibleCol in _grist_Tables_column metadata
-      // Based on Grist Core issue #970, we need UpdateRecord + SetDisplayFormula
-      // Even though AddTable includes visibleCol in ColInfo, it may not be properly stored
-      const updateVisibleColTasks = resolvedColumns
-        .map((col) => {
-          if (!col.visibleCol || !col.type || !isReferenceType(col.type)) {
-            return null
-          }
+      // Build VisibleColSetupParams for each column
+      const setupParams: VisibleColSetupParams[] = []
+      for (const col of visibleColColumns) {
+        const columnInfo = columns.find((c) => c.id === col.colId)
+        if (!columnInfo) {
+          displayFormulaErrors.push({
+            colId: col.colId,
+            error: `Column "${col.colId}" not found in created table`
+          })
+          continue
+        }
 
-          // Find the colRef for this column
-          const columnInfo = columns.find((c) => c.id === col.colId)
-          if (!columnInfo) {
-            return null
-          }
-
-          const colRef = columnInfo.fields.colRef
-
-          return (async () => {
-            try {
-              // UpdateRecord to explicitly set visibleCol in _grist_Tables_column
-              // visibleCol is guaranteed to be a number at this point (resolved earlier)
-              const visibleColValue = col.visibleCol as number
-
-              const updateAction: UserAction = [
-                'UpdateRecord',
-                '_grist_Tables_column',
-                colRef,
-                { visibleCol: visibleColValue }
-              ]
-
-              const updateResponse = await this.client.post<ApplyResponse>(
-                `/docs/${params.docId}/apply`,
-                [updateAction],
-                {
-                  schema: ApplyResponseSchema,
-                  context: `Setting visibleCol for column ${col.colId}`
-                }
-              )
-
-              validateRetValues(updateResponse, {
-                context: `Setting visibleCol for column ${col.colId}`
-              })
-            } catch (error) {
-              // Collect error but don't throw - we'll include it in warnings
-              displayFormulaErrors.push({
-                colId: col.colId,
-                error: `Failed to set visibleCol: ${error instanceof Error ? error.message : String(error)}`
-              })
-            }
-          })()
+        setupParams.push({
+          docId: params.docId,
+          tableId,
+          colId: col.colId,
+          colRef: columnInfo.fields.colRef,
+          visibleCol: col.visibleCol as number,
+          columnType: col.type as string
         })
-        .filter((task): task is Promise<void> => task !== null)
+      }
 
-      // Execute all UpdateRecord actions for visibleCol
-      await Promise.all(updateVisibleColTasks)
+      // Use VisibleColService for batch setup
+      if (setupParams.length > 0) {
+        const visibleColService = new VisibleColService(this.client)
+        const results = await visibleColService.setupBatch(setupParams)
+        const summary = VisibleColService.summarizeResults(results)
 
-      // Build SetDisplayFormula tasks for columns with visibleCol
-      const setDisplayFormulaTasks = resolvedColumns
-        .map((col) => {
-          if (!col.visibleCol || !col.type || !isReferenceType(col.type)) {
-            return null
-          }
-
-          const foreignTable = extractForeignTable(col.type)
-          if (!foreignTable) {
-            displayFormulaErrors.push({
-              colId: col.colId,
-              error: `Failed to extract foreign table from type "${col.type}"`
-            })
-            return null
-          }
-
-          // Find the colRef for this column from the queried columns
-          const columnInfo = columns.find((c) => c.id === col.colId)
-          if (!columnInfo) {
-            displayFormulaErrors.push({
-              colId: col.colId,
-              error: `Column "${col.colId}" not found in created table`
-            })
-            return null
-          }
-
-          const colRef = columnInfo.fields.colRef
-
-          return (async () => {
-            try {
-              // Resolve numeric visibleCol to column name
-              const colName = await getColumnNameFromId(
-                this.client,
-                params.docId,
-                foreignTable,
-                col.visibleCol as number
-              )
-
-              // Build and execute SetDisplayFormula
-              const formula = `$${col.colId}.${colName}`
-              const setDisplayAction: UserAction = [
-                'SetDisplayFormula',
-                tableId,
-                null,
-                colRef,
-                formula
-              ]
-
-              const setDisplayResponse = await this.client.post<ApplyResponse>(
-                `/docs/${params.docId}/apply`,
-                [setDisplayAction],
-                {
-                  schema: ApplyResponseSchema,
-                  context: `Setting display formula for column ${col.colId}`
-                }
-              )
-
-              validateRetValues(setDisplayResponse, {
-                context: `Setting display formula for column ${col.colId}`
-              })
-            } catch (error) {
-              // Table already exists - collect error, don't throw
-              displayFormulaErrors.push({
-                colId: col.colId,
-                error: error instanceof Error ? error.message : String(error)
-              })
-            }
-          })()
-        })
-        .filter((task): task is Promise<void> => task !== null)
-
-      // Execute all SetDisplayFormula actions in parallel
-      await Promise.all(setDisplayFormulaTasks)
+        // Add any errors to our tracking
+        for (const err of summary.errors) {
+          displayFormulaErrors.push(err)
+        }
+      }
     }
 
     return {

@@ -11,6 +11,7 @@ import {
 } from '../../schemas/summary-tables.js'
 import { resolveColumnNameToColRef } from '../../services/widget-resolver.js'
 import type { ApplyResponse, SQLQueryResponse, UserAction } from '../../types.js'
+import { first } from '../../utils/array-helpers.js'
 import { extractFields } from '../../utils/grist-field-extractor.js'
 import { validateRetValues } from '../../validators/apply-response.js'
 import { GristTool } from '../base/GristTool.js'
@@ -157,7 +158,7 @@ class CreateSummaryTableTool extends GristTool<
       )
     }
 
-    const fields = extractFields(response.records[0])
+    const fields = extractFields(first(response.records, `Summary table for section ${sectionRef}`))
     return fields.tableId as string
   }
 
@@ -211,7 +212,7 @@ class CreateSummaryTableTool extends GristTool<
       return // No page/tabBar to remove
     }
 
-    const fields = extractFields(queryResponse.records[0])
+    const fields = extractFields(first(queryResponse.records, 'Summary table page lookup'))
     const removeActions: UserAction[] = []
 
     if (fields.pageId && typeof fields.pageId === 'number') {

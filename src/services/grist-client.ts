@@ -724,6 +724,11 @@ export class GristClient {
     }
 
     const docId = docMatch[1]
+    if (!docId) {
+      // Capture group didn't match, clear all cache to be safe
+      this.cache.clear()
+      return
+    }
 
     // Invalidate all cache entries for this document
     // This includes tables, records, SQL queries, etc.

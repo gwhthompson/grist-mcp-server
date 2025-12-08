@@ -9,6 +9,7 @@
 
 import { ValidationError } from '../errors/ValidationError.js'
 import type { SQLQueryResponse } from '../types.js'
+import { first } from '../utils/array-helpers.js'
 import { extractFields } from '../utils/grist-field-extractor.js'
 import type { GristClient } from './grist-client.js'
 
@@ -354,7 +355,7 @@ export async function getPageByName(
       )
     }
 
-    const fields = extractFields(response.records[0])
+    const fields = extractFields(first(response.records, `Page "${pageName}"`))
     return {
       id: assertNumber(fields.id, 'page id', '_grist_Pages'),
       viewRef: assertNumber(fields.viewRef, 'view ref', '_grist_Pages'),

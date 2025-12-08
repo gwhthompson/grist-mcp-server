@@ -5,6 +5,7 @@ import {
   type ViewSectionRecord,
   ViewSectionRecordSchema
 } from '../schemas/api-responses.js'
+import { first } from '../utils/array-helpers.js'
 import type { SectionId, ViewId } from '../types/advanced.js'
 import type { SQLQueryResponse } from '../types.js'
 import { extractFields } from '../utils/grist-field-extractor.js'
@@ -34,7 +35,9 @@ export class ViewSectionService {
       )
     }
 
-    return this.parseViewSectionRecord(response.records[0])
+    return this.parseViewSectionRecord(
+      first(response.records, `ViewSection ${sectionId}`) as Record<string, unknown>
+    )
   }
 
   async getLayoutSpec(docId: string, viewId: ViewId): Promise<string> {
@@ -47,7 +50,7 @@ export class ViewSectionService {
       throw new Error(`View ${viewId} not found in _grist_Views`)
     }
 
-    const fields = extractFields(response.records[0])
+    const fields = extractFields(first(response.records, `View ${viewId}`))
 
     const result = ViewLayoutSpecSchema.safeParse(fields)
     if (!result.success) {

@@ -11,7 +11,8 @@ export function getFirstSectionId(layout: LayoutSpec): number {
   }
   // For split layouts, get the first child's section
   if (layout.children && layout.children.length > 0) {
-    return getFirstSectionId(layout.children[0])
+    // Safe: length check guarantees children[0] exists
+    return getFirstSectionId(layout.children[0] as LayoutSpec)
   }
   return 0
 }

@@ -2,6 +2,7 @@
 
 import { ValidationError } from '../errors/ValidationError.js'
 import type { SQLQueryResponse } from '../types.js'
+import { firstOrUndefined } from '../utils/array-helpers.js'
 import { extractFields } from '../utils/grist-field-extractor.js'
 import type { GristClient } from './grist-client.js'
 import { canLinkSummaryTables, isSummaryTable } from './summary-table-resolver.js'
@@ -130,7 +131,7 @@ async function getWidgetInfo(
     args: [sectionId]
   })
 
-  const record = response.records[0]
+  const record = firstOrUndefined(response.records)
   if (!record) {
     throw new ValidationError(
       'sectionId',
@@ -165,7 +166,7 @@ async function getColumnType(
     args: [tableRef, colRef]
   })
 
-  const record = response.records[0]
+  const record = firstOrUndefined(response.records)
   if (!record) {
     throw new ValidationError(
       'colRef',

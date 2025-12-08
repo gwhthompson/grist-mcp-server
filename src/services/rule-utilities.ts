@@ -147,7 +147,8 @@ export function formatRulesListMarkdown(rules: ConditionalRuleDisplay[], colId: 
   lines.push(`# Conditional Formatting Rules for Column: ${colId}\n`)
 
   for (let i = 0; i < rules.length; i++) {
-    const rule = rules[i]
+    // Safe: loop bound guarantees rules[i] exists
+    const rule = rules[i] as ConditionalRuleDisplay
     if (i === 0) {
       lines.push(`${formatRuleForMarkdown(rule, i)} (Highest Priority)`)
     } else {

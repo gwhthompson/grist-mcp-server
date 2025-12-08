@@ -187,7 +187,8 @@ export class SchemaCache {
     allEntries.sort((a, b) => a.timestamp - b.timestamp)
 
     for (let i = 0; i < entriesToRemove && i < allEntries.length; i++) {
-      const entry = allEntries[i]
+      // Safe: loop bound guarantees allEntries[i] exists
+      const entry = allEntries[i] as { key: string; timestamp: number; isTableRef: boolean }
       if (entry.isTableRef) {
         this.tableRefCache.delete(entry.key)
       } else {

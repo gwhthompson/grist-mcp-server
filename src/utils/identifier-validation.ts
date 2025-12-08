@@ -106,7 +106,8 @@ export function getTableIdError(tableId: string, existingTableIds?: string[]): s
   }
 
   if (/^[a-z]/.test(tableId)) {
-    return `Table ID must start with UPPERCASE letter (got: "${tableId}"). Suggestion: "${tableId[0].toUpperCase()}${tableId.slice(1)}"`
+    const firstChar = tableId[0] ?? ''
+    return `Table ID must start with UPPERCASE letter (got: "${tableId}"). Suggestion: "${firstChar.toUpperCase()}${tableId.slice(1)}"`
   }
 
   if (/^[0-9]/.test(tableId)) {

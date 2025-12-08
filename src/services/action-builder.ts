@@ -1,4 +1,5 @@
 import { ValidationError } from '../errors/ValidationError.js'
+import { isNonEmpty } from '../utils/array-helpers.js'
 import type { ColId, RowId, TableId } from '../types/advanced.js'
 import type {
   AddColumnAction,
@@ -36,7 +37,7 @@ export function buildBulkAddRecordAction(
   const rowIds = records.map(() => null)
   const columns: BulkColValues = {}
 
-  if (records.length > 0) {
+  if (isNonEmpty(records)) {
     const colNames = Object.keys(records[0])
     colNames.forEach((colId) => {
       columns[colId] = records.map((r) => r[colId] ?? null)

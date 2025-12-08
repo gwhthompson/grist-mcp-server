@@ -14,18 +14,19 @@ import {
   buildAddColumnAction,
   buildModifyColumnAction,
   buildRemoveColumnAction,
-  buildRenameColumnAction,
-  buildSetDisplayFormulaAction,
-  buildUpdateColumnMetadataAction
+  buildRenameColumnAction
 } from '../services/action-builder.js'
 import {
   extractForeignTable,
-  getColumnNameFromId,
   getColumnRef,
   isReferenceType,
   resolveVisibleCol
 } from '../services/column-resolver.js'
 import { serializeUserActions } from '../services/grist-client.js'
+import {
+  VisibleColService,
+  type VisibleColSetupParams
+} from '../services/visiblecol-service.js'
 import { toColId, toDocId, toTableId } from '../types/advanced.js'
 import type { ApplyResponse, UserActionObject } from '../types.js'
 import { validateRetValues } from '../validators/apply-response.js'
@@ -179,16 +180,45 @@ export class ManageColumnsTool extends GristTool<
       context: `${actions.length} column operation(s) on ${params.tableId}`
     })
 
-    // Handle visibleCol post-processing (requires separate API calls)
+    // Handle visibleCol post-processing using VisibleColService
+    // Based on Grist Core issue #970, we need UpdateRecord + SetDisplayFormula
+    const visibleColParams: VisibleColSetupParams[] = []
+
     for (let i = 0; i < enrichedOperations.length; i++) {
-      const op = enrichedOperations[i]
+      // Safe: loop bound guarantees enrichedOperations[i] exists
+      const op = enrichedOperations[i] as ColumnOperation
       if ((op.action === 'add' || op.action === 'modify') && 'visibleCol' in op && op.visibleCol) {
-        // CRITICAL FIX: Explicitly set visibleCol in _grist_Tables_column metadata
-        // Based on Grist Core issue #970, we need UpdateRecord + SetDisplayFormula
-        const singleResponse = { retValues: [response.retValues[i]] }
-        await this.updateVisibleCol(params, op, singleResponse as ApplyResponse)
-        await this.setDisplayFormula(params, op, singleResponse as ApplyResponse)
+        // Get colRef based on operation type
+        let colRef: number
+        if (op.action === 'add') {
+          // Safe: loop bound guarantees response.retValues[i] exists
+          const retValue = response.retValues[i] as unknown
+          if (typeof retValue === 'object' && retValue !== null && 'colRef' in retValue) {
+            colRef = (retValue as { colRef: number }).colRef
+          } else {
+            // Skip if we can't get colRef from response
+            continue
+          }
+        } else {
+          // For modify, query for the colRef
+          colRef = await getColumnRef(this.client, params.docId, params.tableId, op.colId)
+        }
+
+        visibleColParams.push({
+          docId: params.docId,
+          tableId: params.tableId,
+          colId: op.colId,
+          colRef,
+          visibleCol: op.visibleCol as number,
+          columnType: op.type as string
+        })
       }
+    }
+
+    // Execute visibleCol setup in batch
+    if (visibleColParams.length > 0) {
+      const visibleColService = new VisibleColService(this.client)
+      await visibleColService.setupBatch(visibleColParams)
     }
 
     // Invalidate schema cache after successful column operations
@@ -319,138 +349,6 @@ export class ManageColumnsTool extends GristTool<
       ...op,
       visibleCol: resolvedVisibleCol
     }
-  }
-
-  // Grist Core issue #970: visibleCol must be set via UpdateRecord in metadata table
-  private async updateVisibleCol(
-    params: ManageColumnsInput,
-    op: ColumnOperation,
-    response: ApplyResponse
-  ) {
-    if (op.action !== 'add' && op.action !== 'modify') return
-    if (!('visibleCol' in op) || !op.visibleCol) return
-    if (!op.type) return
-
-    // visibleCol should be numeric at this point (resolved by resolveVisibleColInOperation)
-    if (typeof op.visibleCol !== 'number') {
-      throw new Error(
-        `Column configuration error: visibleCol must be a numeric column ID for column "${op.colId}". ` +
-          `Current value type: ${typeof op.visibleCol}. ` +
-          `If you provided a column name (string), the server should have automatically resolved it to a numeric ID. ` +
-          `This error indicates the resolution failed. ` +
-          `Use grist_get_tables with detail_level='full_schema' to verify the column exists in the referenced table. ` +
-          `Ensure the column type is "Ref:TableName" or "RefList:TableName" with a valid foreign table.`
-      )
-    }
-
-    // Get the colRef for the column
-    let colRef: number
-    if (op.action === 'add') {
-      const retValue = response.retValues[0]
-      if (typeof retValue === 'object' && retValue !== null && 'colRef' in retValue) {
-        colRef = (retValue as { colRef: number }).colRef
-      } else {
-        throw new Error(
-          `Failed to get column reference from Grist API response for column "${op.colId}". ` +
-            `This indicates the column was not created successfully or the API response format is unexpected. ` +
-            `Possible causes: 1) Column name conflicts with existing column, ` +
-            `2) Invalid column type specification, ` +
-            `3) Grist API version incompatibility. ` +
-            `Next steps: Use grist_get_tables to verify if the column was created. ` +
-            `If not created, check column name and type are valid. ` +
-            `If created but visibleCol setting failed, you can retry or set it manually.`
-        )
-      }
-    } else {
-      // For modify operations, query the column to get colRef
-      colRef = await getColumnRef(this.client, params.docId, params.tableId, op.colId)
-    }
-
-    // UpdateRecord to explicitly set visibleCol in _grist_Tables_column
-    // visibleCol is guaranteed to be a number at this point (checked above)
-    const visibleColValue = op.visibleCol as number
-
-    const updateAction = buildUpdateColumnMetadataAction(colRef, { visibleCol: visibleColValue })
-
-    const updateResponse = await this.client.post<ApplyResponse>(
-      `/docs/${params.docId}/apply`,
-      serializeUserActions([updateAction]),
-      {
-        schema: ApplyResponseSchema,
-        context: `Setting visibleCol for column ${op.colId}`
-      }
-    )
-
-    validateRetValues(updateResponse, { context: `Setting visibleCol for column ${op.colId}` })
-  }
-
-  private async setDisplayFormula(
-    params: ManageColumnsInput,
-    op: ColumnOperation,
-    response: ApplyResponse
-  ) {
-    if (op.action !== 'add' && op.action !== 'modify') return
-    if (!('visibleCol' in op) || !op.visibleCol) return
-    if (!op.type) return
-
-    const foreignTable = extractForeignTable(op.type)
-    if (!foreignTable) return
-
-    // At this point, visibleCol has been resolved to a number by resolveVisibleColInOperation
-    // TypeScript doesn't know this, so we assert it
-    if (typeof op.visibleCol !== 'number') {
-      throw new Error(
-        `Column configuration error: visibleCol must be a numeric column ID for column "${op.colId}". ` +
-          `Current value type: ${typeof op.visibleCol}. ` +
-          `The server failed to resolve the provided column name to a numeric ID. ` +
-          `This may occur if: 1) The column name doesn't exist in the foreign table, ` +
-          `2) The column type is not a Reference type (Ref/RefList), or ` +
-          `3) The foreign table name is invalid. ` +
-          `Use grist_get_tables to verify: a) column "${op.colId}" has type "Ref:TableName" or "RefList:TableName", ` +
-          `b) the foreign table exists, and c) the visibleCol column name exists in that foreign table.`
-      )
-    }
-
-    const foreignColName = await getColumnNameFromId(
-      this.client,
-      params.docId,
-      foreignTable,
-      op.visibleCol
-    )
-
-    const formula = `$${op.colId}.${foreignColName}`
-
-    let colRef: number
-    if (op.action === 'add') {
-      const retValue = response.retValues[0]
-      if (typeof retValue === 'object' && retValue !== null && 'colRef' in retValue) {
-        colRef = (retValue as { colRef: number }).colRef
-      } else {
-        colRef = 0
-      }
-    } else {
-      colRef = await getColumnRef(this.client, params.docId, params.tableId, op.colId)
-    }
-
-    const setDisplayAction = buildSetDisplayFormulaAction(
-      toTableId(params.tableId),
-      null,
-      colRef,
-      formula
-    )
-
-    const setDisplayResponse = await this.client.post<ApplyResponse>(
-      `/docs/${params.docId}/apply`,
-      serializeUserActions([setDisplayAction]),
-      {
-        schema: ApplyResponseSchema,
-        context: `Setting display formula for column ${op.colId}`
-      }
-    )
-
-    validateRetValues(setDisplayResponse, {
-      context: `Setting display formula for column ${op.colId}`
-    })
   }
 
   private buildActionForOperation(op: ColumnOperation, tableId: string): UserActionObject {

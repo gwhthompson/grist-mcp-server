@@ -67,7 +67,8 @@ export async function resolveVisibleCol(
 /** Extracts foreign table name from Ref/RefList column type (e.g., "Ref:People" → "People"). */
 export function extractForeignTable(columnType: string): string | null {
   const match = columnType.match(/^(?:Ref|RefList):(.+)$/)
-  return match ? match[1] : null
+  // Safe: regex capture group (.+) guarantees match[1] exists when match is truthy
+  return match?.[1] ?? null
 }
 
 /** Type guard to check if column type is a reference (Ref or RefList). */

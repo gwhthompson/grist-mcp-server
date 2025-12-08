@@ -646,7 +646,8 @@ export async function configureChartAxes(
   const fieldsToAdd: { colRef: number; parentPos: number }[] = []
   const fieldsToUpdate: { fieldId: number; parentPos: number }[] = []
   for (let i = 0; i < desiredColRefs.length; i++) {
-    const colRef = desiredColRefs[i]
+    // Safe: loop bound guarantees desiredColRefs[i] exists
+    const colRef = desiredColRefs[i] as number
     const fieldId = existingFields.get(colRef)
     if (fieldId !== undefined) {
       // Collect for bulk update

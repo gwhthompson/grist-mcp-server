@@ -25,10 +25,10 @@
       "style": {
         "useConst": "error",
         "useTemplate": "warn",
-        "noNonNullAssertion": "warn"
+        "noNonNullAssertion": "error"
       },
       "suspicious": {
-        "noExplicitAny": "warn",
+        "noExplicitAny": "error",
         "noConsole": "off",
         "useIterableCallbackReturn": "warn"
       },

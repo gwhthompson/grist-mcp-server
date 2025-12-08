@@ -8,6 +8,7 @@
  */
 
 import type { SQLQueryResponse } from '../types.js'
+import { first } from '../utils/array-helpers.js'
 import { extractFields } from '../utils/grist-field-extractor.js'
 import type { GristClient } from './grist-client.js'
 
@@ -52,7 +53,7 @@ export async function isSummaryTable(
     return false
   }
 
-  const fields = extractFields(response.records[0])
+  const fields = extractFields(first(response.records, 'Summary table check'))
   const sourceTable = fields.summarySourceTable as number | null
   return sourceTable != null && sourceTable !== 0
 }
@@ -80,7 +81,7 @@ export async function getTableInfo(
     throw new Error(`Table with ref ${tableRef} not found`)
   }
 
-  const fields = extractFields(tableResponse.records[0])
+  const fields = extractFields(first(tableResponse.records, `Table ${tableRef}`))
   const tableId = fields.tableId as string
   const summarySourceTable = fields.summarySourceTable as number | null
   const sourceTableId = fields.sourceTableId as string | null

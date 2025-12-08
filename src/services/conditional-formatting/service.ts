@@ -7,6 +7,7 @@
 
 import { ApplyResponseSchema } from '../../schemas/api-responses.js'
 import type { ApplyResponse, SQLQueryResponse } from '../../types.js'
+import { first } from '../../utils/array-helpers.js'
 import { extractFields } from '../../utils/grist-field-extractor.js'
 import type { GristClient } from '../grist-client.js'
 import { parseGristJson, parseStyleOptions, validatePythonFormula } from '../rule-utilities.js'
@@ -310,7 +311,7 @@ export class ConditionalFormattingService {
     }
 
     return parseGristJson<Record<string, unknown>>(
-      extractFields(response.records[0])[styleProperty],
+      extractFields(first(response.records, 'Rule style query'))[styleProperty],
       {}
     )
   }

@@ -5,9 +5,9 @@ import {
   ManageWebhooksSchema,
   type WebhookOperation
 } from '../schemas/webhooks.js'
-import { formatErrorResponse } from '../services/formatter.js'
 import type { WebhookId } from '../types/advanced.js'
 import type { MCPToolResponse } from '../types.js'
+import { GristTool } from './base/GristTool.js'
 
 // Re-export schema and types for backward compatibility
 export { ManageWebhooksSchema, type ManageWebhooksInput, type WebhookOperation }
@@ -130,211 +130,273 @@ interface WebhookUsageOutput {
   last_http_status?: number | null
 }
 
+/**
+ * Class-based implementation of webhook management tool.
+ * Standardizes webhook operations while maintaining custom formatting.
+ */
+export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, OperationResult> {
+  constructor(context: ToolContext) {
+    super(context, ManageWebhooksSchema)
+  }
+
+  protected async executeInternal(params: ManageWebhooksInput): Promise<OperationResult> {
+    const { docId, operation } = params
+
+    switch (operation.action) {
+      case 'list':
+        return this.handleList(docId, operation)
+      case 'create':
+        return this.handleCreate(docId, operation)
+      case 'update':
+        return this.handleUpdate(docId, operation)
+      case 'delete':
+        return this.handleDelete(docId, operation)
+      case 'clear_queue':
+        return this.handleClearQueue(docId)
+      default:
+        return assertUnreachable(operation)
+    }
+  }
+
+  private async handleList(
+    docId: string,
+    operation: Extract<WebhookOperation, { action: 'list' }>
+  ): Promise<ListWebhooksResult> {
+    const response = await this.client.get<ListWebhooksResponse>(`/docs/${docId}/webhooks`)
+    const allWebhooks = response.webhooks || []
+
+    const offset = operation.offset ?? 0
+    const limit = operation.limit ?? 100
+    const total = allWebhooks.length
+    const paginatedWebhooks = allWebhooks.slice(offset, offset + limit)
+    const has_more = offset + limit < total
+    const next_offset = has_more ? offset + limit : null
+    const items_in_page = paginatedWebhooks.length
+    const page_number = Math.floor(offset / limit) + 1
+    const total_pages = Math.ceil(total / limit)
+
+    return {
+      operation: 'list',
+      document_id: docId,
+      webhook_count: items_in_page,
+      total,
+      offset,
+      limit,
+      has_more,
+      next_offset,
+      page_number,
+      total_pages,
+      items_in_page,
+      webhooks: paginatedWebhooks.map((w) => ({
+        id: w.id,
+        name: w.fields.name,
+        url: w.fields.url,
+        enabled: w.fields.enabled,
+        table_id: w.fields.tableId,
+        event_types: w.fields.eventTypes,
+        is_ready_column: w.fields.isReadyColumn,
+        memo: w.fields.memo,
+        usage: w.usage
+          ? {
+              num_waiting: w.usage.numWaiting,
+              status: w.usage.status,
+              last_success_time: w.usage.lastSuccessTime,
+              last_failure_time: w.usage.lastFailureTime,
+              last_error_message: w.usage.lastErrorMessage,
+              last_http_status: w.usage.lastHttpStatus
+            }
+          : null
+      }))
+    }
+  }
+
+  private async handleCreate(
+    docId: string,
+    operation: Extract<WebhookOperation, { action: 'create' }>
+  ): Promise<CreateWebhookResult> {
+    const response = await this.client.post<CreateWebhooksResponse>(`/docs/${docId}/webhooks`, {
+      webhooks: [{ fields: operation.fields }]
+    })
+
+    const createdWebhook = response.webhooks[0]
+    if (!createdWebhook) {
+      throw new Error('Webhook creation response missing webhook data')
+    }
+
+    return {
+      operation: 'create',
+      success: true,
+      document_id: docId,
+      webhook_id: createdWebhook.id,
+      webhook_url: operation.fields.url,
+      table_id: operation.fields.tableId,
+      event_types: operation.fields.eventTypes
+    }
+  }
+
+  private async handleUpdate(
+    docId: string,
+    operation: Extract<WebhookOperation, { action: 'update' }>
+  ): Promise<UpdateWebhookResult> {
+    await this.client.patch(`/docs/${docId}/webhooks/${operation.webhookId}`, operation.fields)
+
+    return {
+      operation: 'update',
+      success: true,
+      document_id: docId,
+      webhook_id: operation.webhookId,
+      fields_updated: Object.keys(operation.fields)
+    }
+  }
+
+  private async handleDelete(
+    docId: string,
+    operation: Extract<WebhookOperation, { action: 'delete' }>
+  ): Promise<DeleteWebhookResult> {
+    await this.client.delete<DeleteWebhookResponse>(`/docs/${docId}/webhooks/${operation.webhookId}`)
+
+    return {
+      operation: 'delete',
+      success: true,
+      document_id: docId,
+      webhook_id: operation.webhookId
+    }
+  }
+
+  private async handleClearQueue(docId: string): Promise<ClearQueueResult> {
+    await this.client.delete(`/docs/${docId}/webhooks/queue`)
+
+    return {
+      operation: 'clear_queue',
+      success: true,
+      document_id: docId,
+      action: 'cleared_webhook_queue'
+    }
+  }
+
+  /**
+   * Custom response formatting for webhooks to include rich markdown summaries.
+   */
+  protected formatResponse(
+    data: OperationResult,
+    format: 'json' | 'markdown'
+  ): MCPToolResponse {
+    if (format === 'json') {
+      return {
+        content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
+        structuredContent: data as unknown as Record<string, unknown>
+      }
+    }
+
+    // Custom markdown formatting for each operation type
+    const summary = this.generateMarkdownSummary(data)
+
+    return {
+      content: [{ type: 'text', text: summary }],
+      structuredContent: data as unknown as Record<string, unknown>
+    }
+  }
+
+  private generateMarkdownSummary(result: OperationResult): string {
+    switch (result.operation) {
+      case 'list':
+        return this.formatListSummary(result)
+      case 'create':
+        return this.formatCreateSummary(result)
+      case 'update':
+        return this.formatUpdateSummary(result)
+      case 'delete':
+        return this.formatDeleteSummary(result)
+      case 'clear_queue':
+        return this.formatClearQueueSummary(result)
+    }
+  }
+
+  private formatListSummary(result: ListWebhooksResult): string {
+    if (result.webhooks.length === 0) {
+      return `No webhooks found for document ${result.document_id}`
+    }
+
+    const enabledCount = result.webhooks.filter((w) => w.enabled).length
+    let summary = `Found ${result.total} webhook(s) in document ${result.document_id} (showing ${result.webhooks.length})\n\n`
+
+    summary += result.webhooks
+      .map((w, i) => {
+        let info = `${i + 1}. **${w.name || 'Unnamed'}** (${w.id})\n`
+        info += `   - URL: ${w.url}\n`
+        info += `   - Table: ${w.table_id}\n`
+        info += `   - Events: ${w.event_types.join(', ')}\n`
+        info += `   - Status: ${w.enabled ? 'Enabled' : 'Disabled'}\n`
+        if (w.usage) {
+          info += `   - Queue: ${w.usage.num_waiting} waiting, status: ${w.usage.status}\n`
+          if (w.usage.last_error_message) {
+            info += `   - Last Error: ${w.usage.last_error_message}\n`
+          }
+        }
+        return info
+      })
+      .join('\n')
+
+    summary += `\n**Summary:** ${enabledCount} enabled, ${result.webhooks.length - enabledCount} disabled`
+    return summary
+  }
+
+  private formatCreateSummary(result: CreateWebhookResult): string {
+    return (
+      `Successfully created webhook\n\n` +
+      `**Webhook ID:** ${result.webhook_id}\n` +
+      `**URL:** ${result.webhook_url}\n` +
+      `**Table:** ${result.table_id}\n` +
+      `**Events:** ${result.event_types.join(', ')}`
+    )
+  }
+
+  private formatUpdateSummary(result: UpdateWebhookResult): string {
+    return (
+      `Successfully updated webhook ${result.webhook_id}\n\n` +
+      `**Updated fields:** ${result.fields_updated.join(', ')}`
+    )
+  }
+
+  private formatDeleteSummary(result: DeleteWebhookResult): string {
+    return `Successfully deleted webhook ${result.webhook_id}`
+  }
+
+  private formatClearQueueSummary(result: ClearQueueResult): string {
+    return `Successfully cleared webhook queue for document ${result.document_id}`
+  }
+
+  /**
+   * Override error handling to provide webhook-specific error messages.
+   */
+  protected formatError(error: Error): MCPToolResponse {
+    const enhancedMessage = enhanceErrorMessage(error.message)
+    return {
+      content: [{ type: 'text', text: enhancedMessage }],
+      isError: true
+    }
+  }
+}
+
+/**
+ * Backward-compatible function wrapper.
+ *
+ * Note: Pre-validates params to throw Zod errors (maintaining original behavior).
+ * The original implementation threw validation errors before the try/catch block.
+ */
 export async function manageWebhooks(
   context: ToolContext,
   params: unknown
 ): Promise<MCPToolResponse> {
-  const { client } = context
-  // Validate and parse input parameters (let validation errors throw)
+  // Pre-validate to throw on errors (maintaining original behavior for tests)
+  // The original implementation let Zod validation errors throw before the try/catch
   const validatedParams = ManageWebhooksSchema.parse(params)
-  const { docId, operation, response_format = 'markdown' } = validatedParams
 
-  try {
-    let result: OperationResult | undefined
-    let summary = ''
-
-    switch (operation.action) {
-      case 'list': {
-        const response = await client.get<ListWebhooksResponse>(`/docs/${docId}/webhooks`)
-        const allWebhooks = response.webhooks || []
-
-        const offset = operation.offset ?? 0
-        const limit = operation.limit ?? 100
-        const total = allWebhooks.length
-        const paginatedWebhooks = allWebhooks.slice(offset, offset + limit)
-        const has_more = offset + limit < total
-        const next_offset = has_more ? offset + limit : null
-        const items_in_page = paginatedWebhooks.length
-        const page_number = Math.floor(offset / limit) + 1
-        const total_pages = Math.ceil(total / limit)
-
-        result = {
-          operation: 'list',
-          document_id: docId,
-          webhook_count: items_in_page,
-          total,
-          offset,
-          limit,
-          has_more,
-          next_offset,
-          page_number,
-          total_pages,
-          items_in_page,
-          webhooks: paginatedWebhooks.map((w) => ({
-            id: w.id,
-            name: w.fields.name,
-            url: w.fields.url,
-            enabled: w.fields.enabled,
-            table_id: w.fields.tableId,
-            event_types: w.fields.eventTypes,
-            is_ready_column: w.fields.isReadyColumn,
-            memo: w.fields.memo,
-            usage: w.usage
-              ? {
-                  num_waiting: w.usage.numWaiting,
-                  status: w.usage.status,
-                  last_success_time: w.usage.lastSuccessTime,
-                  last_failure_time: w.usage.lastFailureTime,
-                  last_error_message: w.usage.lastErrorMessage,
-                  last_http_status: w.usage.lastHttpStatus
-                }
-              : null
-          }))
-        }
-
-        if (allWebhooks.length === 0) {
-          summary = `No webhooks found for document ${docId}`
-        } else {
-          const enabledCount = allWebhooks.filter((w) => w.fields.enabled).length
-          summary = `Found ${allWebhooks.length} webhook(s) in document ${docId} (showing ${paginatedWebhooks.length})\n\n`
-          summary += paginatedWebhooks
-            .map((w, i) => {
-              let info = `${i + 1}. **${w.fields.name || 'Unnamed'}** (${w.id})\n`
-              info += `   - URL: ${w.fields.url}\n`
-              info += `   - Table: ${w.fields.tableId}\n`
-              info += `   - Events: ${w.fields.eventTypes.join(', ')}\n`
-              info += `   - Status: ${w.fields.enabled ? '✅ Enabled' : '❌ Disabled'}\n`
-              if (w.usage) {
-                info += `   - Queue: ${w.usage.numWaiting} waiting, status: ${w.usage.status}\n`
-                if (w.usage.lastErrorMessage) {
-                  info += `   - Last Error: ${w.usage.lastErrorMessage}\n`
-                }
-              }
-              return info
-            })
-            .join('\n')
-          summary += `\n**Summary:** ${enabledCount} enabled, ${allWebhooks.length - enabledCount} disabled`
-        }
-        break
-      }
-
-      case 'create': {
-        if (operation.action !== 'create') break
-
-        const response = await client.post<CreateWebhooksResponse>(`/docs/${docId}/webhooks`, {
-          webhooks: [{ fields: operation.fields }]
-        })
-
-        const webhookId = response.webhooks[0].id
-
-        result = {
-          operation: 'create',
-          success: true,
-          document_id: docId,
-          webhook_id: webhookId,
-          webhook_url: operation.fields.url,
-          table_id: operation.fields.tableId,
-          event_types: operation.fields.eventTypes
-        }
-
-        summary = `✅ Successfully created webhook\n\n`
-        summary += `**Webhook ID:** ${webhookId}\n`
-        summary += `**URL:** ${operation.fields.url}\n`
-        summary += `**Table:** ${operation.fields.tableId}\n`
-        summary += `**Events:** ${operation.fields.eventTypes.join(', ')}\n`
-        if (operation.fields.name) {
-          summary += `**Name:** ${operation.fields.name}\n`
-        }
-        summary += `**Status:** ${operation.fields.enabled !== false ? '✅ Enabled' : '❌ Disabled'}`
-        break
-      }
-
-      case 'update': {
-        if (operation.action !== 'update') break
-
-        await client.patch(`/docs/${docId}/webhooks/${operation.webhookId}`, operation.fields)
-
-        result = {
-          operation: 'update',
-          success: true,
-          document_id: docId,
-          webhook_id: operation.webhookId,
-          fields_updated: Object.keys(operation.fields)
-        }
-
-        summary = `✅ Successfully updated webhook ${operation.webhookId}\n\n`
-        summary += `**Updated fields:** ${Object.keys(operation.fields).join(', ')}`
-        break
-      }
-
-      case 'delete': {
-        if (operation.action !== 'delete') break
-
-        await client.delete<DeleteWebhookResponse>(`/docs/${docId}/webhooks/${operation.webhookId}`)
-
-        result = {
-          operation: 'delete',
-          success: true,
-          document_id: docId,
-          webhook_id: operation.webhookId
-        }
-
-        summary = `✅ Successfully deleted webhook ${operation.webhookId}`
-        break
-      }
-
-      case 'clear_queue': {
-        await client.delete(`/docs/${docId}/webhooks/queue`)
-
-        result = {
-          operation: 'clear_queue',
-          success: true,
-          document_id: docId,
-          action: 'cleared_webhook_queue'
-        }
-
-        summary = `✅ Successfully cleared webhook queue for document ${docId}`
-        break
-      }
-
-      default:
-        return assertUnreachable(operation)
-    }
-
-    if (!result) {
-      throw new Error('Operation did not assign a result')
-    }
-
-    if (response_format === 'json') {
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(result, null, 2)
-          }
-        ],
-        structuredContent: result as unknown as Record<string, unknown>
-      }
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: summary
-        }
-      ],
-      structuredContent: result as unknown as Record<string, unknown>
-    }
-  } catch (error) {
-    if (error instanceof Error) {
-      return formatErrorResponse(enhanceErrorMessage(error.message, docId))
-    }
-    return formatErrorResponse(String(error))
-  }
+  const tool = new ManageWebhooksTool(context)
+  return tool.execute(validatedParams)
 }
 
-function enhanceErrorMessage(errorMessage: string, docId: string): string {
+function enhanceErrorMessage(errorMessage: string): string {
   const lowerMessage = errorMessage.toLowerCase()
 
   // ALLOWED_WEBHOOK_DOMAINS rejection
@@ -355,11 +417,11 @@ function enhanceErrorMessage(errorMessage: string, docId: string): string {
     if (lowerMessage.includes('webhook')) {
       return (
         `Webhook not found. The webhook may have been deleted or the webhook ID is incorrect. ` +
-        `Use action="list" to see available webhooks for document "${docId}".`
+        `Use action="list" to see available webhooks.`
       )
     }
     return (
-      `Document not found (${docId}). ` +
+      `Document not found. ` +
       `Verify the docId is correct. ` +
       `Use grist_get_documents to list accessible documents.`
     )
@@ -371,7 +433,7 @@ function enhanceErrorMessage(errorMessage: string, docId: string): string {
     lowerMessage.includes('permission')
   ) {
     return (
-      `Webhook operation failed: Permission denied for document "${docId}"\n\n` +
+      `Webhook operation failed: Permission denied\n\n` +
       `Possible causes:\n` +
       `1. Domain restriction: Grist server may not allow webhooks to this domain\n` +
       `   - The ALLOWED_WEBHOOK_DOMAINS setting restricts webhook destinations\n` +
@@ -379,12 +441,7 @@ function enhanceErrorMessage(errorMessage: string, docId: string): string {
       `2. Insufficient permissions: Webhook operations require OWNER access\n` +
       `   - Verify you have owner permissions for this document\n` +
       `   - Editor access is NOT sufficient for webhook operations\n` +
-      `3. Webhooks disabled: This Grist instance may have webhooks disabled\n` +
-      `   - Some Grist installations disable webhook functionality\n\n` +
-      `Diagnostic steps:\n` +
-      `- Try using a well-known webhook testing service (e.g., webhook.site)\n` +
-      `- Check if other write operations (table creation) work with this document\n` +
-      `- Contact your Grist administrator for server-side error logs\n\n` +
+      `3. Webhooks disabled: This Grist instance may have webhooks disabled\n\n` +
       `Original error: ${errorMessage}`
     )
   }

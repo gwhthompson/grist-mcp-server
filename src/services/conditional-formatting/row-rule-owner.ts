@@ -10,6 +10,7 @@
 
 import { ApplyResponseSchema } from '../../schemas/api-responses.js'
 import type { ApplyResponse, SQLQueryResponse } from '../../types.js'
+import { first } from '../../utils/array-helpers.js'
 import { extractFields } from '../../utils/grist-field-extractor.js'
 import { validateRetValues } from '../../validators/apply-response.js'
 import type { GristClient } from '../grist-client.js'
@@ -64,7 +65,7 @@ export class RowRuleOwner extends RuleOwner {
       )
     }
 
-    const fields = extractFields(response.records[0])
+    const fields = extractFields(first(response.records, `Table "${params.tableId}"`))
     const rawViewSectionRef = fields.rawViewSectionRef
 
     if (typeof rawViewSectionRef !== 'number' || rawViewSectionRef <= 0) {
@@ -96,7 +97,7 @@ export class RowRuleOwner extends RuleOwner {
       return { helperColRefs: [], styles: [] }
     }
 
-    const fields = extractFields(response.records[0])
+    const fields = extractFields(first(response.records, 'Row rules query'))
 
     // Parse rules RefList (handles SQL string or REST array)
     const helperColRefs = parseGristList(fields.rules)
@@ -130,7 +131,7 @@ export class RowRuleOwner extends RuleOwner {
     const currentOptions =
       fullOptionsResp.records.length > 0
         ? parseGristJson<Record<string, unknown>>(
-            extractFields(fullOptionsResp.records[0]).options,
+            extractFields(first(fullOptionsResp.records, 'Row section options query')).options,
             {}
           )
         : {}
@@ -181,6 +182,9 @@ export class RowRuleOwner extends RuleOwner {
       return {}
     }
 
-    return parseGristJson<Record<string, unknown>>(extractFields(response.records[0]).options, {})
+    return parseGristJson<Record<string, unknown>>(
+      extractFields(first(response.records, 'Row section options for styles')).options,
+      {}
+    )
   }
 }

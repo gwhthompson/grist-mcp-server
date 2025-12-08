@@ -1,6 +1,6 @@
 {
   "name": "grist-mcp-server",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "description": "22 tools for managing Grist documents with AI",
   "repository": {
     "type": "git",

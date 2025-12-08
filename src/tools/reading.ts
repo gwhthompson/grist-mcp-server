@@ -5,7 +5,7 @@ import {
   type ToolContext,
   type ToolDefinition
 } from '../registry/types.js'
-import { decodeCellValue } from '../schemas/api-responses.js'
+import { decodeCellValue, decodeCellValueWithType } from '../schemas/api-responses.js'
 import {
   ColumnSelectionSchema,
   DocIdSchema,
@@ -16,6 +16,7 @@ import {
 } from '../schemas/common.js'
 import { GetRecordsOutputSchema, QuerySqlOutputSchema } from '../schemas/output-schemas.js'
 import { truncateIfNeeded } from '../services/formatter.js'
+import { toDocId, toTableId } from '../types/advanced.js'
 import type { CellValue, RecordsResponse, SQLQueryResponse } from '../types.js'
 import { GristTool } from './base/GristTool.js'
 
@@ -207,6 +208,13 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
   }
 
   protected async executeInternal(params: GetRecordsInput) {
+    // Fetch column types for type-aware decoding (Date/DateTime → ISO strings)
+    const columns = await this.schemaCache.getTableColumns(
+      toDocId(params.docId),
+      toTableId(params.tableId)
+    )
+    const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
+
     const queryParams: Record<string, unknown> = {
       limit: params.limit,
       offset: params.offset
@@ -224,7 +232,7 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
 
     let records = response.records || []
     records = this.selectColumns(records, params.columns)
-    const formattedRecords = this.flattenRecords(records)
+    const formattedRecords = this.flattenRecords(records, columnTypes)
 
     const total = this.estimateTotal(records.length, params.limit, params.offset)
     const hasMore = records.length === params.limit
@@ -318,11 +326,15 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
     }))
   }
 
-  private flattenRecords(records: GristRecord[]): FlattenedRecord[] {
+  private flattenRecords(
+    records: GristRecord[],
+    columnTypes: Map<string, string>
+  ): FlattenedRecord[] {
     return records.map((record) => {
       const decodedFields: Record<string, unknown> = {}
       for (const [key, value] of Object.entries(record.fields)) {
-        decodedFields[key] = decodeCellValue(value)
+        const colType = columnTypes.get(key) || 'Text'
+        decodedFields[key] = decodeCellValueWithType(value, colType)
       }
 
       return {

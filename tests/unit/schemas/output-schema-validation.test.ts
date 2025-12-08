@@ -280,7 +280,9 @@ describe('Output Schema Validation', () => {
 
   describe('ManageConditionalRulesOutputSchema', () => {
     it('should validate add operation response', () => {
-      const result = ManageConditionalRulesOutputSchema.safeParse(ManageConditionalRulesFixtures.add)
+      const result = ManageConditionalRulesOutputSchema.safeParse(
+        ManageConditionalRulesFixtures.add
+      )
       expect(result.success).toBe(true)
     })
 

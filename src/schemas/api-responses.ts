@@ -131,22 +131,91 @@ export function decodeRecords(
   return records.map(decodeRecord)
 }
 
-export const CellValueSchema = z.preprocess(
-  preprocessCellValue,
-  z.union([
-    z.null().describe('Empty cell'),
-    z.string().describe('Text value'),
-    z.number().describe('Numeric value'),
-    z.boolean().describe('True or false'),
-    z.tuple([z.literal('L')]).rest(z.union([z.string(), z.number(), z.boolean()])),
-    z.tuple([z.literal('l')]).rest(z.unknown()),
-    z.tuple([z.literal('d'), z.number()]),
-    z.tuple([z.literal('D'), z.number(), z.string()]),
-    z.tuple([z.literal('r'), z.string(), z.array(z.number())]),
-    z.tuple([z.literal('R'), z.string(), z.number()]),
-    z.tuple([z.literal('O'), z.record(z.unknown())]),
-    z.tuple([z.enum(['E', 'P', 'U', 'C', 'S', 'V'])]).rest(z.unknown())
-  ])
+/**
+ * Decode cell value using column type information.
+ * Handles raw timestamps for Date/DateTime columns that Grist returns as plain numbers.
+ * @param value - The raw cell value from Grist API
+ * @param columnType - The Grist column type (e.g., "Date", "DateTime:UTC", "Text", "Numeric")
+ * @returns Decoded value with dates converted to ISO strings
+ */
+export function decodeCellValueWithType(value: unknown, columnType: string): unknown {
+  // First apply existing decoding for encoded values (e.g., ['L', ...], ['d', ts])
+  const decoded = decodeCellValue(value)
+
+  // If it's a number and column is Date/DateTime, convert to ISO string
+  // Grist API returns Date/DateTime as raw Unix timestamps (seconds), not encoded arrays
+  if (typeof decoded === 'number') {
+    if (columnType === 'Date') {
+      return new Date(decoded * 1000).toISOString().split('T')[0] // "YYYY-MM-DD"
+    }
+    if (columnType.startsWith('DateTime')) {
+      return new Date(decoded * 1000).toISOString() // "YYYY-MM-DDTHH:mm:ss.sssZ"
+    }
+  }
+
+  return decoded
+}
+
+/**
+ * Decode all fields in a record using column type information.
+ * @param fields - Record fields from Grist API
+ * @param columnTypes - Map of column ID to column type
+ * @returns Decoded fields with dates converted to ISO strings
+ */
+export function decodeRecordFieldsWithTypes(
+  fields: Record<string, unknown>,
+  columnTypes: Map<string, string>
+): Record<string, unknown> {
+  const decoded: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(fields)) {
+    const colType = columnTypes.get(key) || 'Text'
+    decoded[key] = decodeCellValueWithType(value, colType)
+  }
+  return decoded
+}
+
+/**
+ * User-facing schema for cell values - only natural formats.
+ * This is what LLMs see in tool JSON schemas via zod-to-json-schema.
+ * MCP SDK uses pipeStrategy: "input" so only this schema is exposed.
+ */
+export const CellValueInputSchema = z.union([
+  z.null().describe('Empty cell'),
+  z.string().describe('Text value. For dates use ISO 8601: "2024-01-15" or "2024-01-15T10:30:00Z"'),
+  z.number().describe('Numeric value. For Ref columns, use row ID directly'),
+  z.boolean().describe('True or false'),
+  z
+    .array(z.union([z.string(), z.number(), z.boolean()]))
+    .describe('List of values for ChoiceList or RefList columns')
+])
+
+/**
+ * Internal schema validating Grist-encoded formats (after preprocessing).
+ * NOT exposed in JSON Schema - only used internally for validation after transform.
+ */
+const GristEncodedCellValueSchema = z.union([
+  z.null(),
+  z.string(),
+  z.number(),
+  z.boolean(),
+  z.tuple([z.literal('L')]).rest(z.union([z.string(), z.number(), z.boolean()])),
+  z.tuple([z.literal('l')]).rest(z.unknown()),
+  z.tuple([z.literal('d'), z.number()]),
+  z.tuple([z.literal('D'), z.number(), z.string()]),
+  z.tuple([z.literal('r'), z.string(), z.array(z.number())]),
+  z.tuple([z.literal('R'), z.string(), z.number()]),
+  z.tuple([z.literal('O'), z.record(z.unknown())]),
+  z.tuple([z.enum(['E', 'P', 'U', 'C', 'S', 'V'])]).rest(z.unknown())
+])
+
+/**
+ * CellValueSchema for tool inputs.
+ * - JSON Schema shows CellValueInputSchema (natural formats only) via pipeStrategy: "input"
+ * - Runtime: transform converts natural -> Grist encoded via preprocessCellValue
+ * - Validates transformed output against GristEncodedCellValueSchema
+ */
+export const CellValueSchema = CellValueInputSchema.transform(preprocessCellValue).pipe(
+  GristEncodedCellValueSchema
 )
 
 export const WorkspaceSummarySchema = z.object({

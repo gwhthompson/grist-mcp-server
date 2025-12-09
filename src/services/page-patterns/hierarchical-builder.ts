@@ -6,8 +6,9 @@
  */
 
 import type { BuildPageInput } from '../../schemas/pages-widgets.js'
-import { at, first } from '../../utils/array-helpers.js'
+import { getFirstSectionId } from '../../tools/pages/shared.js'
 import type { LayoutSpec, UserAction } from '../../types.js'
+import { at, first } from '../../utils/array-helpers.js'
 import {
   buildColumnRefsMap,
   buildCreateViewSectionAction,
@@ -15,7 +16,6 @@ import {
   buildVerticalSplitLayout,
   buildWidgetLinkAction
 } from '../pages-builder.js'
-import { getFirstSectionId } from '../../tools/pages/shared.js'
 import { PatternBuilder } from './pattern-builder.js'
 import type { PatternBuildResult, WidgetInfo } from './types.js'
 

@@ -76,7 +76,7 @@ export const QuerySQLSchema = z
       ),
     response_format: ResponseFormatSchema
   })
-  .merge(PaginationSchema)
+  .extend(PaginationSchema.shape)
   .strict()
 
 export type QuerySQLInput = z.infer<typeof QuerySQLSchema>
@@ -197,7 +197,7 @@ export const GetRecordsSchema = z
     columns: ColumnSelectionSchema,
     response_format: ResponseFormatSchema
   })
-  .merge(PaginationSchema)
+  .extend(PaginationSchema.shape)
   .strict()
 
 export type GetRecordsInput = z.infer<typeof GetRecordsSchema>
@@ -361,10 +361,7 @@ export const READING_TOOLS: ReadonlyArray<ToolDefinition> = [
   {
     name: 'grist_query_sql',
     title: 'Query Grist with SQL',
-    description: `Execute SQL for JOINs, aggregations, complex filtering.
-NOT FOR: Simple single-table queries -> use grist_get_records
-Params: docId, sql, parameters (? placeholders)
-Ex: {sql:"SELECT Region,AVG(Sales) FROM Data GROUP BY Region"}`,
+    description: 'Execute SQL for JOINs, aggregations, and complex queries',
     purpose: 'Run SQL queries with JOINs and aggregations',
     category: 'reading',
     inputSchema: QuerySQLSchema,
@@ -407,10 +404,7 @@ Ex: {sql:"SELECT Region,AVG(Sales) FROM Data GROUP BY Region"}`,
   {
     name: 'grist_get_records',
     title: 'Get Grist Records',
-    description: `Fetch records with filters (no SQL needed).
-NOT FOR: JOINs, aggregations -> use grist_query_sql
-Params: docId, tableId, filters, columns, limit, offset
-Ex: {tableId:"Contacts",filters:{"Status":"Active"}}`,
+    description: 'Fetch records with optional filters',
     purpose: 'Fetch records with filters',
     category: 'reading',
     inputSchema: GetRecordsSchema,

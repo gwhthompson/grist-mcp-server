@@ -1,5 +1,4 @@
 import { ValidationError } from '../errors/ValidationError.js'
-import { isNonEmpty } from '../utils/array-helpers.js'
 import type { ColId, RowId, TableId } from '../types/advanced.js'
 import type {
   AddColumnAction,
@@ -20,6 +19,7 @@ import type {
   SetDisplayFormulaAction,
   UpdateMetadataAction
 } from '../types.js'
+import { isNonEmpty } from '../utils/array-helpers.js'
 import { isReferenceType } from './column-resolver.js'
 import { validateAndSerializeWidgetOptions } from './widget-options-validator.js'
 

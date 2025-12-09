@@ -102,7 +102,7 @@ export const TableIdSchema = z
       'Table ID must start with uppercase letter or underscore, followed by letters, numbers, or underscores'
   })
   .refine((id) => !PYTHON_KEYWORDS.has(id), {
-    message:
+    error:
       'Table ID cannot be a Python keyword (for, class, if, def, etc.) because Grist uses Python for formulas'
   })
   .describe(
@@ -124,11 +124,11 @@ export const ColIdSchema = z
       'Column ID must be a valid Python identifier (start with letter or underscore, followed by letters, numbers, or underscores)'
   })
   .refine((id) => !PYTHON_KEYWORDS.has(id), {
-    message:
+    error:
       'Column ID cannot be a Python keyword (for, class, if, def, etc.) because Grist uses Python for formulas'
   })
   .refine((id) => !id.startsWith('gristHelper_'), {
-    message: 'Column ID cannot start with gristHelper_ (reserved prefix for Grist internal columns)'
+    error: 'Column ID cannot start with gristHelper_ (reserved prefix for Grist internal columns)'
   })
   .describe('Column identifier (e.g., "Email", "Phone_Number"). Use alphanumeric and underscores')
 
@@ -258,7 +258,7 @@ export const WidgetOptionsSchema = z.union([
   EmptyWidgetOptionsSchema
 ])
 
-export function createWidgetOptionsSchema(columnType: string): z.ZodTypeAny {
+export function createWidgetOptionsSchema(columnType: string): z.ZodType<any, any> {
   if (columnType === 'Ref' || columnType === 'RefList') {
     return RefWidgetOptionsSchema
   }
@@ -308,22 +308,13 @@ export const ColumnDefinitionSchema = z
       ])
       .optional()
       .describe(
-        'Widget options validated by column type. Examples:\n' +
-          '- Numeric: {"numMode": "currency", "currency": "USD", "decimals": 2}\n' +
-          '- Choice: {"choices": ["Red", "Blue", "Green"]}\n' +
-          '- Date: {"dateFormat": "YYYY-MM-DD"}\n' +
-          '- Ref/RefList: Widget options for references (alignment, styles)\n' +
-          'Validation is enforced based on column type - unknown properties are rejected.'
+        'Type-specific options. Ex: {"numMode":"currency","currency":"USD"} for Numeric, {"choices":["A","B"]} for Choice'
       ),
 
     visibleCol: z
       .union([z.string(), z.number()])
       .optional()
-      .describe(
-        'Which column from referenced table to display (Ref/RefList only). ' +
-          'String column name (e.g., "Email") auto-resolves to numeric ID. ' +
-          'Numeric ID (e.g., 456) used directly.'
-      )
+      .describe('Display column for Ref/RefList. String name or numeric ID. Ex: "Email" or 456')
   })
   .strict()
 
@@ -346,25 +337,15 @@ const FilterValueSchema = z.union([
 export const FilterSchema = z
   .record(z.string(), FilterValueSchema)
   .optional()
-  .describe(
-    'Filters as key-value pairs. Examples:\n' +
-      '  • Text: {"Status": "Active"}\n' +
-      '  • Number: {"Priority": 1}\n' +
-      '  • Boolean: {"IsActive": true}\n' +
-      '  • Multiple values (OR): {"Status": ["Active", "Lead"]}\n' +
-      '  • Multiple columns (AND): {"Status": "Active", "Region": "West"}\n' +
-      'Note: For boolean columns use true/false (not strings like "Yes" or "__YES__")'
-  )
+  .describe('Filter by column values. Ex: {"Status": "Active"}, {"Priority": [1,2]}')
 
 export const ColumnSelectionSchema = z
   .array(z.string())
   .optional()
-  .describe(
-    'List of column IDs to return. Omit to return all columns. Example: ["Name", "Email", "Phone"]'
-  )
+  .describe('Columns to return. Omit for all. Ex: ["Name", "Email"]')
 
 export const StandardToolParams = z.object({
   response_format: ResponseFormatSchema
 })
 
-export const ListToolParams = StandardToolParams.merge(PaginationSchema)
+export const ListToolParams = StandardToolParams.extend(PaginationSchema.shape)

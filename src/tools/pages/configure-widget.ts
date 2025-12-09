@@ -4,7 +4,6 @@ import {
   type ToolDefinition,
   WRITE_SAFE_ANNOTATIONS
 } from '../../registry/types.js'
-import { first } from '../../utils/array-helpers.js'
 import { ApplyResponseSchema } from '../../schemas/api-responses.js'
 import { ConfigureWidgetOutputSchema } from '../../schemas/output-schemas.js'
 import {
@@ -36,6 +35,7 @@ import {
 } from '../../services/widget-resolver.js'
 import type { SectionId, ViewId } from '../../types/advanced.js'
 import type { ApplyResponse, LayoutSpec, SQLQueryResponse, UserAction } from '../../types.js'
+import { first } from '../../utils/array-helpers.js'
 import { validateRetValues } from '../../validators/apply-response.js'
 import { GristTool } from '../base/GristTool.js'
 import { fetchWidgetTableMetadata, getFirstSectionId } from './shared.js'
@@ -546,11 +546,7 @@ export async function configureWidget(context: ToolContext, params: ConfigureWid
 export const CONFIGURE_WIDGET_DEFINITION: ToolDefinition = {
   name: 'grist_configure_widget',
   title: 'Configure Widget',
-  description:
-    'Modify widgets on existing pages.\n' +
-    'Actions: add, modify, link, sort, filter, delete\n' +
-    'Params: docId, operations (array)\n' +
-    'Ex: {operations:[{action:"link",page_name:"Dashboard",target_widget:"Orders",link_config:{source_widget:"Customers",target_col:"CustomerRef"}}]}',
+  description: 'Configure widget properties, linking, sorting, and filtering',
   purpose: 'Configure widget properties, linking, sorting, and filtering',
   category: 'document_structure',
   inputSchema: ConfigureWidgetSchema,

@@ -9,8 +9,12 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { zodToJsonSchema } from 'zod-to-json-schema'
-import { CellValueSchema, decodeCellValueWithType } from '../../../src/schemas/api-responses.js'
+import { z } from 'zod'
+import {
+  CellValueInputSchema,
+  CellValueSchema,
+  decodeCellValueWithType
+} from '../../../src/schemas/api-responses.js'
 import { isDateEncoding, isDateTimeEncoding } from '../../helpers/type-guards.js'
 
 describe('CellValue Preprocessing', () => {
@@ -357,8 +361,9 @@ describe('CellValue Preprocessing', () => {
  */
 describe('JSON Schema Visibility', () => {
   it('should NOT expose Grist encoding patterns in JSON Schema', () => {
-    // Use pipeStrategy: "input" to match MCP SDK behavior
-    const jsonSchema = zodToJsonSchema(CellValueSchema, { pipeStrategy: 'input' })
+    // Test the INPUT schema (CellValueInputSchema) which is what MCP SDK exposes to LLMs
+    // CellValueSchema includes transform/pipe which outputs Grist encoding formats
+    const jsonSchema = z.toJSONSchema(CellValueInputSchema)
     const schemaString = JSON.stringify(jsonSchema)
 
     // Should NOT contain encoding literals like ["d", ...] or ["L", ...]
@@ -372,7 +377,8 @@ describe('JSON Schema Visibility', () => {
   })
 
   it('should show natural types in JSON Schema', () => {
-    const jsonSchema = zodToJsonSchema(CellValueSchema, { pipeStrategy: 'input' })
+    // Test the INPUT schema which is what users/LLMs see
+    const jsonSchema = z.toJSONSchema(CellValueInputSchema)
     const schemaString = JSON.stringify(jsonSchema)
 
     // Should have basic types - check for type keywords in anyOf
@@ -385,7 +391,8 @@ describe('JSON Schema Visibility', () => {
   })
 
   it('should include helpful descriptions for dates', () => {
-    const jsonSchema = zodToJsonSchema(CellValueSchema, { pipeStrategy: 'input' })
+    // Test the INPUT schema which includes user-facing descriptions
+    const jsonSchema = z.toJSONSchema(CellValueInputSchema)
     const schemaString = JSON.stringify(jsonSchema)
 
     // Should have date format hint in description

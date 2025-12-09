@@ -259,11 +259,7 @@ export async function createSummaryTable(context: ToolContext, params: CreateSum
 export const CREATE_SUMMARY_TABLE_DEFINITION: ToolDefinition = {
   name: 'grist_create_summary_table',
   title: 'Create Summary Table',
-  description:
-    'Create aggregated summary table from source table.\n' +
-    'Groups data by specified columns, auto-generates count and SUM columns.\n' +
-    'Params: docId, sourceTable, groupByColumns\n' +
-    'Ex: {sourceTable:"Sales",groupByColumns:["Region","Year"]}',
+  description: 'Create an aggregated summary table from a source table',
   purpose: 'Create summary tables for aggregations and chart data sources',
   category: 'tables',
   inputSchema: CreateSummaryTableSchema,

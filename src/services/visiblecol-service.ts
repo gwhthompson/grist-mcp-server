@@ -11,15 +11,12 @@
  */
 
 import { ApplyResponseSchema } from '../schemas/api-responses.js'
-import type { ApplyResponse } from '../types.js'
 import type { TableId } from '../types/advanced.js'
+import type { ApplyResponse } from '../types.js'
 import { validateRetValues } from '../validators/apply-response.js'
-import {
-  buildSetDisplayFormulaAction,
-  buildUpdateColumnMetadataAction
-} from './action-builder.js'
+import { buildSetDisplayFormulaAction, buildUpdateColumnMetadataAction } from './action-builder.js'
 import { extractForeignTable, getColumnNameFromId } from './column-resolver.js'
-import { serializeUserAction, type GristClient } from './grist-client.js'
+import { type GristClient, serializeUserAction } from './grist-client.js'
 
 /**
  * Parameters for setting up visibleCol on a reference column.
@@ -99,12 +96,7 @@ export class VisibleColService {
       }
 
       // Resolve numeric visibleCol ID to column name for the formula
-      const foreignColName = await getColumnNameFromId(
-        this.client,
-        docId,
-        foreignTable,
-        visibleCol
-      )
+      const foreignColName = await getColumnNameFromId(this.client, docId, foreignTable, visibleCol)
 
       // Build formula like $ColId.ForeignColName
       const formula = `$${colId}.${foreignColName}`

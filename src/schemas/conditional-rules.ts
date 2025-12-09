@@ -11,7 +11,7 @@ export const RuleFormulaSchema = z
   .min(1, 'Formula cannot be empty')
   .max(1000, 'Formula exceeds maximum length (1000 characters). Break into simpler conditions.')
   .refine((val) => val.trim().length > 0, {
-    message: 'Formula must contain non-whitespace characters'
+    error: 'Formula must contain non-whitespace characters'
   })
   .describe(
     'Python formula returning boolean. Examples: "$Price > 1000", "$Status == \\"Active\\"", "$DueDate < NOW()"'

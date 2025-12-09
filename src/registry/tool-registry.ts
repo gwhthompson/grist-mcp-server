@@ -40,7 +40,7 @@ export interface RegistrationStrategy {
   onError?: (error: Error, toolName: string) => boolean
 }
 
-export async function registerTool<TSchema extends z.ZodTypeAny>(
+export async function registerTool<TSchema extends z.ZodType<any, any>>(
   server: McpServer,
   context: ToolContext,
   definition: ToolDefinition<TSchema>
@@ -91,7 +91,8 @@ export async function registerTool<TSchema extends z.ZodTypeAny>(
       }
 
       try {
-        const result = await definition.handler(context, params)
+        // MCP SDK parses params with inputSchema, so type assertion is safe
+        const result = await definition.handler(context, params as z.infer<TSchema>)
 
         if (shouldLogCalls) {
           const duration = Date.now() - startTime

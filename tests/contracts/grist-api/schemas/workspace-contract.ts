@@ -161,7 +161,7 @@ export type ColumnListContract = z.infer<typeof ColumnListContractSchema>
 export const RecordContractSchema = z
   .object({
     id: z.number().int().positive().describe('Row ID'),
-    fields: z.record(z.unknown()).describe('Record fields (column values)')
+    fields: z.record(z.string(), z.unknown()).describe('Record fields (column values)')
   })
   .strict()
 

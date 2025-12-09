@@ -90,10 +90,7 @@ export const DOCUMENT_TOOLS: ReadonlyArray<ToolDefinition> = [
   {
     name: 'grist_create_document',
     title: 'Create Document',
-    description:
-      'Create new document or fork existing one.\n' +
-      'Params: name, workspaceId, forkFromDocId (optional - copies data)\n' +
-      'Ex: {name:"Customer CRM",workspaceId:123}',
+    description: 'Create a new document or fork an existing one',
     purpose: 'Create new Grist documents or copy existing ones',
     category: 'documents',
     inputSchema: CreateDocumentSchema,

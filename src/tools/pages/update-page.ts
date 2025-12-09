@@ -186,11 +186,7 @@ export async function updatePage(context: ToolContext, params: UpdatePageInput) 
 export const UPDATE_PAGE_DEFINITION: ToolDefinition = {
   name: 'grist_update_page',
   title: 'Update Page',
-  description:
-    'Rename, reorder, or delete pages.\n' +
-    'NOT FOR: New pages -> use grist_build_page; widgets -> use grist_configure_widget\n' +
-    'Params: docId, operations (action: rename/reorder/delete)\n' +
-    'Ex: {operations:[{action:"rename",page_name:"Old",new_name:"New"}]}',
+  description: 'Rename, reorder, or delete pages',
   purpose: 'Rename, reorder, or delete existing pages',
   category: 'document_structure',
   inputSchema: UpdatePageSchema,

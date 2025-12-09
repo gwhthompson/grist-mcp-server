@@ -12,6 +12,7 @@ import {
   validateToolNames
 } from './registry/tool-registry.js'
 import type { ToolContext } from './registry/types.js'
+import { registerResources } from './resources/index.js'
 import { createGristMcpServer, type ServerConfig, type ServerInstance } from './server.js'
 import { initSessionAnalytics } from './services/session-analytics.js'
 import { sharedLogger } from './utils/shared-logger.js'
@@ -109,6 +110,7 @@ async function main(): Promise<void> {
   serverInstance = await createGristMcpServer(config)
 
   await registerTools(serverInstance.server, serverInstance.context)
+  registerResources(serverInstance.server, serverInstance.context)
   await connectServer(serverInstance.server)
   logStartupInfo(config)
 }

@@ -85,7 +85,7 @@ export type ReferenceListValueContract = readonly ['r', string, number[]]
  * Format: ["O", {key: value, ...}]
  * Used for: Complex object storage
  */
-export const DictValueContractSchema = z.tuple([z.literal('O'), z.record(z.unknown())])
+export const DictValueContractSchema = z.tuple([z.literal('O'), z.record(z.string(), z.unknown())])
 
 export type DictValueContract = readonly ['O', Record<string, unknown>]
 

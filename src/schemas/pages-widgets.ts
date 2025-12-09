@@ -137,7 +137,7 @@ export const FilterSpecSchema = z
   })
   .strict()
   .refine((data) => data.included !== undefined || data.excluded !== undefined, {
-    message: 'Filter must specify either included or excluded values'
+    error: 'Filter must specify either included or excluded values'
   })
 
 const WidgetIdentifierSchema = z

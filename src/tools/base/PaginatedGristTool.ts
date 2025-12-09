@@ -15,7 +15,7 @@ export interface PaginatedResponse<TItem> {
 }
 
 export abstract class PaginatedGristTool<
-  TInput extends z.ZodTypeAny,
+  TInput extends z.ZodType<any, any>,
   TItem,
   TOutput = PaginatedResponse<TItem>
 > extends GristTool<TInput, TOutput> {
@@ -74,5 +74,5 @@ export abstract class PaginatedGristTool<
   }
 }
 
-export type PaginatedToolItem<T extends PaginatedGristTool<z.ZodTypeAny, unknown, unknown>> =
-  T extends PaginatedGristTool<z.ZodTypeAny, infer TItem, unknown> ? TItem : never
+export type PaginatedToolItem<T extends PaginatedGristTool<z.ZodType<any, any>, unknown, unknown>> =
+  T extends PaginatedGristTool<z.ZodType<any, any>, infer TItem, unknown> ? TItem : never

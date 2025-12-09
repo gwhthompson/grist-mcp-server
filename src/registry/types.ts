@@ -49,7 +49,8 @@ export interface ToolDocumentation {
  * Handler function signature for tools.
  * Receives a context object with all dependencies instead of just the client.
  */
-export type ToolHandler<TSchema extends z.ZodTypeAny> = (
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type ToolHandler<TSchema extends z.ZodType<any, any>> = (
   context: ToolContext,
   params: z.infer<TSchema>
 ) => Promise<MCPToolResponse>
@@ -72,9 +73,11 @@ export type ToolCategory =
  * Complete tool definition with all metadata.
  * Single source of truth for MCP manifest, README, and help.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export interface ToolDefinition<
-  TSchema extends z.ZodTypeAny = z.ZodTypeAny,
-  TOutputSchema extends z.ZodTypeAny = z.ZodTypeAny
+  TSchema extends z.ZodType<any, any> = z.ZodType<any, any>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  TOutputSchema extends z.ZodType<any, any> = z.ZodType<any, any>
 > {
   /** Tool name (grist_verb_noun) */
   readonly name: string

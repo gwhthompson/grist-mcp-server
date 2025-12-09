@@ -7,7 +7,7 @@ import type { SchemaCache } from '../../services/schema-cache.js'
 import { getSessionAnalytics } from '../../services/session-analytics.js'
 import type { MCPToolResponse, ResponseFormat } from '../../types.js'
 
-export abstract class GristTool<TInput extends z.ZodTypeAny, TOutput = unknown> {
+export abstract class GristTool<TInput extends z.ZodType<any, any>, TOutput = unknown> {
   protected readonly client: GristClient
   protected readonly schemaCache: SchemaCache
 
@@ -123,8 +123,8 @@ export abstract class GristTool<TInput extends z.ZodTypeAny, TOutput = unknown> 
   }
 }
 
-export type ToolInput<T extends GristTool<z.ZodTypeAny, unknown>> =
+export type ToolInput<T extends GristTool<z.ZodType<any, any>, unknown>> =
   T extends GristTool<infer TInput, unknown> ? z.infer<TInput> : never
 
-export type ToolOutput<T extends GristTool<z.ZodTypeAny, unknown>> =
-  T extends GristTool<z.ZodTypeAny, infer TOutput> ? TOutput : never
+export type ToolOutput<T extends GristTool<z.ZodType<any, any>, unknown>> =
+  T extends GristTool<z.ZodType<any, any>, infer TOutput> ? TOutput : never

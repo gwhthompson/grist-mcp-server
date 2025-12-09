@@ -137,7 +137,7 @@ export type ToolName = (typeof ALL_TOOLS)[number]['name']
  */
 export type ToolInputType<T extends ToolName> =
   Extract<(typeof ALL_TOOLS)[number], { name: T }> extends {
-    inputSchema: infer S extends z.ZodTypeAny
+    inputSchema: infer S extends z.ZodType<any, any>
   }
     ? z.infer<S>
     : never

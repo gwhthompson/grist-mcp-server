@@ -5,9 +5,9 @@ import {
   type ViewSectionRecord,
   ViewSectionRecordSchema
 } from '../schemas/api-responses.js'
-import { first } from '../utils/array-helpers.js'
 import type { SectionId, ViewId } from '../types/advanced.js'
 import type { SQLQueryResponse } from '../types.js'
+import { first } from '../utils/array-helpers.js'
 import { extractFields } from '../utils/grist-field-extractor.js'
 import type { GristClient } from './grist-client.js'
 

@@ -6,8 +6,8 @@
  */
 
 import { ApplyResponseSchema } from '../../schemas/api-responses.js'
-import { first } from '../../utils/array-helpers.js'
 import type { ApplyResponse, LayoutSpec, UserAction } from '../../types.js'
+import { first } from '../../utils/array-helpers.js'
 import { validateRetValues } from '../../validators/apply-response.js'
 import {
   buildLeafLayout,
@@ -15,11 +15,7 @@ import {
   buildVerticalSplitLayout,
   processCreateViewSectionResults
 } from '../pages-builder.js'
-import type {
-  CreateViewSectionResult,
-  PatternBuildResult,
-  PatternContext
-} from './types.js'
+import type { CreateViewSectionResult, PatternBuildResult, PatternContext } from './types.js'
 
 /**
  * Abstract base class for pattern builders.
@@ -60,10 +56,7 @@ export abstract class PatternBuilder<TConfig> {
   /**
    * Execute API call for general actions.
    */
-  protected async executeActions(
-    actions: UserAction[],
-    contextMessage: string
-  ): Promise<void> {
+  protected async executeActions(actions: UserAction[], contextMessage: string): Promise<void> {
     const response = await this.context.client.post<ApplyResponse>(
       `/docs/${this.context.docId}/apply`,
       actions,
@@ -79,10 +72,7 @@ export abstract class PatternBuilder<TConfig> {
   /**
    * Set layout and page name.
    */
-  protected async setLayoutAndName(
-    viewRef: number,
-    layout: LayoutSpec
-  ): Promise<void> {
+  protected async setLayoutAndName(viewRef: number, layout: LayoutSpec): Promise<void> {
     await this.executeActions(
       [
         buildUpdateLayoutAction(viewRef, layout),
@@ -95,10 +85,7 @@ export abstract class PatternBuilder<TConfig> {
   /**
    * Set widget titles.
    */
-  protected async setWidgetTitles(
-    sectionRefs: number[],
-    titles: string[]
-  ): Promise<void> {
+  protected async setWidgetTitles(sectionRefs: number[], titles: string[]): Promise<void> {
     const actions: UserAction[] = sectionRefs.map((sectionRef, i) => [
       'UpdateRecord',
       '_grist_Views_section',

@@ -23,10 +23,7 @@ import {
   resolveVisibleCol
 } from '../services/column-resolver.js'
 import { serializeUserActions } from '../services/grist-client.js'
-import {
-  VisibleColService,
-  type VisibleColSetupParams
-} from '../services/visiblecol-service.js'
+import { VisibleColService, type VisibleColSetupParams } from '../services/visiblecol-service.js'
 import { toColId, toDocId, toTableId } from '../types/advanced.js'
 import type { ApplyResponse, UserActionObject } from '../types.js'
 import { validateRetValues } from '../validators/apply-response.js'
@@ -428,10 +425,7 @@ export const COLUMN_TOOLS: ReadonlyArray<ToolDefinition> = [
   {
     name: 'grist_manage_columns',
     title: 'Manage Grist Columns',
-    description: `Add, modify, delete, or rename columns (atomic, rollback on error).
-Actions: add (colId,type), modify (colId,changes), delete, rename
-Params: docId, tableId, operations (array)
-Ex: {operations:[{action:"add",colId:"Phone",type:"Text"}]}`,
+    description: 'Add, modify, delete, or rename columns',
     purpose: 'Add, modify, delete, rename columns',
     category: 'columns',
     inputSchema: ManageColumnsSchema,

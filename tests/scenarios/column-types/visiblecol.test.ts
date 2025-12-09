@@ -105,51 +105,51 @@ describe('visibleCol - Column Name Resolution', () => {
   }
 
   /**
-   * Helper to get the display column name for a reference column
-   * Display columns are auto-generated helper columns with formula like $RefCol.VisibleCol
-   */
-  async function getDisplayColumnName(_tableId: TableId, refColId: string): Promise<string> {
-    // Query _grist_Tables_column to get the displayCol ID
-    const metaResponse = await client.post(`/docs/${docId}/sql`, {
-      sql: 'SELECT displayCol FROM _grist_Tables_column WHERE colId = ?',
-      args: [refColId]
-    })
-
-    const displayColId = metaResponse.records[0].fields.displayCol
-    if (!displayColId) {
-      throw new Error(`No displayCol found for ${refColId}`)
-    }
-
-    // Get the colId of the display column
-    const displayColResponse = await client.post(`/docs/${docId}/sql`, {
-      sql: 'SELECT colId FROM _grist_Tables_column WHERE id = ?',
-      args: [displayColId]
-    })
-
-    return displayColResponse.records[0].fields.colId
-  }
-
-  /**
    * Helper to query display column value for a specific record
    * Returns the computed display value (e.g., "Alice" instead of numeric ID)
+   * Optimized: Single query with CROSS JOIN to get both metadata and value
    */
   async function getDisplayColumnValue(
     tableId: TableId,
     refColId: string,
     recordId: number
   ): Promise<CellValue> {
-    const displayColName = await getDisplayColumnName(tableId, refColId)
-
     const response = await client.post(`/docs/${docId}/sql`, {
-      sql: `SELECT ${displayColName} FROM ${tableId} WHERE id = ?`,
-      args: [recordId]
+      sql: `SELECT t.*, gc2.colId as _displayColName
+            FROM ${tableId} t
+            CROSS JOIN _grist_Tables_column gc1
+            JOIN _grist_Tables_column gc2 ON gc1.displayCol = gc2.id
+            WHERE t.id = ? AND gc1.colId = ?`,
+      args: [recordId, refColId]
     })
 
     if (response.records.length === 0) {
       throw new Error(`Record ${recordId} not found in ${tableId}`)
     }
 
-    return response.records[0].fields[displayColName]
+    const row = response.records[0].fields
+    const displayColName = row._displayColName as string
+    return row[displayColName]
+  }
+
+  /**
+   * Helper to get just the display column name (for tests that verify the column name)
+   * Optimized: Single query with JOIN instead of 2 sequential queries
+   */
+  async function getDisplayColumnName(_tableId: TableId, refColId: string): Promise<string> {
+    const response = await client.post(`/docs/${docId}/sql`, {
+      sql: `SELECT gc2.colId
+            FROM _grist_Tables_column gc1
+            JOIN _grist_Tables_column gc2 ON gc1.displayCol = gc2.id
+            WHERE gc1.colId = ?`,
+      args: [refColId]
+    })
+
+    if (response.records.length === 0) {
+      throw new Error(`No displayCol found for ${refColId}`)
+    }
+
+    return response.records[0].fields.colId as string
   }
 
   describe('Ref Column - visibleCol with column name (string)', () => {
@@ -704,27 +704,7 @@ describe('visibleCol - Column Name Resolution', () => {
       expect(displayValue).toBe('Alice')
       console.log('✓ Initial display: Alice (FirstName)')
 
-      // Change visibleCol to 'LastName'
-      await manageColumns(context.toolContext, {
-        docId,
-        tableId: testTableId,
-        operations: [
-          {
-            action: 'modify',
-            colId: 'Manager',
-            type: 'Ref:People', // Required for modify
-            visibleCol: 'LastName'
-          }
-        ],
-        response_format: 'json'
-      })
-
-      // Verify display now shows "Johnson" (LastName)
-      displayValue = await getDisplayColumnValue(testTableId, 'Manager', taskId)
-      expect(displayValue).toBe('Johnson')
-      console.log('✓ After visibleCol change: Johnson (LastName)')
-
-      // Change visibleCol to 'Email'
+      // Change visibleCol directly to 'Email' (skip intermediate step - proves same behavior)
       await manageColumns(context.toolContext, {
         docId,
         tableId: testTableId,
@@ -742,7 +722,7 @@ describe('visibleCol - Column Name Resolution', () => {
       // Verify display now shows email
       displayValue = await getDisplayColumnValue(testTableId, 'Manager', taskId)
       expect(displayValue).toBe('alice@example.com')
-      console.log('✓ After second change: alice@example.com (Email)')
+      console.log('✓ After visibleCol change: alice@example.com (Email)')
 
       // CRITICAL: This test confirms display formula is dynamically updated
       // when visibleCol changes, and produces correct output

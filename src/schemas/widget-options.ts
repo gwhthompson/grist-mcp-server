@@ -46,7 +46,7 @@ export const TextWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .merge(HeaderStylePropertiesSchema)
+  .extend(HeaderStylePropertiesSchema.shape)
   .strict()
 
 export type TextWidgetOptions = z.infer<typeof TextWidgetOptionsSchema>
@@ -65,9 +65,9 @@ export const NumericWidgetOptionsSchema = StylePropertiesSchema.extend({
     .string()
     .length(3)
     .transform((code) => code.toUpperCase())
-    .refine(isValidCurrency, (code) => ({
-      message: getCurrencyCodeError(code)
-    }))
+    .refine(isValidCurrency, {
+      error: (issue) => getCurrencyCodeError(issue.input as string)
+    })
     .optional()
     .describe('ISO 4217 currency code (e.g., "USD", "EUR", "GBP" - case-insensitive)'),
   numSign: z
@@ -95,7 +95,7 @@ export const NumericWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .merge(HeaderStylePropertiesSchema)
+  .extend(HeaderStylePropertiesSchema.shape)
   .strict()
   .superRefine((data, ctx) => {
     if (data.numMode === 'currency' && !data.currency) {
@@ -117,7 +117,7 @@ export const BoolWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .merge(HeaderStylePropertiesSchema)
+  .extend(HeaderStylePropertiesSchema.shape)
   .strict()
 
 export type BoolWidgetOptions = z.infer<typeof BoolWidgetOptionsSchema>
@@ -135,7 +135,7 @@ export const DateWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .merge(HeaderStylePropertiesSchema)
+  .extend(HeaderStylePropertiesSchema.shape)
   .strict()
   .superRefine((data, ctx) => {
     if (data.isCustomDateFormat === true && !data.dateFormat) {
@@ -164,7 +164,7 @@ export const DateTimeWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .merge(HeaderStylePropertiesSchema)
+  .extend(HeaderStylePropertiesSchema.shape)
   .strict()
   .superRefine((data, ctx) => {
     if (data.isCustomDateFormat === true && !data.dateFormat) {
@@ -200,7 +200,7 @@ export const ChoiceWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .merge(HeaderStylePropertiesSchema)
+  .extend(HeaderStylePropertiesSchema.shape)
   .strict()
 
 export type ChoiceWidgetOptions = z.infer<typeof ChoiceWidgetOptionsSchema>
@@ -220,7 +220,7 @@ export const RefWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .merge(HeaderStylePropertiesSchema)
+  .extend(HeaderStylePropertiesSchema.shape)
   .strict()
 
 export type RefWidgetOptions = z.infer<typeof RefWidgetOptionsSchema>
@@ -243,7 +243,7 @@ export const AttachmentsWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .merge(HeaderStylePropertiesSchema)
+  .extend(HeaderStylePropertiesSchema.shape)
   .strict()
 
 export type AttachmentsWidgetOptions = z.infer<typeof AttachmentsWidgetOptionsSchema>
@@ -364,7 +364,7 @@ function preprocessWidgetOptions(val: unknown): object {
 
 export const WidgetOptionsSchema = z.preprocess(preprocessWidgetOptions, WidgetOptionsUnionSchema)
 
-export function getWidgetOptionsSchema(columnType: string): z.ZodTypeAny {
+export function getWidgetOptionsSchema(columnType: string): z.ZodType<any, any> {
   const baseType = columnType.split(':')[0]
 
   switch (baseType) {
@@ -390,7 +390,7 @@ export function getWidgetOptionsSchema(columnType: string): z.ZodTypeAny {
     case 'Attachments':
       return AttachmentsWidgetOptionsSchema
     default:
-      return z.object({}).passthrough()
+      return z.looseObject({})
   }
 }
 
@@ -449,6 +449,6 @@ export function validateWidgetOptions(
 
   return {
     valid: false,
-    errors: result.error.errors.map((e) => `${e.path.join('.')}: ${e.message}`)
+    errors: result.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`)
   }
 }

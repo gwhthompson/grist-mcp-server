@@ -14,10 +14,10 @@
  * @returns The first element of the array
  */
 export function first<T>(arr: readonly T[], context?: string): T {
-	if (arr.length === 0) {
-		throw new Error(context ? `${context}: Array is empty` : 'Array is empty')
-	}
-	return arr[0] as T // Safe: length check above
+  if (arr.length === 0) {
+    throw new Error(context ? `${context}: Array is empty` : 'Array is empty')
+  }
+  return arr[0] as T // Safe: length check above
 }
 
 /**
@@ -27,7 +27,7 @@ export function first<T>(arr: readonly T[], context?: string): T {
  * @returns The first element or undefined
  */
 export function firstOrUndefined<T>(arr: readonly T[]): T | undefined {
-	return arr[0] // Already T | undefined with noUncheckedIndexedAccess
+  return arr[0] // Already T | undefined with noUncheckedIndexedAccess
 }
 
 /**
@@ -39,11 +39,11 @@ export function firstOrUndefined<T>(arr: readonly T[]): T | undefined {
  * @returns The element at the specified index
  */
 export function at<T>(arr: readonly T[], index: number, context?: string): T {
-	if (index < 0 || index >= arr.length) {
-		const message = `Index ${index} out of bounds [0, ${arr.length})`
-		throw new RangeError(context ? `${context}: ${message}` : message)
-	}
-	return arr[index] as T // Safe: bounds check above
+  if (index < 0 || index >= arr.length) {
+    const message = `Index ${index} out of bounds [0, ${arr.length})`
+    throw new RangeError(context ? `${context}: ${message}` : message)
+  }
+  return arr[index] as T // Safe: bounds check above
 }
 
 /**
@@ -54,10 +54,10 @@ export function at<T>(arr: readonly T[], index: number, context?: string): T {
  * @returns The element at the index or undefined
  */
 export function atOrUndefined<T>(arr: readonly T[], index: number): T | undefined {
-	if (index < 0 || index >= arr.length) {
-		return undefined
-	}
-	return arr[index] as T // Safe: bounds check above
+  if (index < 0 || index >= arr.length) {
+    return undefined
+  }
+  return arr[index] as T // Safe: bounds check above
 }
 
 /**
@@ -75,7 +75,7 @@ export function atOrUndefined<T>(arr: readonly T[], index: number): T | undefine
  * ```
  */
 export function isNonEmpty<T>(arr: readonly T[]): arr is readonly [T, ...T[]] {
-	return arr.length > 0
+  return arr.length > 0
 }
 
 /**
@@ -86,10 +86,10 @@ export function isNonEmpty<T>(arr: readonly T[]): arr is readonly [T, ...T[]] {
  * @returns The last element of the array
  */
 export function last<T>(arr: readonly T[], context?: string): T {
-	if (arr.length === 0) {
-		throw new Error(context ? `${context}: Array is empty` : 'Array is empty')
-	}
-	return arr[arr.length - 1] as T // Safe: length check above
+  if (arr.length === 0) {
+    throw new Error(context ? `${context}: Array is empty` : 'Array is empty')
+  }
+  return arr[arr.length - 1] as T // Safe: length check above
 }
 
 /**
@@ -98,8 +98,8 @@ export function last<T>(arr: readonly T[], context?: string): T {
  * @returns The last element or undefined
  */
 export function lastOrUndefined<T>(arr: readonly T[]): T | undefined {
-	if (arr.length === 0) {
-		return undefined
-	}
-	return arr[arr.length - 1] as T // Safe: length check above
+  if (arr.length === 0) {
+    return undefined
+  }
+  return arr[arr.length - 1] as T // Safe: length check above
 }

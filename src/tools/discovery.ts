@@ -39,7 +39,7 @@ export const GetWorkspacesSchema = z
     detail_level: DetailLevelWorkspaceSchema,
     response_format: ResponseFormatSchema
   })
-  .merge(PaginationSchema)
+  .extend(PaginationSchema.shape)
   .strict()
 
 export type GetWorkspacesInput = z.infer<typeof GetWorkspacesSchema>
@@ -176,7 +176,7 @@ export const GetDocumentsSchema = z
       ),
     response_format: ResponseFormatSchema
   })
-  .merge(PaginationSchema)
+  .extend(PaginationSchema.shape)
   .strict()
 
 export type GetDocumentsInput = z.infer<typeof GetDocumentsSchema>
@@ -326,7 +326,7 @@ export const GetTablesSchema = z
     detail_level: DetailLevelTableSchema,
     response_format: ResponseFormatSchema
   })
-  .merge(PaginationSchema)
+  .extend(PaginationSchema.shape)
   .strict()
 
 export type GetTablesInput = z.infer<typeof GetTablesSchema>
@@ -504,10 +504,7 @@ export const DISCOVERY_TOOLS: ReadonlyArray<ToolDefinition> = [
   {
     name: 'grist_get_workspaces',
     title: 'Get Workspaces',
-    description: `List workspaces accessible to the user.
-NOT FOR: Finding documents -> use grist_get_documents
-Params: name_contains, detail_level (summary/detailed), limit, offset
-Ex: {name_contains:"Sales",limit:10}`,
+    description: 'List accessible workspaces',
     purpose: 'List and filter workspaces',
     category: 'discovery',
     inputSchema: GetWorkspacesSchema,
@@ -532,10 +529,7 @@ Ex: {name_contains:"Sales",limit:10}`,
   {
     name: 'grist_get_documents',
     title: 'Get Documents',
-    description: `Find documents by ID, name, or workspace.
-NOT FOR: Getting document data -> use grist_get_records
-Params: docId (exact), name_contains (search), workspaceId, limit
-Ex: {name_contains:"CRM",limit:5}`,
+    description: 'Find documents by ID, name, or workspace',
     purpose: 'Find documents by ID, name, or workspace',
     category: 'discovery',
     inputSchema: GetDocumentsSchema,
@@ -559,10 +553,7 @@ Ex: {name_contains:"CRM",limit:5}`,
   {
     name: 'grist_get_tables',
     title: 'Get Grist Table Structure',
-    description: `Get table/column schema. Run before reading/writing data.
-Params: docId, tableId (optional), detail_level (names/columns/full_schema)
-Ex: {docId:"abc123",tableId:"Contacts",detail_level:"columns"}
-Use full_schema for widgetOptions.`,
+    description: 'Get table and column schema',
     purpose: 'Get table structure and schema',
     category: 'discovery',
     inputSchema: GetTablesSchema,

@@ -204,7 +204,7 @@ const GristEncodedCellValueSchema = z.union([
   z.tuple([z.literal('D'), z.number(), z.string()]),
   z.tuple([z.literal('r'), z.string(), z.array(z.number())]),
   z.tuple([z.literal('R'), z.string(), z.number()]),
-  z.tuple([z.literal('O'), z.record(z.unknown())]),
+  z.tuple([z.literal('O'), z.record(z.string(), z.unknown())]),
   z.tuple([z.enum(['E', 'P', 'U', 'C', 'S', 'V'])]).rest(z.unknown())
 ])
 
@@ -366,7 +366,7 @@ export const PaginationMetadataSchema = z.object({
   next_offset: z.number().nullable()
 })
 
-export function createPaginatedSchema<T extends z.ZodTypeAny>(itemsSchema: T) {
+export function createPaginatedSchema<T extends z.ZodType<any, any>>(itemsSchema: T) {
   return z.object({
     items: itemsSchema,
     pagination: PaginationMetadataSchema
@@ -378,7 +378,7 @@ export const GristErrorSchema = z.object({
   details: z.unknown().optional()
 })
 
-export function validateApiResponse<T extends z.ZodTypeAny>(
+export function validateApiResponse<T extends z.ZodType<any, any>>(
   schema: T,
   data: unknown,
   context?: string
@@ -400,7 +400,7 @@ export function validateApiResponse<T extends z.ZodTypeAny>(
   }
 }
 
-export function safeValidate<T extends z.ZodTypeAny>(
+export function safeValidate<T extends z.ZodType<any, any>>(
   schema: T,
   data: unknown
 ): { success: true; data: z.infer<T> } | { success: false; error: z.ZodError } {
@@ -413,7 +413,7 @@ export function safeValidate<T extends z.ZodTypeAny>(
   return { success: false, error: result.error }
 }
 
-export function isValidApiResponse<T extends z.ZodTypeAny>(
+export function isValidApiResponse<T extends z.ZodType<any, any>>(
   schema: T,
   data: unknown
 ): data is z.infer<T> {

@@ -93,7 +93,9 @@ const FullColumnSchema = z.object({
   type: z.string().describe('Column type'),
   is_formula: z.boolean().describe('Whether column is a formula'),
   formula: z.string().nullable().describe('Formula expression if applicable'),
-  widget_options: z.union([z.string(), z.record(z.unknown()), z.null()]).describe('Widget options'),
+  widget_options: z
+    .union([z.string(), z.record(z.string(), z.unknown()), z.null()])
+    .describe('Widget options'),
   visible_col: z.number().nullable().optional().describe('Visible column ID for references'),
   visible_col_name: z.string().nullable().optional().describe('Visible column name for references')
 })
@@ -141,7 +143,7 @@ export const GetRecordsOutputSchema = z.object({
   limit: z.number(),
   has_more: z.boolean(),
   next_offset: z.number().nullable(),
-  filters: z.record(z.unknown()).optional().describe('Applied filters'),
+  filters: z.record(z.string(), z.unknown()).optional().describe('Applied filters'),
   columns: z
     .union([z.string(), z.array(z.string())])
     .optional()
@@ -157,7 +159,7 @@ export const GetRecordsOutputSchema = z.object({
 
 /** grist_query_sql output */
 export const QuerySqlOutputSchema = z.object({
-  records: z.array(z.record(z.unknown())).describe('Query result rows'),
+  records: z.array(z.record(z.string(), z.unknown())).describe('Query result rows'),
   total: z.number(),
   offset: z.number(),
   limit: z.number(),
@@ -275,7 +277,15 @@ export const ManageColumnsOutputSchema = z.object({
   table_id: z.string().describe('Table ID'),
   operations_performed: z.number().describe('Number of operations completed'),
   actions: z.array(z.string()).describe('Description of each action performed'),
-  summary: z.string().optional().describe('Summary message'),
+  summary: z
+    .object({
+      added: z.number().describe('Number of columns added'),
+      modified: z.number().describe('Number of columns modified'),
+      deleted: z.number().describe('Number of columns deleted'),
+      renamed: z.number().describe('Number of columns renamed')
+    })
+    .optional()
+    .describe('Operation counts summary'),
   message: z.string().optional().describe('Success message'),
   details: z.array(z.string()).optional().describe('Detailed operation results'),
   hint: z.string().optional().describe('Usage hints')
@@ -294,7 +304,7 @@ export const ManageConditionalRulesOutputSchema = z.object({
       z.object({
         index: z.number().describe('Rule index'),
         formula: z.string().describe('Rule formula'),
-        style: z.record(z.unknown()).describe('Rule style')
+        style: z.record(z.string(), z.unknown()).describe('Rule style')
       })
     )
     .optional()
@@ -478,14 +488,17 @@ export const WebhookClearQueueOutputSchema = z.object({
   action: z.literal('cleared_webhook_queue').describe('Action performed')
 })
 
-/** Combined webhook output schema (union of all actions) */
-export const ManageWebhooksOutputSchema = z.union([
-  WebhookListOutputSchema,
-  WebhookCreateOutputSchema,
-  WebhookUpdateOutputSchema,
-  WebhookDeleteOutputSchema,
-  WebhookClearQueueOutputSchema
-])
+/**
+ * Combined webhook output schema.
+ *
+ * Uses z.looseObject() instead of z.union() because the MCP SDK's
+ * normalizeObjectSchema() only accepts object schemas (def.type === 'object').
+ * z.looseObject() is the Zod v4 replacement for deprecated .passthrough().
+ */
+export const ManageWebhooksOutputSchema = z.looseObject({
+  operation: z.enum(['list', 'create', 'update', 'delete', 'clear_queue']),
+  document_id: z.string().describe('Document ID')
+})
 
 // ============================================================================
 // Utility Tool Outputs

@@ -329,10 +329,7 @@ export const RECORD_TOOLS: ReadonlyArray<ToolDefinition> = [
   {
     name: 'grist_add_records',
     title: 'Add Grist Records',
-    description: `Insert new records (fastest, no duplicate check).
-NOT FOR: CSV imports, sync -> use grist_upsert_records
-Params: docId, tableId, records (array, max 500)
-Ex: {records:[{"Name":"John","Email":"j@x.com"}]}`,
+    description: 'Insert new records',
     purpose: 'Insert new records',
     category: 'records',
     inputSchema: AddRecordsSchema,
@@ -381,10 +378,7 @@ Ex: {records:[{"Name":"John","Email":"j@x.com"}]}`,
   {
     name: 'grist_update_records',
     title: 'Update Grist Records',
-    description: `Update existing records by row ID.
-NOT FOR: Sync by unique key -> use grist_upsert_records
-Params: docId, tableId, rowIds (array), updates (object)
-Ex: {rowIds:[1,2],updates:{"Status":"Complete"}}`,
+    description: 'Update existing records by row ID',
     purpose: 'Modify records by row ID',
     category: 'records',
     inputSchema: UpdateRecordsSchema,
@@ -414,10 +408,7 @@ Ex: {rowIds:[1,2],updates:{"Status":"Complete"}}`,
   {
     name: 'grist_upsert_records',
     title: 'Upsert Grist Records',
-    description: `Add or update by unique key (idempotent sync).
-USE FOR: CSV imports, API syncs, deduplication
-Params: docId, tableId, records:[{require:{key},fields:{}}]
-Ex: {records:[{require:{"Email":"j@x.com"},fields:{"Name":"John"}}]}`,
+    description: 'Add or update records by unique key (idempotent sync)',
     purpose: 'Add or update by unique key (sync)',
     category: 'records',
     inputSchema: UpsertRecordsSchema,
@@ -459,10 +450,7 @@ Ex: {records:[{require:{"Email":"j@x.com"},fields:{"Name":"John"}}]}`,
   {
     name: 'grist_delete_records',
     title: 'Delete Grist Records',
-    description: `Permanently delete records by row ID (CANNOT be undone).
-NOT FOR: Archiving -> use grist_update_records with Status="Archived"
-Params: docId, tableId, rowIds (array, max 500)
-Ex: {rowIds:[1,2,3]}`,
+    description: 'Permanently delete records by row ID',
     purpose: 'Delete records permanently',
     category: 'records',
     inputSchema: DeleteRecordsSchema,

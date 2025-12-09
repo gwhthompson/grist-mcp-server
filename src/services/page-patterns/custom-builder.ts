@@ -7,8 +7,8 @@
 
 import type { BuildPageInput } from '../../schemas/pages-widgets.js'
 import { toGristWidgetType } from '../../schemas/pages-widgets.js'
-import { at, first } from '../../utils/array-helpers.js'
 import type { LayoutSpec, UserAction } from '../../types.js'
+import { at, first } from '../../utils/array-helpers.js'
 import {
   buildCreateViewSectionAction,
   buildLeafLayout,

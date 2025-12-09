@@ -119,7 +119,8 @@ export class ColumnRuleOwner extends RuleOwner {
     const currentWidgetOptions =
       fullOptionsResp.records.length > 0
         ? parseGristJson<Record<string, unknown>>(
-            extractFields(first(fullOptionsResp.records, 'Column widgetOptions query')).widgetOptions,
+            extractFields(first(fullOptionsResp.records, 'Column widgetOptions query'))
+              .widgetOptions,
             {}
           )
         : {}

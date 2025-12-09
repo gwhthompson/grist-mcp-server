@@ -5,10 +5,7 @@ import {
   WRITE_SAFE_ANNOTATIONS
 } from '../../registry/types.js'
 import { BuildPageOutputSchema } from '../../schemas/output-schemas.js'
-import {
-  type BuildPageInput,
-  BuildPageSchema
-} from '../../schemas/pages-widgets.js'
+import { type BuildPageInput, BuildPageSchema } from '../../schemas/pages-widgets.js'
 import {
   ChartDashboardBuilder,
   CustomBuilder,
@@ -140,12 +137,7 @@ export async function buildPage(context: ToolContext, params: BuildPageInput) {
 export const BUILD_PAGE_DEFINITION: ToolDefinition = {
   name: 'grist_build_page',
   title: 'Build Page',
-  description:
-    'Create pages with widget patterns.\n' +
-    'Patterns: master_detail, hierarchical, chart_dashboard, form_table, custom\n' +
-    'Widgets: grid, card, card_list, chart, form, custom\n' +
-    'Params: docId, page_name, config\n' +
-    'Ex: {page_name:"Dashboard",config:{pattern:"master_detail",master:{table:"Customers"},detail:{table:"Orders",link_field:"CustomerRef"}}}',
+  description: 'Create pages with widget patterns (master-detail, hierarchical, chart dashboard)',
   purpose: 'Create pages with pre-configured widget layouts and linking',
   category: 'document_structure',
   inputSchema: BuildPageSchema,

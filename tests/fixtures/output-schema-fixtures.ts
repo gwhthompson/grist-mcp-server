@@ -356,7 +356,8 @@ export const ManageColumnsFixtures = {
     table_id: 'Customers',
     operations_performed: 1,
     actions: ['Added column Phone (Text)'],
-    summary: 'Successfully completed 1 operation'
+    summary: { added: 1, modified: 0, deleted: 0, renamed: 0 },
+    message: 'Successfully completed 1 operation'
   },
   multipleOperations: {
     success: true as const,
@@ -368,6 +369,7 @@ export const ManageColumnsFixtures = {
       'Modified column Email widgetOptions',
       'Renamed column Addr to Address'
     ],
+    summary: { added: 1, modified: 1, deleted: 0, renamed: 1 },
     message: 'All operations completed successfully',
     details: ['Phone: Created as Text type', 'Email: Updated widget to HyperLink'],
     hint: 'Use grist_get_tables to verify changes'

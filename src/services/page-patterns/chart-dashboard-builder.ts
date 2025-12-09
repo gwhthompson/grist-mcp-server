@@ -7,8 +7,9 @@
 
 import type { BuildPageInput } from '../../schemas/pages-widgets.js'
 import { toGristWidgetType } from '../../schemas/pages-widgets.js'
-import { at, first } from '../../utils/array-helpers.js'
+import { getFirstSectionId } from '../../tools/pages/shared.js'
 import type { LayoutSpec, UserAction, WidgetType } from '../../types.js'
+import { at, first } from '../../utils/array-helpers.js'
 import {
   buildChartConfigAction,
   buildCreateViewSectionAction,
@@ -18,7 +19,6 @@ import {
   buildWidgetLinkAction,
   configureChartAxes
 } from '../pages-builder.js'
-import { getFirstSectionId } from '../../tools/pages/shared.js'
 import { PatternBuilder } from './pattern-builder.js'
 import type { PatternBuildResult, WidgetInfo } from './types.js'
 
@@ -112,7 +112,13 @@ export class ChartDashboardBuilder extends PatternBuilder<ChartDashboardConfig> 
     }
 
     // Phase 6: Set widget titles
-    await this.setDashboardWidgetTitles(config, hasSelector, sectionRefs, selectorIndex, chartStartIndex)
+    await this.setDashboardWidgetTitles(
+      config,
+      hasSelector,
+      sectionRefs,
+      selectorIndex,
+      chartStartIndex
+    )
 
     // Build result
     const widgets = this.buildWidgetResults(
@@ -301,7 +307,12 @@ export class ChartDashboardBuilder extends PatternBuilder<ChartDashboardConfig> 
 
     const linkActions: UserAction[] = config.charts.map((_, i) => {
       const chartSectionIndex = chartStartIndex + i
-      return buildWidgetLinkAction(sectionRefs[chartSectionIndex] as number, selectorSectionRef, 0, 0)
+      return buildWidgetLinkAction(
+        sectionRefs[chartSectionIndex] as number,
+        selectorSectionRef,
+        0,
+        0
+      )
     })
 
     await this.executeActions(linkActions, 'Linking charts to selector')

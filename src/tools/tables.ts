@@ -29,10 +29,7 @@ import {
   resolveVisibleCol
 } from '../services/column-resolver.js'
 import { serializeUserAction } from '../services/grist-client.js'
-import {
-  VisibleColService,
-  type VisibleColSetupParams
-} from '../services/visiblecol-service.js'
+import { VisibleColService, type VisibleColSetupParams } from '../services/visiblecol-service.js'
 import { toTableId } from '../types/advanced.js'
 import type { ApplyResponse, ColumnDefinition } from '../types.js'
 import { validateRetValues } from '../validators/apply-response.js'
@@ -320,10 +317,7 @@ export const TABLE_TOOLS: ReadonlyArray<ToolDefinition> = [
   {
     name: 'grist_create_table',
     title: 'Create Grist Table',
-    description: `Create table with column definitions.
-Types: Text, Numeric, Int, Bool, Date, DateTime, Choice, ChoiceList, Ref:Table, RefList:Table
-Params: docId, tableName, columns:[{colId,type,label,widgetOptions}]
-Ex: {tableName:"Contacts",columns:[{colId:"Name",type:"Text"}]}`,
+    description: 'Create a new table with column definitions',
     purpose: 'Create table with columns',
     category: 'tables',
     inputSchema: CreateTableSchema,
@@ -374,9 +368,7 @@ Ex: {tableName:"Contacts",columns:[{colId:"Name",type:"Text"}]}`,
   {
     name: 'grist_rename_table',
     title: 'Rename Grist Table',
-    description: `Rename table (updates references automatically).
-Params: docId, tableId (current), newTableId
-Ex: {tableId:"OldName",newTableId:"NewName"}`,
+    description: 'Rename a table',
     purpose: 'Rename table',
     category: 'tables',
     inputSchema: RenameTableSchema,
@@ -400,9 +392,7 @@ Ex: {tableId:"OldName",newTableId:"NewName"}`,
   {
     name: 'grist_delete_table',
     title: 'Delete Grist Table',
-    description: `Permanently delete table and all data (CANNOT be undone).
-Params: docId, tableId
-Ex: {tableId:"ObsoleteTable"}`,
+    description: 'Permanently delete a table and all its data',
     purpose: 'Delete table permanently',
     category: 'tables',
     inputSchema: DeleteTableSchema,

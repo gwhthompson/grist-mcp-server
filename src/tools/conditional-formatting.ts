@@ -260,11 +260,7 @@ export const CONDITIONAL_TOOLS: ReadonlyArray<ToolDefinition> = [
   {
     name: 'grist_manage_conditional_rules',
     title: 'Manage Conditional Rules',
-    description:
-      'Add, update, remove, or list conditional formatting rules.\n' +
-      'Scopes: column (all views), row (entire rows), field (specific widget).\n' +
-      'Formulas: Python syntax with $ColumnName. Colors: hex #RRGGBB.\n' +
-      'Ex: {scope:"column",colId:"Price",operation:{action:"add",rule:{formula:"$Price>1000",style:{fillColor:"#FF0000"}}}}',
+    description: 'Add, update, remove, or list conditional formatting rules',
     purpose: 'Add visual formatting rules that highlight cells based on conditions',
     category: 'columns',
     inputSchema: ConditionalRulesInputSchema,

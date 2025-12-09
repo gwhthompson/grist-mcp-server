@@ -55,3 +55,4 @@ inspector-config.json
 # Local development files (not needed in repo)
 evaluations/
 examples/
+temp/

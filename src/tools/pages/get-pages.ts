@@ -374,11 +374,7 @@ export async function getPages(context: ToolContext, params: GetPagesInput) {
 export const GET_PAGES_DEFINITION: ToolDefinition = {
   name: 'grist_get_pages',
   title: 'Get Pages',
-  description:
-    'List pages, widgets, and tables in a document.\n' +
-    'Shows page structure, widget linking, summary tables, and Raw Data tables.\n' +
-    'Params: docId, detail_level (summary/detailed), limit, offset\n' +
-    'Ex: {docId:"abc123",detail_level:"detailed"}',
+  description: 'List pages and widgets in a document',
   purpose: 'Introspect document structure including pages, widgets, and summary tables',
   category: 'document_structure',
   inputSchema: GetPagesSchema,

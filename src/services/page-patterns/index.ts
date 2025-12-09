@@ -12,20 +12,19 @@
  * - custom: Arbitrary widget arrangements
  */
 
-// Export types
-export type {
-  PatternContext,
-  PatternBuildResult,
-  WidgetInfo,
-  CreateViewSectionResult
-} from './types.js'
-
-// Export base class
-export { PatternBuilder } from './pattern-builder.js'
+export { ChartDashboardBuilder, type ChartDashboardConfig } from './chart-dashboard-builder.js'
+export { CustomBuilder, type CustomConfig } from './custom-builder.js'
 
 // Pattern builders
 export { FormTableBuilder, type FormTableConfig } from './form-table-builder.js'
-export { MasterDetailBuilder, type MasterDetailConfig } from './master-detail-builder.js'
 export { HierarchicalBuilder, type HierarchicalConfig } from './hierarchical-builder.js'
-export { ChartDashboardBuilder, type ChartDashboardConfig } from './chart-dashboard-builder.js'
-export { CustomBuilder, type CustomConfig } from './custom-builder.js'
+export { MasterDetailBuilder, type MasterDetailConfig } from './master-detail-builder.js'
+// Export base class
+export { PatternBuilder } from './pattern-builder.js'
+// Export types
+export type {
+  CreateViewSectionResult,
+  PatternBuildResult,
+  PatternContext,
+  WidgetInfo
+} from './types.js'

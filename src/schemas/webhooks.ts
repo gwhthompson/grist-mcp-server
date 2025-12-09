@@ -30,7 +30,7 @@ const WebhookUrlSchema = z
       return !privatePatterns.some((pattern) => pattern.test(url))
     },
     {
-      message:
+      error:
         'URL appears to be localhost or a private IP address. ' +
         'Webhooks require publicly accessible endpoints. ' +
         'Use a service like ngrok for local development testing. ' +
@@ -82,7 +82,7 @@ const WebhookColumnIdSchema = z
       'contain only alphanumeric and underscores). Example: "IsReady", "Status", "Approved"'
   })
   .refine((col) => !SQL_RESERVED_KEYWORDS.has(col.toUpperCase()), {
-    message: 'Column ID cannot be an SQL reserved keyword for security reasons'
+    error: 'Column ID cannot be an SQL reserved keyword for security reasons'
   })
   .nullable()
   .optional()
@@ -93,13 +93,11 @@ const WebhookColumnIdSchema = z
   )
 
 export const WebhookEventTypeSchema = z.enum(['add', 'update'], {
-  errorMap: () => ({
-    message:
-      'Event type must be "add" or "update". ' +
-      'Use ["add"] to trigger only on new records, ' +
-      '["update"] for changes to existing records, ' +
-      'or ["add", "update"] for both.'
-  })
+  error:
+    'Event type must be "add" or "update". ' +
+    'Use ["add"] to trigger only on new records, ' +
+    '["update"] for changes to existing records, ' +
+    'or ["add", "update"] for both.'
 })
 
 export const WebhookFieldsSchema = z
@@ -132,7 +130,7 @@ export const WebhookFieldsSchema = z
         message: 'At least one event type required. Use ["add"], ["update"], or ["add", "update"].'
       })
       .refine((types) => new Set(types).size === types.length, {
-        message: 'Event types must be unique. Remove duplicate entries.'
+        error: 'Event types must be unique. Remove duplicate entries.'
       })
       .describe('Array of event types that trigger this webhook: "add", "update"'),
 
@@ -199,7 +197,7 @@ const WebhookUpdateFieldsSchema = z
         message: 'At least one event type required. Use ["add"], ["update"], or ["add", "update"].'
       })
       .refine((types) => new Set(types).size === types.length, {
-        message: 'Event types must be unique. Remove duplicate entries.'
+        error: 'Event types must be unique. Remove duplicate entries.'
       })
       .optional()
       .describe('Array of event types that trigger this webhook: "add", "update"'),
@@ -210,7 +208,7 @@ const WebhookUpdateFieldsSchema = z
   })
   .strict()
   .refine((fields) => Object.keys(fields).length > 0, {
-    message:
+    error:
       'At least one field must be provided for update. ' +
       'Available fields: url, enabled, eventTypes, name, memo, isReadyColumn, tableId.'
   })

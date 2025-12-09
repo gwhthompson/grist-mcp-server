@@ -253,7 +253,9 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
     docId: string,
     operation: Extract<WebhookOperation, { action: 'delete' }>
   ): Promise<DeleteWebhookResult> {
-    await this.client.delete<DeleteWebhookResponse>(`/docs/${docId}/webhooks/${operation.webhookId}`)
+    await this.client.delete<DeleteWebhookResponse>(
+      `/docs/${docId}/webhooks/${operation.webhookId}`
+    )
 
     return {
       operation: 'delete',
@@ -277,10 +279,7 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
   /**
    * Custom response formatting for webhooks to include rich markdown summaries.
    */
-  protected formatResponse(
-    data: OperationResult,
-    format: 'json' | 'markdown'
-  ): MCPToolResponse {
+  protected formatResponse(data: OperationResult, format: 'json' | 'markdown'): MCPToolResponse {
     if (format === 'json') {
       return {
         content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
@@ -509,11 +508,7 @@ export const WEBHOOK_TOOLS: ReadonlyArray<ToolDefinition> = [
   {
     name: 'grist_manage_webhooks',
     title: 'Manage Webhooks',
-    description:
-      'Manage webhooks for real-time notifications.\n' +
-      'Actions: list, create, update, delete, clear_queue\n' +
-      'Params: docId, operation (action + fields)\n' +
-      'Ex: {operation:{action:"create",fields:{url:"https://x.com/hook",tableId:"Contacts",eventTypes:["add","update"]}}}',
+    description: 'Create, update, delete, or list webhooks for real-time notifications',
     purpose: 'Create and manage webhooks for real-time event notifications',
     category: 'webhooks',
     inputSchema: ManageWebhooksSchema,

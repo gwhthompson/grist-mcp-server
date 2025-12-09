@@ -102,7 +102,7 @@ describe('ViewSection Schemas', () => {
       const result = ViewSectionRecordSchema.safeParse(invalid)
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.errors).toContainEqual(expect.objectContaining({ path: ['id'] }))
+        expect(result.error.issues).toContainEqual(expect.objectContaining({ path: ['id'] }))
       }
     })
 
@@ -123,7 +123,7 @@ describe('ViewSection Schemas', () => {
       const result = ViewSectionRecordSchema.safeParse(invalid)
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.errors).toContainEqual(expect.objectContaining({ path: ['tableRef'] }))
+        expect(result.error.issues).toContainEqual(expect.objectContaining({ path: ['tableRef'] }))
       }
     })
 
@@ -145,7 +145,7 @@ describe('ViewSection Schemas', () => {
       const result = ViewSectionRecordSchema.safeParse(invalid)
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.errors).toContainEqual(
+        expect(result.error.issues).toContainEqual(
           expect.objectContaining({
             path: ['tableRef'],
             code: 'invalid_type'
@@ -290,7 +290,7 @@ describe('ViewSection Schemas', () => {
       const result = ViewLayoutSpecSchema.safeParse(invalid)
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.errors).toContainEqual(expect.objectContaining({ path: ['id'] }))
+        expect(result.error.issues).toContainEqual(expect.objectContaining({ path: ['id'] }))
       }
     })
 
@@ -302,7 +302,7 @@ describe('ViewSection Schemas', () => {
       const result = ViewLayoutSpecSchema.safeParse(invalid)
       expect(result.success).toBe(false)
       if (!result.success) {
-        expect(result.error.errors).toContainEqual(
+        expect(result.error.issues).toContainEqual(
           expect.objectContaining({ path: ['layoutSpec'] })
         )
       }

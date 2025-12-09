@@ -57,5 +57,26 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": [
+        "src/registry/types.ts",
+        "src/registry/tool-registry.ts",
+        "src/registry/tool-definitions.ts",
+        "src/schemas/api-responses.ts",
+        "src/schemas/common.ts",
+        "src/schemas/widget-options.ts",
+        "src/types/type-guards.ts",
+        "src/tools/base/*.ts"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    }
+  ]
 }

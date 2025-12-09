@@ -90,6 +90,14 @@ const ModifyColumnOperationSchema = z
         'Which column from referenced table to display (Ref/RefList only). ' +
           'String column name (e.g., "Email") auto-resolves to numeric ID. ' +
           'Numeric ID (e.g., 456) used directly.'
+      ),
+    untieColIdFromLabel: z
+      .boolean()
+      .optional()
+      .describe(
+        'Set to true to allow colId and label to be independent. ' +
+          'By default, Grist auto-updates colId when label changes. ' +
+          'Setting this to true prevents that behavior.'
       )
   })
   .strict()
@@ -390,6 +398,8 @@ export class ManageColumnsTool extends GristTool<
     if (op.isFormula !== undefined) modifyUpdates.isFormula = op.isFormula
     if (op.widgetOptions !== undefined) modifyUpdates.widgetOptions = op.widgetOptions
     if ('visibleCol' in op && op.visibleCol !== undefined) modifyUpdates.visibleCol = op.visibleCol
+    if ('untieColIdFromLabel' in op && op.untieColIdFromLabel !== undefined)
+      modifyUpdates.untieColIdFromLabel = op.untieColIdFromLabel
     return modifyUpdates
   }
 
@@ -434,7 +444,7 @@ export const COLUMN_TOOLS: ReadonlyArray<ToolDefinition> = [
     handler: manageColumns,
     docs: {
       overview:
-        'Add, modify, delete, or rename columns. Operations execute atomically. Actions: add (colId, type, label?, formula?, widgetOptions?), modify (colId, changes), delete (colId), rename (oldColId, newColId). Note: visibleCol is top-level, NOT in widgetOptions.',
+        'Add, modify, delete, or rename columns. Operations execute atomically. Actions: add (colId, type, label?, formula?, widgetOptions?), modify (colId, changes), delete (colId), rename (oldColId, newColId). Note: visibleCol is top-level, NOT in widgetOptions. **colId/label behavior:** By default, Grist auto-updates colId when label is changed. Use `untieColIdFromLabel: true` in modify action to prevent this.',
       examples: [
         {
           desc: 'Add column',
@@ -474,6 +484,21 @@ export const COLUMN_TOOLS: ReadonlyArray<ToolDefinition> = [
             tableId: 'Tasks',
             operations: [
               { action: 'add', colId: 'Manager', type: 'Ref:People', visibleCol: 'Email' }
+            ]
+          }
+        },
+        {
+          desc: 'Change label without changing colId',
+          input: {
+            docId: 'abc123',
+            tableId: 'Products',
+            operations: [
+              {
+                action: 'modify',
+                colId: 'Name',
+                label: 'Product Name',
+                untieColIdFromLabel: true
+              }
             ]
           }
         }

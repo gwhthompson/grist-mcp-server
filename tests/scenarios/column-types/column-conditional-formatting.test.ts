@@ -74,7 +74,7 @@ describe('Conditional Formatting Integration', () => {
         if (content.type === 'text') {
           const data = JSON.parse(content.text)
           expect(data.rules).toEqual([])
-          expect(data.totalRules).toBe(0)
+          expect(data.rules_count).toBe(0)
           expect(data.scope).toBe('column')
         }
       })
@@ -93,9 +93,12 @@ describe('Conditional Formatting Integration', () => {
         const content = result.content[0]
         expect(content.type).toBe('text')
         if (content.type === 'text') {
-          expect(content.text).toContain('Amount')
-          expect(content.text).toContain('No conditional formatting rules')
+          expect(content.text).toContain('scope')
+          expect(content.text).toContain('column')
         }
+        // Verify structured content shows 0 rules
+        const data = result.structuredContent as { rules_count?: number }
+        expect(data.rules_count).toBe(0)
       })
     })
 
@@ -499,8 +502,9 @@ describe('Conditional Formatting Integration', () => {
         expect(removeResult.isError).toBeFalsy()
         const removeContent = removeResult.content[0]
         if (removeContent.type === 'text') {
-          expect(removeContent.text).toContain('Successfully removed')
-          expect(removeContent.text).toContain('1 rule(s) remaining')
+          expect(removeContent.text).toContain('success')
+          // rules_count shows remaining rules after removal
+          expect(removeContent.text).toContain('rules_count')
         }
 
         // Verify only one rule remains
@@ -571,7 +575,7 @@ describe('Conditional Formatting Integration', () => {
         if (content.type === 'text') {
           const data = JSON.parse(content.text)
           expect(data.rules).toEqual([])
-          expect(data.totalRules).toBe(0)
+          expect(data.rules_count).toBe(0)
           expect(data.scope).toBe('row')
         }
       })
@@ -719,7 +723,7 @@ describe('Conditional Formatting Integration', () => {
         expect(removeResult.isError).toBeFalsy()
         const removeContent = removeResult.content[0]
         if (removeContent.type === 'text') {
-          expect(removeContent.text).toContain('Successfully removed')
+          expect(removeContent.text).toContain('success')
         }
       })
     })
@@ -769,7 +773,7 @@ describe('Conditional Formatting Integration', () => {
         if (content.type === 'text') {
           const data = JSON.parse(content.text)
           expect(data.rules).toEqual([])
-          expect(data.totalRules).toBe(0)
+          expect(data.rules_count).toBe(0)
           expect(data.scope).toBe('field')
         }
       })
@@ -899,7 +903,7 @@ describe('Conditional Formatting Integration', () => {
         expect(removeResult.isError).toBeFalsy()
         const removeContent = removeResult.content[0]
         if (removeContent.type === 'text') {
-          expect(removeContent.text).toContain('Successfully removed')
+          expect(removeContent.text).toContain('success')
         }
       })
     })

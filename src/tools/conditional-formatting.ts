@@ -34,17 +34,30 @@ import { GristTool } from './base/GristTool.js'
 
 type ToolInput = z.infer<typeof ConditionalRulesInputSchema>
 
+/** Output type matching ManageConditionalRulesOutputSchema */
+interface ConditionalRulesOutput {
+  success: true
+  document_id: string
+  table_id: string
+  scope: string
+  action: string
+  rules_count?: number
+  rules?: Array<{
+    index: number
+    formula: string
+    style: Record<string, unknown>
+  }>
+}
+
 export class ConditionalFormattingTool extends GristTool<
   typeof ConditionalRulesInputSchema,
-  RuleOperationResult | RuleRemoveResult
+  ConditionalRulesOutput
 > {
   constructor(context: ToolContext) {
     super(context, ConditionalRulesInputSchema)
   }
 
-  protected async executeInternal(
-    params: ToolInput
-  ): Promise<RuleOperationResult | RuleRemoveResult> {
+  protected async executeInternal(params: ToolInput): Promise<ConditionalRulesOutput> {
     const docId = toDocId(params.docId)
     const tableId = toTableId(params.tableId)
 
@@ -55,30 +68,89 @@ export class ConditionalFormattingTool extends GristTool<
     // Create service for this scope
     const service = new ConditionalFormattingService(this.client, scope)
 
-    // Execute operation
-    switch (params.operation.action) {
-      case 'add':
-        return await service.addRule(docId, tableId, ownerParams, params.operation.rule)
+    // Execute operation and transform to output schema
+    const action = params.operation.action
 
-      case 'update':
-        return await service.updateRule(
+    switch (action) {
+      case 'add': {
+        const result = await service.addRule(docId, tableId, ownerParams, params.operation.rule)
+        return this.transformOperationResult(docId, tableId, scope, action, result)
+      }
+
+      case 'update': {
+        const result = await service.updateRule(
           docId,
           tableId,
           ownerParams,
           params.operation.ruleIndex,
           params.operation.rule
         )
+        return this.transformOperationResult(docId, tableId, scope, action, result)
+      }
 
-      case 'remove':
-        return await service.removeRule(docId, tableId, ownerParams, params.operation.ruleIndex)
+      case 'remove': {
+        const result = await service.removeRule(
+          docId,
+          tableId,
+          ownerParams,
+          params.operation.ruleIndex
+        )
+        return this.transformRemoveResult(docId, tableId, scope, result)
+      }
 
-      case 'list':
-        return await service.listRules(docId, tableId, ownerParams)
+      case 'list': {
+        const result = await service.listRules(docId, tableId, ownerParams)
+        return this.transformOperationResult(docId, tableId, scope, action, result)
+      }
 
       default: {
         const _exhaustive: never = params.operation
         throw new Error(`Unknown operation: ${JSON.stringify(_exhaustive)}`)
       }
+    }
+  }
+
+  /**
+   * Transform RuleOperationResult to output schema format
+   */
+  private transformOperationResult(
+    docId: string,
+    tableId: string,
+    scope: RuleScope,
+    action: string,
+    result: RuleOperationResult
+  ): ConditionalRulesOutput {
+    return {
+      success: true,
+      document_id: docId,
+      table_id: tableId,
+      scope,
+      action,
+      rules_count: result.totalRules,
+      rules: result.rules.map((r) => ({
+        index: r.index,
+        formula: r.formula,
+        style: r.style as Record<string, unknown>
+      }))
+    }
+  }
+
+  /**
+   * Transform RuleRemoveResult to output schema format
+   */
+  private transformRemoveResult(
+    docId: string,
+    tableId: string,
+    scope: RuleScope,
+    result: RuleRemoveResult
+  ): ConditionalRulesOutput {
+    return {
+      success: true,
+      document_id: docId,
+      table_id: tableId,
+      scope,
+      action: 'remove',
+      rules_count: result.remainingRules
     }
   }
 
@@ -149,98 +221,6 @@ export class ConditionalFormattingTool extends GristTool<
 
     const viewId = await resolvePageNameToViewId(this.client, docId, pageName)
     return await resolveWidgetNameToSectionId(this.client, docId, viewId, widgetTitle)
-  }
-
-  protected override formatResponse(
-    result: RuleOperationResult | RuleRemoveResult,
-    format: 'markdown' | 'json'
-  ): MCPToolResponse {
-    // Remove result (string message)
-    if ('message' in result && 'remainingRules' in result) {
-      const removeResult = result as RuleRemoveResult
-      if (format === 'json') {
-        return {
-          content: [{ type: 'text', text: JSON.stringify(removeResult, null, 2) }],
-          _meta: { responseFormat: format }
-        }
-      }
-      return {
-        content: [{ type: 'text', text: removeResult.message }],
-        _meta: { responseFormat: format }
-      }
-    }
-
-    // Rules result
-    const rulesResult = result as RuleOperationResult
-
-    if (format === 'json') {
-      return {
-        content: [{ type: 'text', text: JSON.stringify(rulesResult, null, 2) }],
-        _meta: { responseFormat: format }
-      }
-    }
-
-    // Markdown format
-    const markdown = this.formatRulesMarkdown(rulesResult)
-    return {
-      content: [{ type: 'text', text: markdown }],
-      _meta: { responseFormat: format }
-    }
-  }
-
-  /**
-   * Format rules result as markdown
-   */
-  private formatRulesMarkdown(result: RuleOperationResult): string {
-    const lines: string[] = []
-
-    // Header with scope and target info
-    const scopeDesc = this.getScopeDescription(result.scope, result.target)
-    lines.push(`## Conditional Rules for ${scopeDesc}`)
-    lines.push('')
-
-    if (result.rules.length === 0) {
-      lines.push('No conditional formatting rules defined.')
-      lines.push('')
-      lines.push('Use `action: "add"` to create a rule.')
-      return lines.join('\n')
-    }
-
-    lines.push(`**Total Rules:** ${result.totalRules}`)
-    lines.push('')
-
-    for (const rule of result.rules) {
-      lines.push(`### Rule ${rule.index}`)
-      lines.push(`**Formula:** \`${rule.formula}\``)
-
-      // Format style
-      const styleEntries = Object.entries(rule.style).filter(([_, v]) => v !== undefined)
-      if (styleEntries.length > 0) {
-        lines.push('**Style:**')
-        for (const [key, value] of styleEntries) {
-          lines.push(`  - ${key}: ${typeof value === 'string' ? value : JSON.stringify(value)}`)
-        }
-      }
-      lines.push('')
-    }
-
-    return lines.join('\n')
-  }
-
-  /**
-   * Get human-readable scope description
-   */
-  private getScopeDescription(scope: RuleScope, target: RuleOperationResult['target']): string {
-    switch (scope) {
-      case 'column':
-        return `column "${target.colId}" in ${target.tableId}`
-      case 'row':
-        return `rows in ${target.tableId}${target.sectionId ? ` (widget ${target.sectionId})` : ''}`
-      case 'field':
-        return `field "${target.colId}" in widget ${target.sectionId} (${target.tableId})`
-      default:
-        return target.tableId
-    }
   }
 }
 

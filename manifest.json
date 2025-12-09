@@ -1,7 +1,7 @@
 {
   "manifest_version": "0.3",
   "name": "grist-mcp-server",
-  "version": "1.1.1",
+  "version": "1.1.2",
   "display_name": "Grist Database Integration",
   "description": "22 tools for managing Grist documents with AI",
   "long_description": "Read and write tables, records, pages, and widgets. Works with Grist Cloud or self-hosted instances.",

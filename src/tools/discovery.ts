@@ -285,7 +285,7 @@ export class GetDocumentsTool extends PaginatedGristTool<
     return {
       id: doc.id,
       name: doc.name,
-      workspace: doc.workspace || { id: 0, name: 'Unknown' },
+      workspace: doc.workspace,
       access: doc.access,
       url: `${baseUrl}/doc/${doc.id}`,
       is_pinned: doc.isPinned || false,

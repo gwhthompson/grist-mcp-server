@@ -1,5 +1,11 @@
 import { z } from 'zod'
-import { ColIdSchema, DocIdSchema, parseJsonString, ResponseFormatSchema, TableIdSchema } from './common.js'
+import {
+  ColIdSchema,
+  DocIdSchema,
+  parseJsonString,
+  ResponseFormatSchema,
+  TableIdSchema
+} from './common.js'
 import { StylePropertiesSchema } from './widget-options.js'
 
 // ============================================================================

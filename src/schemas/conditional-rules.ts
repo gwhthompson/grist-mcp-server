@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ColIdSchema, DocIdSchema, ResponseFormatSchema, TableIdSchema } from './common.js'
+import { ColIdSchema, DocIdSchema, parseJsonString, ResponseFormatSchema, TableIdSchema } from './common.js'
 import { StylePropertiesSchema } from './widget-options.js'
 
 // ============================================================================
@@ -36,7 +36,7 @@ export type BaseConditionalRule = z.infer<typeof BaseConditionalRuleSchema>
 // Rule Operation Schema (shared across all scopes)
 // ============================================================================
 
-export const RuleOperationSchema = z.discriminatedUnion('action', [
+const RawRuleOperationSchema = z.discriminatedUnion('action', [
   z
     .object({
       action: z.literal('add'),
@@ -75,6 +75,8 @@ export const RuleOperationSchema = z.discriminatedUnion('action', [
     })
     .strict()
 ])
+
+export const RuleOperationSchema = z.preprocess(parseJsonString, RawRuleOperationSchema)
 
 export type RuleOperation = z.infer<typeof RuleOperationSchema>
 

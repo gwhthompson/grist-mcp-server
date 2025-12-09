@@ -349,3 +349,19 @@ export const StandardToolParams = z.object({
 })
 
 export const ListToolParams = StandardToolParams.extend(PaginationSchema.shape)
+
+/**
+ * Parse JSON strings to objects for discriminatedUnion parameters.
+ * Claude Code may send oneOf parameters as JSON strings instead of objects.
+ * Use with z.preprocess() to handle both string and object inputs.
+ */
+export function parseJsonString(val: unknown): unknown {
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val)
+    } catch {
+      return val
+    }
+  }
+  return val
+}

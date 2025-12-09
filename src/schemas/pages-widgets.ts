@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DocIdSchema, ResponseFormatSchema, TableIdSchema } from './common.js'
+import { DocIdSchema, parseJsonString, ResponseFormatSchema, TableIdSchema } from './common.js'
 
 /**
  * Schema for grist_get_pages tool
@@ -293,6 +293,14 @@ const CustomConfigSchema = z
   })
   .strict()
 
+const RawPageConfigSchema = z.discriminatedUnion('pattern', [
+  MasterDetailConfigSchema,
+  HierarchicalConfigSchema,
+  ChartDashboardConfigSchema,
+  FormTableConfigSchema,
+  CustomConfigSchema
+])
+
 export const BuildPageSchema = z
   .object({
     docId: DocIdSchema,
@@ -301,13 +309,7 @@ export const BuildPageSchema = z
       .min(1)
       .max(255)
       .describe('Page name for navigation (e.g., "Sales Dashboard", "Inventory View")'),
-    config: z.discriminatedUnion('pattern', [
-      MasterDetailConfigSchema,
-      HierarchicalConfigSchema,
-      ChartDashboardConfigSchema,
-      FormTableConfigSchema,
-      CustomConfigSchema
-    ]),
+    config: z.preprocess(parseJsonString, RawPageConfigSchema),
     response_format: ResponseFormatSchema.optional().default('markdown')
   })
   .strict()
@@ -435,20 +437,20 @@ const DeleteWidgetOperationSchema = z
   })
   .strict()
 
+const RawWidgetOperationSchema = z.discriminatedUnion('action', [
+  AddWidgetOperationSchema,
+  ModifyWidgetOperationSchema,
+  LinkWidgetOperationSchema,
+  SortWidgetOperationSchema,
+  FilterWidgetOperationSchema,
+  DeleteWidgetOperationSchema
+])
+
 export const ConfigureWidgetSchema = z
   .object({
     docId: DocIdSchema,
     operations: z
-      .array(
-        z.discriminatedUnion('action', [
-          AddWidgetOperationSchema,
-          ModifyWidgetOperationSchema,
-          LinkWidgetOperationSchema,
-          SortWidgetOperationSchema,
-          FilterWidgetOperationSchema,
-          DeleteWidgetOperationSchema
-        ])
-      )
+      .array(z.preprocess(parseJsonString, RawWidgetOperationSchema))
       .min(1)
       .max(50)
       .describe('Widget operations to perform (1-50 operations, executed in order)'),

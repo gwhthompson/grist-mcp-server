@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { DocIdSchema, ResponseFormatSchema, TableIdSchema } from './common.js'
+import { DocIdSchema, parseJsonString, ResponseFormatSchema, TableIdSchema } from './common.js'
 
 export const WebhookIdSchema = z
   .string()
@@ -243,13 +243,15 @@ export const ClearQueueOperationSchema = z
       'Use when webhook queue has backed up due to endpoint failures.'
   )
 
-export const WebhookOperationSchema = z.discriminatedUnion('action', [
+const RawWebhookOperationSchema = z.discriminatedUnion('action', [
   ListWebhooksOperationSchema,
   CreateWebhookOperationSchema,
   UpdateWebhookOperationSchema,
   DeleteWebhookOperationSchema,
   ClearQueueOperationSchema
 ])
+
+export const WebhookOperationSchema = z.preprocess(parseJsonString, RawWebhookOperationSchema)
 
 export const ManageWebhooksSchema = z
   .object({

@@ -215,9 +215,11 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
     )
     const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
 
+    // Grist API doesn't support offset - implement client-side pagination
+    // Fetch offset + limit + 1 records to detect if there are more pages
+    const fetchLimit = params.offset + params.limit + 1
     const queryParams: Record<string, unknown> = {
-      limit: params.limit,
-      offset: params.offset
+      limit: fetchLimit
     }
 
     const gristFilters = this.convertToGristFilters(params.filters)
@@ -230,12 +232,16 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
       queryParams
     )
 
-    let records = response.records || []
-    records = this.selectColumns(records, params.columns)
+    const allRecords = response.records || []
+    // Apply offset client-side by slicing
+    const slicedRecords = allRecords.slice(params.offset, params.offset + params.limit)
+    const records = this.selectColumns(slicedRecords, params.columns)
     const formattedRecords = this.flattenRecords(records, columnTypes)
 
-    const total = this.estimateTotal(records.length, params.limit, params.offset)
-    const hasMore = records.length === params.limit
+    // Calculate pagination correctly
+    const totalFetched = allRecords.length
+    const hasMore = totalFetched > params.offset + params.limit
+    const total = totalFetched // Exact count of records that match filters
     const nextOffset = hasMore ? params.offset + params.limit : null
 
     const recordsWithErrors = records.filter((r) => r.errors && Object.keys(r.errors).length > 0)
@@ -345,10 +351,6 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
           : {})
       }
     })
-  }
-
-  private estimateTotal(recordCount: number, limit: number, offset: number): number {
-    return recordCount < limit ? offset + recordCount : offset + recordCount + 1
   }
 }
 

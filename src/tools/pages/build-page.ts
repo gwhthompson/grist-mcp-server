@@ -150,6 +150,8 @@ export const BUILD_PAGE_DEFINITION: ToolDefinition = {
       'Hierarchical creates drill-down summaries (auto-creates summary tables). ' +
       'Chart dashboard combines charts with selectors. ' +
       'Custom allows arbitrary widget arrangements. ' +
+      '**Note:** chart_dashboard with selector requires all charts to use the same table as the selector (for proper linking). ' +
+      'To use charts from different tables, either omit the selector or use the custom pattern with manual linking. ' +
       'For charts with existing summary tables, use grist_create_summary_table first, then reference the summary table in chart_dashboard.',
     examples: [
       {

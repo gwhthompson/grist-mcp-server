@@ -11,6 +11,7 @@ import {
 import { ApplyResponseSchema, CellValueSchema } from '../schemas/api-responses.js'
 import {
   DocIdSchema,
+  FilterSchema,
   ResponseFormatSchema,
   RowIdsSchema,
   TableIdSchema
@@ -66,7 +67,7 @@ export class AddRecordsTool extends GristTool<typeof AddRecordsSchema, unknown> 
       toTableId(params.tableId)
     )
 
-    validateRecords(params.records, columns)
+    validateRecords(params.records, columns, params.tableId)
 
     const action = buildBulkAddRecordAction(toTableId(params.tableId), params.records)
     const response = await this.client.post<ApplyResponse>(
@@ -136,7 +137,7 @@ export class UpdateRecordsTool extends GristTool<typeof UpdateRecordsSchema, unk
       toTableId(params.tableId)
     )
 
-    validateRecord(params.updates, columns)
+    validateRecord(params.updates, columns, params.tableId)
 
     const action = buildBulkUpdateRecordAction(
       toTableId(params.tableId),
@@ -214,7 +215,7 @@ export class UpsertRecordsTool extends GristTool<typeof UpsertRecordsSchema, unk
       toTableId(params.tableId)
     )
 
-    validateUpsertRecords(params.records, columns)
+    validateUpsertRecords(params.records, columns, params.tableId)
 
     const requestBody = {
       records: params.records
@@ -253,7 +254,8 @@ export class UpsertRecordsTool extends GristTool<typeof UpsertRecordsSchema, unk
     if (response?.records) {
       recordIds = response.records
     } else {
-      recordIds = []
+      // Grist API doesn't return IDs for upsert - query for affected records
+      recordIds = await this.findAffectedRecordIds(params)
     }
 
     return {
@@ -265,9 +267,44 @@ export class UpsertRecordsTool extends GristTool<typeof UpsertRecordsSchema, unk
       message: `Successfully processed ${params.records.length} upsert operation(s) on ${params.tableId}`,
       note:
         recordIds.length === 0
-          ? 'Grist upsert API does not return record IDs. Query table with filters to find affected records.'
-          : 'Record IDs returned include both newly added and updated records'
+          ? 'Could not determine affected record IDs. Use grist_get_records with filters to find them.'
+          : 'Record IDs determined by querying for records matching the require fields'
     }
+  }
+
+  private async findAffectedRecordIds(params: UpsertRecordsInput): Promise<number[]> {
+    // Collect all unique require field combinations to query
+    const allIds = new Set<number>()
+
+    for (const record of params.records) {
+      if (!record.require || Object.keys(record.require).length === 0) {
+        continue // Skip records with empty require (can't query for them)
+      }
+
+      try {
+        // Build filter from require fields
+        const filter: Record<string, unknown[]> = {}
+        for (const [key, value] of Object.entries(record.require)) {
+          filter[key] = [value]
+        }
+
+        const response = await this.client.get<{ records: Array<{ id: number }> }>(
+          `/docs/${params.docId}/tables/${params.tableId}/records`,
+          {
+            filter: JSON.stringify(filter),
+            limit: 100 // Reasonable limit for upsert results
+          }
+        )
+
+        for (const rec of response.records || []) {
+          allIds.add(rec.id)
+        }
+      } catch {
+        // If query fails, continue with other records
+      }
+    }
+
+    return Array.from(allIds)
   }
 }
 
@@ -280,12 +317,24 @@ export const DeleteRecordsSchema = z
   .object({
     docId: DocIdSchema,
     tableId: TableIdSchema,
-    rowIds: RowIdsSchema,
+    rowIds: RowIdsSchema.optional().describe(
+      'Array of row IDs to delete. Either rowIds OR filters must be provided.'
+    ),
+    filters: FilterSchema.describe(
+      'Delete records matching these filters. Either rowIds OR filters must be provided. Example: {"Status": "Cancelled"}'
+    ),
     response_format: ResponseFormatSchema
   })
   .strict()
+  .refine((data) => data.rowIds || data.filters, {
+    message: 'Either rowIds or filters must be provided'
+  })
 
 export type DeleteRecordsInput = z.infer<typeof DeleteRecordsSchema>
+
+interface RecordsResponse {
+  records: Array<{ id: number }>
+}
 
 export class DeleteRecordsTool extends GristTool<typeof DeleteRecordsSchema, unknown> {
   constructor(context: ToolContext) {
@@ -293,9 +342,31 @@ export class DeleteRecordsTool extends GristTool<typeof DeleteRecordsSchema, unk
   }
 
   protected async executeInternal(params: DeleteRecordsInput) {
+    let rowIdsToDelete: number[]
+
+    if (params.rowIds) {
+      // Use provided row IDs
+      rowIdsToDelete = params.rowIds
+    } else if (params.filters) {
+      // Query for matching records first
+      rowIdsToDelete = await this.findMatchingRecordIds(params)
+      if (rowIdsToDelete.length === 0) {
+        return {
+          success: true,
+          document_id: params.docId,
+          table_id: params.tableId,
+          records_deleted: 0,
+          message: 'No records matched the provided filters',
+          filters_used: params.filters
+        }
+      }
+    } else {
+      throw new Error('Either rowIds or filters must be provided')
+    }
+
     const action = buildBulkRemoveRecordAction(
       toTableId(params.tableId),
-      params.rowIds.map(toRowId)
+      rowIdsToDelete.map(toRowId)
     )
 
     const response = await this.client.post<ApplyResponse>(
@@ -303,7 +374,7 @@ export class DeleteRecordsTool extends GristTool<typeof DeleteRecordsSchema, unk
       [serializeUserAction(action)],
       {
         schema: ApplyResponseSchema,
-        context: `Deleting ${params.rowIds.length} records from ${params.tableId}`
+        context: `Deleting ${rowIdsToDelete.length} records from ${params.tableId}`
       }
     )
 
@@ -313,10 +384,30 @@ export class DeleteRecordsTool extends GristTool<typeof DeleteRecordsSchema, unk
       success: true,
       document_id: params.docId,
       table_id: params.tableId,
-      records_deleted: params.rowIds.length,
-      message: `Successfully deleted ${params.rowIds.length} record(s) from ${params.tableId}`,
-      warning: 'This operation cannot be undone. Deleted records are permanently removed.'
+      records_deleted: rowIdsToDelete.length,
+      deleted_row_ids: rowIdsToDelete,
+      message: `Successfully deleted ${rowIdsToDelete.length} record(s) from ${params.tableId}`,
+      warning: 'This operation cannot be undone. Deleted records are permanently removed.',
+      ...(params.filters ? { filters_used: params.filters } : {})
     }
+  }
+
+  private async findMatchingRecordIds(params: DeleteRecordsInput): Promise<number[]> {
+    // Convert filters to Grist format
+    const gristFilters: Record<string, unknown[]> = {}
+    for (const [key, value] of Object.entries(params.filters || {})) {
+      gristFilters[key] = Array.isArray(value) ? value : [value]
+    }
+
+    const response = await this.client.get<RecordsResponse>(
+      `/docs/${params.docId}/tables/${params.tableId}/records`,
+      {
+        filter: JSON.stringify(gristFilters),
+        limit: MAX_RECORDS_PER_BATCH // Don't delete more than batch limit at once
+      }
+    )
+
+    return (response.records || []).map((r) => r.id)
   }
 }
 
@@ -450,7 +541,7 @@ export const RECORD_TOOLS: ReadonlyArray<ToolDefinition> = [
   {
     name: 'grist_delete_records',
     title: 'Delete Grist Records',
-    description: 'Permanently delete records by row ID',
+    description: 'Permanently delete records by row ID or filters',
     purpose: 'Delete records permanently',
     category: 'records',
     inputSchema: DeleteRecordsSchema,
@@ -458,16 +549,31 @@ export const RECORD_TOOLS: ReadonlyArray<ToolDefinition> = [
     annotations: DESTRUCTIVE_ANNOTATIONS,
     handler: deleteRecords,
     docs: {
-      overview: 'Permanently remove records by row ID. Cannot be undone.',
+      overview:
+        'Permanently remove records by row ID or by filter. Cannot be undone. ' +
+        'Use rowIds for specific records, or filters to delete matching records.',
       examples: [
         {
           desc: 'Delete by IDs',
           input: { docId: 'abc123', tableId: 'Tasks', rowIds: [1, 2, 3] }
+        },
+        {
+          desc: 'Delete by filter',
+          input: { docId: 'abc123', tableId: 'Orders', filters: { Status: 'Cancelled' } }
+        },
+        {
+          desc: 'Delete with multiple filter values',
+          input: {
+            docId: 'abc123',
+            tableId: 'Logs',
+            filters: { Level: ['debug', 'info'], Archived: true }
+          }
         }
       ],
       errors: [
         { error: 'Row ID not found', solution: 'Use grist_get_records first' },
-        { error: 'Permission denied', solution: 'Verify write access' }
+        { error: 'Permission denied', solution: 'Verify write access' },
+        { error: 'No records matched', solution: 'Check filter values and column names' }
       ]
     }
   }

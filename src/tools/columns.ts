@@ -488,6 +488,38 @@ export const COLUMN_TOOLS: ReadonlyArray<ToolDefinition> = [
           }
         },
         {
+          desc: 'Formula column (auto-calculated, read-only)',
+          input: {
+            docId: 'abc123',
+            tableId: 'Orders',
+            operations: [
+              {
+                action: 'add',
+                colId: 'Total',
+                type: 'Numeric',
+                isFormula: true,
+                formula: '$Price * $Quantity'
+              }
+            ]
+          }
+        },
+        {
+          desc: 'Trigger formula (calculates on create/update, writable)',
+          input: {
+            docId: 'abc123',
+            tableId: 'Tasks',
+            operations: [
+              {
+                action: 'add',
+                colId: 'CreatedAt',
+                type: 'DateTime',
+                isFormula: false,
+                formula: 'NOW()'
+              }
+            ]
+          }
+        },
+        {
           desc: 'Change label without changing colId',
           input: {
             docId: 'abc123',

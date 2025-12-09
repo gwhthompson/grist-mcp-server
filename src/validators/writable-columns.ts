@@ -1,4 +1,5 @@
 import { GristError } from '../errors/GristError.js'
+import { NotFoundError } from '../errors/NotFoundError.js'
 import type { ColumnMetadata } from '../services/schema-cache.js'
 
 export class FormulaColumnWriteError extends GristError {
@@ -23,6 +24,24 @@ export class FormulaColumnWriteError extends GristError {
 /** Checks if a column can be written to (not a formula column). */
 export function isWritableColumn(column: ColumnMetadata): boolean {
   return column.fields.isFormula !== true
+}
+
+/**
+ * Validates that all columns in the updates exist in the table.
+ * @throws {NotFoundError} if any column doesn't exist
+ */
+export function validateColumnExistence(
+  updates: Record<string, unknown>,
+  columns: ColumnMetadata[],
+  tableId: string
+): void {
+  const columnIds = new Set(columns.map((c) => c.id))
+
+  for (const colId of Object.keys(updates)) {
+    if (!columnIds.has(colId)) {
+      throw new NotFoundError('column', colId, { tableId })
+    }
+  }
 }
 
 /**

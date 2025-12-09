@@ -698,7 +698,20 @@ export class GristClient {
   }
 
   private getCacheKey(method: HttpMethod, path: string, params?: Record<string, unknown>): string {
-    const paramStr = params ? JSON.stringify(params) : ''
+    // Sort params for deterministic cache keys regardless of object property order
+    let paramStr = ''
+    if (params) {
+      const sortedParams = Object.keys(params)
+        .sort()
+        .reduce(
+          (acc, key) => {
+            acc[key] = params[key]
+            return acc
+          },
+          {} as Record<string, unknown>
+        )
+      paramStr = JSON.stringify(sortedParams)
+    }
     return `${method}:${path}${paramStr ? `:${paramStr}` : ''}`
   }
 

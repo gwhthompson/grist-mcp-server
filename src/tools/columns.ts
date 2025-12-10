@@ -147,6 +147,14 @@ interface ManageColumnsResponseData {
   table_id: string
   operations_performed: number
   actions: string[]
+  colId_changes?: ColIdChangeInfo[]
+  warning?: string
+}
+
+interface ColIdChangeInfo {
+  originalColId: string
+  newColId: string
+  operation: 'modify'
 }
 
 export class ManageColumnsTool extends GristTool<
@@ -230,13 +238,21 @@ export class ManageColumnsTool extends GristTool<
     // This ensures fresh schema is fetched on next record validation
     this.schemaCache.invalidateCache(toDocId(params.docId), toTableId(params.tableId))
 
+    // Detect colId changes for modify operations that changed label
+    // When label is changed without untieColIdFromLabel: true, Grist auto-updates colId
+    const colIdChanges = await this.detectColIdChanges(
+      params.docId,
+      params.tableId,
+      enrichedOperations
+    )
+
     // Check if any operations set widgetOptions
     const hasWidgetOptions = params.operations.some(
       (op) => (op.action === 'add' || op.action === 'modify') && 'widgetOptions' in op
     )
 
     // Build success response
-    return {
+    const responseData: ManageColumnsResponseData & Record<string, unknown> = {
       success: true,
       document_id: params.docId,
       table_id: params.tableId,
@@ -249,13 +265,27 @@ export class ManageColumnsTool extends GristTool<
       }),
       summary: this.calculateOperationSummary(params.operations),
       message: `Successfully completed ${params.operations.length} column operation(s) on ${params.tableId}`,
-      details: params.operations.map(this.formatOperationMessage),
-      ...(hasWidgetOptions
-        ? {
-            hint: `To verify widgetOptions were set correctly, use: grist_get_tables({docId: "${params.docId}", tableId: "${params.tableId}", detail_level: "full_schema"})`
-          }
-        : {})
+      details: params.operations.map(this.formatOperationMessage)
     }
+
+    // Add hint for widgetOptions verification
+    if (hasWidgetOptions) {
+      responseData.hint = `To verify widgetOptions were set correctly, use: grist_get_tables({docId: "${params.docId}", tableId: "${params.tableId}", detail_level: "full_schema"})`
+    }
+
+    // Add colId change warnings if any occurred
+    if (colIdChanges.length > 0) {
+      responseData.colId_changes = colIdChanges
+      const changesDesc = colIdChanges
+        .map((c) => `"${c.originalColId}" → "${c.newColId}"`)
+        .join(', ')
+      responseData.warning =
+        `Column ID(s) changed due to label modification: ${changesDesc}. ` +
+        `Use untieColIdFromLabel: true to prevent this. ` +
+        `Update any code referencing the old column ID(s).`
+    }
+
+    return responseData
   }
 
   private async enrichModifyOperation(
@@ -424,6 +454,59 @@ export class ManageColumnsTool extends GristTool<
       renamed: operations.filter((op) => op.action === 'rename').length
     }
   }
+
+  /**
+   * Detect colId changes for modify operations that changed label.
+   * When label is changed without untieColIdFromLabel: true, Grist auto-updates colId.
+   * We fetch fresh column data to compare actual colIds after the operation.
+   */
+  private async detectColIdChanges(
+    docId: string,
+    tableId: string,
+    operations: ColumnOperation[]
+  ): Promise<ColIdChangeInfo[]> {
+    // Filter modify operations that changed label without untieColIdFromLabel
+    const modifyOpsWithLabel = operations.filter(
+      (op): op is Extract<ColumnOperation, { action: 'modify' }> =>
+        op.action === 'modify' && op.label !== undefined && !op.untieColIdFromLabel
+    )
+
+    if (modifyOpsWithLabel.length === 0) {
+      return []
+    }
+
+    // Fetch fresh column data from Grist to check actual colIds
+    const columnsResponse = await this.client.get<{
+      columns: Array<{ id: string; fields: { label?: string } }>
+    }>(`/docs/${docId}/tables/${tableId}/columns`)
+
+    const colIdChanges: ColIdChangeInfo[] = []
+
+    for (const op of modifyOpsWithLabel) {
+      // The original colId we sent in the modify operation
+      const originalColId = op.colId
+
+      // Check if a column now exists with a different colId but matching label
+      // When Grist auto-updates colId from label, the new colId is based on the label
+      const matchingColumn = columnsResponse.columns.find(
+        (col) => col.fields.label === op.label && col.id !== originalColId
+      )
+
+      // Also check if the original colId no longer exists
+      // (meaning it was renamed due to label change)
+      const originalExists = columnsResponse.columns.some((col) => col.id === originalColId)
+
+      if (matchingColumn && !originalExists) {
+        colIdChanges.push({
+          originalColId,
+          newColId: matchingColumn.id,
+          operation: 'modify'
+        })
+      }
+    }
+
+    return colIdChanges
+  }
 }
 
 export async function manageColumns(context: ToolContext, params: ManageColumnsInput) {
@@ -538,7 +621,11 @@ export const COLUMN_TOOLS: ReadonlyArray<ToolDefinition> = [
       errors: [
         { error: 'Column not found', solution: 'Use grist_get_tables' },
         { error: 'Column already exists', solution: "Use action='modify'" },
-        { error: 'All operations rolled back', solution: 'Fix failed operation and retry all' }
+        { error: 'All operations rolled back', solution: 'Fix failed operation and retry all' },
+        {
+          error: 'colId changed unexpectedly',
+          solution: 'Use untieColIdFromLabel: true when modifying label to preserve colId'
+        }
       ]
     }
   }

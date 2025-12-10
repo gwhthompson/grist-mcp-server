@@ -202,30 +202,22 @@ describe('Reference Columns - Real-World Tests', () => {
       expect(task?.fields.AssignedTo).toBe(bob?.id)
     })
 
-    it("should handle invalid reference (ID that doesn't exist)", async () => {
+    it("should reject invalid reference (ID that doesn't exist)", async () => {
       // Create task referencing a non-existent person ID
       const nonExistentId = 999
-      const taskIds = await addTestRecords(client, docId, tasksTableId, [
-        {
-          fields: {
-            Title: 'Task with invalid ref',
-            AssignedTo: nonExistentId, // Use primitive ID that doesn't exist
-            Status: 'New'
+
+      // MCP server validates Ref values and rejects invalid references
+      await expect(
+        addTestRecords(client, docId, tasksTableId, [
+          {
+            fields: {
+              Title: 'Task with invalid ref',
+              AssignedTo: nonExistentId, // Use primitive ID that doesn't exist
+              Status: 'New'
+            }
           }
-        }
-      ])
-
-      // Query task - reference should be stored as-is
-      const tasks = await client.get<{
-        records: Array<{ id: number; fields: Record<string, CellValue> }>
-      }>(`/docs/${docId}/tables/${tasksTableId}/records`)
-
-      const task = tasks.records.find((r) => r.id === taskIds[0])
-      expect(task).toBeDefined()
-
-      // Grist stores the numeric reference even when target doesn't exist
-      expect(typeof task?.fields.AssignedTo).toBe('number')
-      expect(task?.fields.AssignedTo).toBe(nonExistentId)
+        ])
+      ).rejects.toThrow(/Invalid reference.*AssignedTo[\s\S]*999[\s\S]*does not exist/)
     })
   })
 
@@ -377,7 +369,7 @@ describe('Reference Columns - Real-World Tests', () => {
       expect(project?.fields.TeamMembers).toEqual(['L', alice?.id, carol?.id])
     })
 
-    it('should handle RefList with invalid references', async () => {
+    it('should reject RefList with invalid references', async () => {
       const people = await client.get<{
         records: Array<{ id: number; fields: Record<string, CellValue> }>
       }>(`/docs/${docId}/tables/${peopleTableId}/records`)
@@ -385,25 +377,19 @@ describe('Reference Columns - Real-World Tests', () => {
 
       // Create project with Alice and a non-existent person ID
       const nonExistentId = 888
-      const projectIds = await addTestRecords(client, docId, projectsTableId, [
-        {
-          fields: {
-            Name: 'Mixed Refs Project',
-            TeamMembers: [alice?.id, nonExistentId], // Natural format
-            Budget: 60000
+
+      // MCP server validates RefList values and rejects invalid references
+      await expect(
+        addTestRecords(client, docId, projectsTableId, [
+          {
+            fields: {
+              Name: 'Mixed Refs Project',
+              TeamMembers: [alice?.id, nonExistentId], // Natural format
+              Budget: 60000
+            }
           }
-        }
-      ])
-
-      // Verify RefList stores IDs even when some don't exist
-      const projects = await client.get<{
-        records: Array<{ id: number; fields: Record<string, CellValue> }>
-      }>(`/docs/${docId}/tables/${projectsTableId}/records`)
-
-      const project = projects.records.find((r) => r.id === projectIds[0])
-      // Raw Grist API returns encoded format
-      expect(Array.isArray(project?.fields.TeamMembers)).toBe(true)
-      expect(project?.fields.TeamMembers).toEqual(['L', alice?.id, nonExistentId])
+        ])
+      ).rejects.toThrow(/Invalid reference values.*TeamMembers[\s\S]*888[\s\S]*do not exist/)
     })
   })
 

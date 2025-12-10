@@ -32,6 +32,11 @@ import { toDocId, toRowId, toTableId } from '../types/advanced.js'
 import type { ApplyResponse, UpsertResponse } from '../types.js'
 import { validateRetValues } from '../validators/apply-response.js'
 import {
+  validateRecordsDataIntegrity,
+  validateRowIdsExist,
+  validateUpsertRecordsDataIntegrity
+} from '../validators/data-integrity-validators.js'
+import {
   validateRecord,
   validateRecords,
   validateUpsertRecords
@@ -62,14 +67,19 @@ export class AddRecordsTool extends GristTool<typeof AddRecordsSchema, unknown> 
 
   protected async executeInternal(params: AddRecordsInput) {
     const { schemaCache } = this
-    const columns = await schemaCache.getTableColumns(
-      toDocId(params.docId),
-      toTableId(params.tableId)
-    )
+    const docId = toDocId(params.docId)
+    const tableId = toTableId(params.tableId)
 
+    // Fetch fresh column metadata for validation (includes widgetOptions for Choice)
+    const columns = await schemaCache.getFreshColumns(docId, tableId)
+
+    // Type validation (column existence, writable, type compatibility)
     validateRecords(params.records, columns, params.tableId)
 
-    const action = buildBulkAddRecordAction(toTableId(params.tableId), params.records)
+    // Data integrity validation (Ref values exist, Choice values valid)
+    await validateRecordsDataIntegrity(params.records, columns, tableId, docId, schemaCache)
+
+    const action = buildBulkAddRecordAction(tableId, params.records)
     const response = await this.client.post<ApplyResponse>(
       `/docs/${params.docId}/apply`,
       [serializeUserAction(action)],
@@ -132,18 +142,22 @@ export class UpdateRecordsTool extends GristTool<typeof UpdateRecordsSchema, unk
 
   protected async executeInternal(params: UpdateRecordsInput) {
     const { schemaCache } = this
-    const columns = await schemaCache.getTableColumns(
-      toDocId(params.docId),
-      toTableId(params.tableId)
-    )
+    const docId = toDocId(params.docId)
+    const tableId = toTableId(params.tableId)
 
+    // Validate row IDs exist before attempting update (prevents 500 error)
+    await validateRowIdsExist(params.rowIds, tableId, docId, schemaCache)
+
+    // Fetch fresh column metadata for validation
+    const columns = await schemaCache.getFreshColumns(docId, tableId)
+
+    // Type validation
     validateRecord(params.updates, columns, params.tableId)
 
-    const action = buildBulkUpdateRecordAction(
-      toTableId(params.tableId),
-      params.rowIds.map(toRowId),
-      params.updates
-    )
+    // Data integrity validation (Ref values exist, Choice values valid)
+    await validateRecordsDataIntegrity([params.updates], columns, tableId, docId, schemaCache)
+
+    const action = buildBulkUpdateRecordAction(tableId, params.rowIds.map(toRowId), params.updates)
 
     const response = await this.client.post<ApplyResponse>(
       `/docs/${params.docId}/apply`,
@@ -210,12 +224,17 @@ export class UpsertRecordsTool extends GristTool<typeof UpsertRecordsSchema, unk
 
   protected async executeInternal(params: UpsertRecordsInput) {
     const { schemaCache } = this
-    const columns = await schemaCache.getTableColumns(
-      toDocId(params.docId),
-      toTableId(params.tableId)
-    )
+    const docId = toDocId(params.docId)
+    const tableId = toTableId(params.tableId)
 
+    // Fetch fresh column metadata for validation
+    const columns = await schemaCache.getFreshColumns(docId, tableId)
+
+    // Type validation
     validateUpsertRecords(params.records, columns, params.tableId)
+
+    // Data integrity validation (Ref values exist, Choice values valid)
+    await validateUpsertRecordsDataIntegrity(params.records, columns, tableId, docId, schemaCache)
 
     const requestBody = {
       records: params.records
@@ -342,10 +361,14 @@ export class DeleteRecordsTool extends GristTool<typeof DeleteRecordsSchema, unk
   }
 
   protected async executeInternal(params: DeleteRecordsInput) {
+    const { schemaCache } = this
+    const docId = toDocId(params.docId)
+    const tableId = toTableId(params.tableId)
     let rowIdsToDelete: number[]
 
     if (params.rowIds) {
-      // Use provided row IDs
+      // Validate row IDs exist before attempting delete (prevents 500 error)
+      await validateRowIdsExist(params.rowIds, tableId, docId, schemaCache)
       rowIdsToDelete = params.rowIds
     } else if (params.filters) {
       // Query for matching records first
@@ -364,10 +387,7 @@ export class DeleteRecordsTool extends GristTool<typeof DeleteRecordsSchema, unk
       throw new Error('Either rowIds or filters must be provided')
     }
 
-    const action = buildBulkRemoveRecordAction(
-      toTableId(params.tableId),
-      rowIdsToDelete.map(toRowId)
-    )
+    const action = buildBulkRemoveRecordAction(tableId, rowIdsToDelete.map(toRowId))
 
     const response = await this.client.post<ApplyResponse>(
       `/docs/${params.docId}/apply`,
@@ -462,6 +482,16 @@ export const RECORD_TOOLS: ReadonlyArray<ToolDefinition> = [
         {
           error: 'Cannot write to formula column',
           solution: 'Use grist_manage_columns to make it non-formula'
+        },
+        {
+          error: 'Invalid reference',
+          solution:
+            'Row ID must exist in referenced table. Use grist_get_records to find valid IDs.'
+        },
+        {
+          error: 'Invalid choice',
+          solution:
+            'Value must be in allowed choices. Use grist_get_tables with detail_level="full_schema" to see choices.'
         }
       ]
     }
@@ -491,8 +521,18 @@ export const RECORD_TOOLS: ReadonlyArray<ToolDefinition> = [
         }
       ],
       errors: [
-        { error: 'Row ID not found', solution: 'Use grist_get_records to get IDs' },
-        { error: 'Column not found', solution: 'Use grist_get_tables' }
+        { error: 'Row ID not found', solution: 'Use grist_get_records to find valid row IDs' },
+        { error: 'Column not found', solution: 'Use grist_get_tables' },
+        {
+          error: 'Invalid reference',
+          solution:
+            'Row ID must exist in referenced table. Use grist_get_records to find valid IDs.'
+        },
+        {
+          error: 'Invalid choice',
+          solution:
+            'Value must be in allowed choices. Use grist_get_tables with detail_level="full_schema" to see choices.'
+        }
       ]
     }
   },
@@ -534,7 +574,17 @@ export const RECORD_TOOLS: ReadonlyArray<ToolDefinition> = [
           error: 'Upsert created duplicate',
           solution: 'Check case-sensitivity and whitespace in require field'
         },
-        { error: 'Multiple records match', solution: 'Use onMany parameter' }
+        { error: 'Multiple records match', solution: 'Use onMany parameter' },
+        {
+          error: 'Invalid reference',
+          solution:
+            'Row ID must exist in referenced table. Use grist_get_records to find valid IDs.'
+        },
+        {
+          error: 'Invalid choice',
+          solution:
+            'Value must be in allowed choices. Use grist_get_tables with detail_level="full_schema" to see choices.'
+        }
       ]
     }
   },

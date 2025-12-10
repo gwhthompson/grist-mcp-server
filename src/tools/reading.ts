@@ -372,7 +372,7 @@ export const READING_TOOLS: ReadonlyArray<ToolDefinition> = [
     handler: querySql,
     docs: {
       overview:
-        'Execute SQL queries for JOINs, aggregations, and complex filters. Use grist_get_records for single-table queries without SQL. Supports parameterized queries with ? placeholders (requires Grist v1.1.0+).',
+        'Execute SQL queries for JOINs, aggregations, and complex filters. Use grist_get_records for single-table queries without SQL. Supports parameterized queries with ? placeholders (requires Grist v1.1.0+). **Output format:** SQL returns raw SQLite format: `{records: [{fields: {...}}]}`. Booleans are 0/1 (not true/false). Row IDs must be explicitly selected. For flat object format with decoded values, use grist_get_records instead.',
       examples: [
         {
           desc: 'JOIN query',
@@ -395,11 +395,22 @@ export const READING_TOOLS: ReadonlyArray<ToolDefinition> = [
             sql: 'SELECT * FROM Contacts WHERE Region = ?',
             parameters: ['West']
           }
+        },
+        {
+          desc: 'Select with row ID and boolean (note: Active returns 0/1)',
+          input: {
+            docId: 'abc123',
+            sql: 'SELECT id, Name, Active FROM Customers WHERE Active = 1'
+          }
         }
       ],
       errors: [
         { error: 'SQL syntax error', solution: 'Verify table/column names with grist_get_tables' },
-        { error: 'Table not found', solution: 'Use grist_get_tables to see available tables' }
+        { error: 'Table not found', solution: 'Use grist_get_tables to see available tables' },
+        {
+          error: 'Unexpected boolean format (0/1 vs true/false)',
+          solution: 'SQL returns raw SQLite types. Compare with 0/1, not true/false'
+        }
       ]
     }
   },

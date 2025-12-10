@@ -10,6 +10,35 @@ export interface ColumnMetadata {
     isFormula: boolean
     formula?: string
     recalcWhen?: number
+    /** Widget options as JSON string (e.g., contains choices for Choice columns) */
+    widgetOptions?: string
+    /** Numeric column reference for visibleCol lookups */
+    visibleCol?: number
+  }
+}
+
+/**
+ * Parsed widget options for Choice/ChoiceList columns.
+ * Extracted from widgetOptions JSON string.
+ */
+export interface ParsedChoiceOptions {
+  choices?: string[]
+  choiceOptions?: Record<string, unknown>
+}
+
+/**
+ * Parses widgetOptions JSON string to extract choice values.
+ * @returns ParsedChoiceOptions or undefined if parsing fails or no choices
+ */
+export function parseChoiceOptions(
+  widgetOptions: string | undefined
+): ParsedChoiceOptions | undefined {
+  if (!widgetOptions) return undefined
+  try {
+    const parsed = JSON.parse(widgetOptions) as ParsedChoiceOptions
+    return parsed.choices ? parsed : undefined
+  } catch {
+    return undefined
   }
 }
 
@@ -86,6 +115,45 @@ export class SchemaCache {
   async getTableRef(docId: DocId, tableName: string): Promise<number | null> {
     const tableRefs = await this.getTableRefs(docId)
     return tableRefs.get(tableName) ?? null
+  }
+
+  /**
+   * Fetches row IDs from a table for Ref validation.
+   * Uses SQL for performance (10x faster than records API at scale).
+   * Does NOT cache - always returns fresh data for validation accuracy.
+   */
+  async getRowIds(docId: DocId, tableId: TableId): Promise<Set<number>> {
+    try {
+      const response = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+        sql: `SELECT id FROM "${tableId}"`,
+        args: []
+      })
+
+      const rowIds = new Set<number>()
+      for (const record of response.records) {
+        const rec = record as Record<string, unknown>
+        const fields = rec.fields as Record<string, unknown> | undefined
+        const id = (fields?.id ?? rec.id) as number | undefined
+        if (typeof id === 'number') {
+          rowIds.add(id)
+        }
+      }
+
+      return rowIds
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      throw new Error(
+        `Failed to fetch row IDs for table "${tableId}" in document "${docId}": ${errorMessage}`
+      )
+    }
+  }
+
+  /**
+   * Fetches fresh column metadata directly from API (bypasses cache).
+   * Use for validation when you need the latest widgetOptions.
+   */
+  async getFreshColumns(docId: DocId, tableId: TableId): Promise<ColumnMetadata[]> {
+    return this.fetchColumns(docId, tableId)
   }
 
   invalidateCache(docId: DocId, tableId: TableId): void {

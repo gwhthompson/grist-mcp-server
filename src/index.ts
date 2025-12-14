@@ -99,7 +99,6 @@ function logStartupInfo(config: ServerConfig): void {
 
 /**
  * Clean and validate JSON Schema output for token optimization and consistency.
- * - Removes redundant $schema field (MCP defaults to JSON Schema 2020-12)
  * - Removes redundant id field in $defs (already the key name)
  * - Removes redundant type field when const is present (type is inferred)
  * - Removes redundant minLength/maxLength when pattern enforces length
@@ -110,9 +109,6 @@ function cleanAndValidateSchema(
   schema: Record<string, unknown>,
   context: string
 ): Record<string, unknown> {
-  // Remove MCP default $schema - it's redundant
-  delete schema.$schema
-
   const defs = schema.$defs as Record<string, Record<string, unknown>> | undefined
   if (defs) {
     for (const [key, def] of Object.entries(defs)) {

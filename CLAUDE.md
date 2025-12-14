@@ -111,10 +111,10 @@ Never return MCPToolResponse from executeInternal - causes double-wrapping.
 | Task | Action |
 |------|--------|
 | MCP tools | Invoke `mcp-builder` skill |
-| Zod schemas | Fetch Zod v3 docs via Context7 |
+| Zod schemas | Fetch https://zod.dev/llms-full.txt |
 | Complex types | Invoke `typescript-pro` agent |
 
-**Zod v3 (not v4):** Fetch docs via Context7 with `/websites/v3_zod_dev`
+**Zod docs:** Fetch https://zod.dev/llms-full.txt (LLM-optimized)
 
 ---
 

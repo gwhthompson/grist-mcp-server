@@ -564,7 +564,7 @@ export const ManageRecordsOutputSchema = z.object({
   docId: z.string(),
   tableId: z.string(),
   operationsCompleted: z.number(),
-  total_recordsAffected: z.number(),
+  totalRecordsAffected: z.number(),
   results: z.array(
     z.object({
       action: z.string(),

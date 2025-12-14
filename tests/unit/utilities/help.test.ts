@@ -12,12 +12,14 @@ import { HELP_TOPICS, HelpSchema, TOOL_NAMES } from '../../../src/schemas/help.j
 
 describe('Help Tool - Schema Validation', () => {
   describe('TOOL_NAMES constant', () => {
-    it('should contain all 22 Grist tool names', () => {
-      // 22 tools (including grist_help, auto-generated from ALL_TOOLS)
-      expect(TOOL_NAMES.length).toBe(22)
+    it('should contain all 12 Grist tool names', () => {
+      // 12 tools (v2.0 consolidated architecture, auto-generated from ALL_TOOLS)
+      // Discovery: 4, Reading: 2, Management: 3, Utility: 3
+      expect(TOOL_NAMES.length).toBe(12)
     })
 
     it('should contain all discovery tools', () => {
+      expect(TOOL_NAMES).toContain('grist_discover_tools')
       expect(TOOL_NAMES).toContain('grist_get_workspaces')
       expect(TOOL_NAMES).toContain('grist_get_documents')
       expect(TOOL_NAMES).toContain('grist_get_tables')
@@ -28,33 +30,11 @@ describe('Help Tool - Schema Validation', () => {
       expect(TOOL_NAMES).toContain('grist_get_records')
     })
 
-    it('should contain all record tools', () => {
-      expect(TOOL_NAMES).toContain('grist_add_records')
-      expect(TOOL_NAMES).toContain('grist_update_records')
-      expect(TOOL_NAMES).toContain('grist_upsert_records')
-      expect(TOOL_NAMES).toContain('grist_delete_records')
-    })
-
-    it('should contain all table tools', () => {
-      expect(TOOL_NAMES).toContain('grist_create_table')
-      expect(TOOL_NAMES).toContain('grist_rename_table')
-      expect(TOOL_NAMES).toContain('grist_delete_table')
-    })
-
-    it('should contain all column tools', () => {
-      expect(TOOL_NAMES).toContain('grist_manage_columns')
-      expect(TOOL_NAMES).toContain('grist_manage_conditional_rules')
-    })
-
-    it('should contain all page tools', () => {
-      expect(TOOL_NAMES).toContain('grist_get_pages')
-      expect(TOOL_NAMES).toContain('grist_build_page')
-      expect(TOOL_NAMES).toContain('grist_configure_widget')
-      expect(TOOL_NAMES).toContain('grist_update_page')
-    })
-
-    it('should contain summary table tool', () => {
-      expect(TOOL_NAMES).toContain('grist_create_summary_table')
+    it('should contain consolidated management tools', () => {
+      // v2.0: Consolidated tools replace granular tools
+      expect(TOOL_NAMES).toContain('grist_manage_records') // replaces add/update/delete/upsert
+      expect(TOOL_NAMES).toContain('grist_manage_schema') // replaces table/column/summary tools
+      expect(TOOL_NAMES).toContain('grist_manage_pages') // replaces page/widget tools
     })
 
     it('should contain document creation tool', () => {
@@ -63,6 +43,10 @@ describe('Help Tool - Schema Validation', () => {
 
     it('should contain webhook tool', () => {
       expect(TOOL_NAMES).toContain('grist_manage_webhooks')
+    })
+
+    it('should contain help tool', () => {
+      expect(TOOL_NAMES).toContain('grist_help')
     })
   })
 
@@ -177,13 +161,13 @@ describe('Help Tool - Schema Validation', () => {
 
     it('should combine tool_name and topic parameters', () => {
       const result = HelpSchema.safeParse({
-        tool_name: 'grist_upsert_records',
+        tool_name: 'grist_manage_records',
         topic: 'errors',
         response_format: 'json'
       })
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.data.tool_name).toBe('grist_upsert_records')
+        expect(result.data.tool_name).toBe('grist_manage_records')
         expect(result.data.topic).toBe('errors')
         expect(result.data.response_format).toBe('json')
       }
@@ -202,7 +186,7 @@ describe('Help Tool - Documentation Content', () => {
 
       // Data tools should follow verb_noun pattern
       expect(toolName).toMatch(
-        /^grist_(get|add|update|upsert|delete|create|rename|manage|query|build|configure)_/
+        /^grist_(get|add|update|upsert|delete|create|rename|manage|query|build|configure|discover)_/
       )
     }
   })

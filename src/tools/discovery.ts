@@ -1,5 +1,14 @@
 import { z } from 'zod'
+import type { ToolCategory } from '../registry/tool-definitions.js'
 import { READ_ONLY_ANNOTATIONS, type ToolContext, type ToolDefinition } from '../registry/types.js'
+
+// Lazy imports to avoid circular dependency with tool-definitions.ts
+// These are resolved at runtime when discoverTools is called
+const getToolDefinitions = async () => {
+  const { ALL_TOOLS, TOOLS_BY_CATEGORY } = await import('../registry/tool-definitions.js')
+  return { ALL_TOOLS, TOOLS_BY_CATEGORY }
+}
+
 import {
   DetailLevelTableSchema,
   DetailLevelWorkspaceSchema,
@@ -24,23 +33,195 @@ import type { DocumentInfo, WorkspaceInfo } from '../types.js'
 import { GristTool } from './base/GristTool.js'
 import { PaginatedGristTool, type PaginatedResponse } from './base/PaginatedGristTool.js'
 
-export const GetWorkspacesSchema = z
-  .object({
-    name_contains: z
-      .string()
-      .min(1, 'Search term must be at least 1 character')
-      .max(100, 'Search term cannot exceed 100 characters')
-      .optional()
-      .describe(
-        'Optional: Filter workspaces by name. Case-insensitive partial matching. ' +
-          "Example: 'Sales' matches 'Sales Team', 'Regional Sales', etc. " +
-          'Leave empty to list all accessible workspaces.'
-      ),
-    detail_level: DetailLevelWorkspaceSchema,
-    response_format: ResponseFormatSchema
+// =============================================================================
+// grist_discover_tools - Progressive disclosure for tool schemas
+// =============================================================================
+
+const ToolCategorySchema = z.enum([
+  'all',
+  'discovery',
+  'reading',
+  'records',
+  'tables',
+  'columns',
+  'documents',
+  'document_structure',
+  'webhooks',
+  'utility'
+])
+
+export const DiscoverToolsSchema = z.strictObject({
+  detail_level: z
+    .enum(['names', 'descriptions', 'full'])
+    .default('descriptions')
+    .describe(
+      'names: tool names only. descriptions: + one-line descriptions. full: + complete JSON schema'
+    ),
+  category: ToolCategorySchema.optional().describe('Filter by category. Omit for all tools'),
+  tool_name: z
+    .string()
+    .optional()
+    .describe('Get full schema for specific tool (overrides detail_level to "full")'),
+  response_format: ResponseFormatSchema
+})
+
+export type DiscoverToolsInput = z.infer<typeof DiscoverToolsSchema>
+
+interface ToolInfo {
+  name: string
+  description?: string
+  inputSchema?: Record<string, unknown>
+  category?: string
+  [key: string]: unknown
+}
+
+interface DiscoverToolsOutput {
+  tools: ToolInfo[]
+  total: number
+  detail_level: string
+  category?: string
+  [key: string]: unknown
+}
+
+/**
+ * Discover available Grist tools with progressive disclosure.
+ * Use detail_level='names' for minimal tokens, 'descriptions' for quick overview,
+ * or 'full' to get complete JSON schemas for specific tools.
+ */
+export async function discoverTools(
+  _context: ToolContext,
+  params: DiscoverToolsInput
+): Promise<{
+  content: Array<{ type: 'text'; text: string }>
+  structuredContent: DiscoverToolsOutput
+}> {
+  const { detail_level, category, tool_name, response_format } = params
+
+  // Lazy load to avoid circular dependency
+  const { ALL_TOOLS, TOOLS_BY_CATEGORY } = await getToolDefinitions()
+
+  // If specific tool requested, return full schema for that tool
+  if (tool_name) {
+    const tool = ALL_TOOLS.find((t) => t.name === tool_name)
+    if (!tool) {
+      const availableTools = ALL_TOOLS.map((t) => t.name).join(', ')
+      throw new Error(`Tool "${tool_name}" not found. Available: ${availableTools}`)
+    }
+
+    const toolInfo: ToolInfo = {
+      name: tool.name,
+      description: tool.description,
+      category: tool.category,
+      inputSchema: z.toJSONSchema(tool.inputSchema, { reused: 'ref', io: 'input' }) as Record<
+        string,
+        unknown
+      >
+    }
+
+    const result: DiscoverToolsOutput = {
+      tools: [toolInfo],
+      total: 1,
+      detail_level: 'full'
+    }
+
+    if (response_format === 'json') {
+      return {
+        content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+        structuredContent: result
+      }
+    }
+
+    // Markdown format
+    let markdown = `## ${tool.name}\n\n`
+    markdown += `**Description:** ${tool.description}\n\n`
+    markdown += `**Category:** ${tool.category}\n\n`
+    markdown += `**Input Schema:**\n\`\`\`json\n${JSON.stringify(toolInfo.inputSchema, null, 2)}\n\`\`\`\n`
+
+    return {
+      content: [{ type: 'text', text: markdown }],
+      structuredContent: result
+    }
+  }
+
+  // Get tools by category or all
+  let tools: readonly ToolDefinition[]
+  if (category && category !== 'all') {
+    tools = TOOLS_BY_CATEGORY[category as ToolCategory] || []
+  } else {
+    tools = ALL_TOOLS
+  }
+
+  // Build tool info based on detail level
+  const toolInfos: ToolInfo[] = tools.map((tool) => {
+    if (detail_level === 'names') {
+      return { name: tool.name }
+    }
+    if (detail_level === 'descriptions') {
+      return { name: tool.name, description: tool.description, category: tool.category }
+    }
+    // full
+    return {
+      name: tool.name,
+      description: tool.description,
+      category: tool.category,
+      inputSchema: z.toJSONSchema(tool.inputSchema, { reused: 'ref', io: 'input' }) as Record<
+        string,
+        unknown
+      >
+    }
   })
-  .extend(PaginationSchema.shape)
-  .strict()
+
+  const result: DiscoverToolsOutput = {
+    tools: toolInfos,
+    total: toolInfos.length,
+    detail_level,
+    ...(category && category !== 'all' ? { category } : {})
+  }
+
+  if (response_format === 'json') {
+    return {
+      content: [{ type: 'text', text: JSON.stringify(result, null, 2) }],
+      structuredContent: result
+    }
+  }
+
+  // Markdown format
+  let markdown = `## Available Tools (${toolInfos.length})\n\n`
+  if (category && category !== 'all') {
+    markdown = `## ${category} Tools (${toolInfos.length})\n\n`
+  }
+
+  if (detail_level === 'names') {
+    markdown += toolInfos.map((t) => `- ${t.name}`).join('\n')
+  } else if (detail_level === 'descriptions') {
+    markdown += '| Tool | Description |\n|------|-------------|\n'
+    markdown += toolInfos.map((t) => `| \`${t.name}\` | ${t.description} |`).join('\n')
+  } else {
+    // full - show each tool with schema
+    for (const tool of toolInfos) {
+      markdown += `### ${tool.name}\n\n`
+      markdown += `${tool.description}\n\n`
+      markdown += `\`\`\`json\n${JSON.stringify(tool.inputSchema, null, 2)}\n\`\`\`\n\n`
+    }
+  }
+
+  return {
+    content: [{ type: 'text', text: markdown }],
+    structuredContent: result
+  }
+}
+
+export const GetWorkspacesSchema = z.strictObject({
+  name_contains: z
+    .string()
+    .min(1, 'Search term must be at least 1 character')
+    .max(100, 'Search term cannot exceed 100 characters')
+    .optional()
+    .describe('Filter by name (partial match)'),
+  detail_level: DetailLevelWorkspaceSchema,
+  response_format: ResponseFormatSchema,
+  ...PaginationSchema.shape
+})
 
 export type GetWorkspacesInput = z.infer<typeof GetWorkspacesSchema>
 
@@ -48,11 +229,11 @@ interface FormattedWorkspace {
   id: string | number
   name: string
   org: string | number | undefined
-  org_domain?: string
-  doc_count: number
+  orgDomain?: string
+  docCount: number
   access: string
-  created_at?: string
-  updated_at?: string
+  createdAt?: string
+  updatedAt?: string
 }
 
 export class GetWorkspacesTool extends PaginatedGristTool<
@@ -106,16 +287,16 @@ export class GetWorkspacesTool extends PaginatedGristTool<
       id: ws.id,
       name: ws.name,
       org: ws.orgName || ws.org,
-      doc_count: ws.docs?.length || 0,
+      docCount: ws.docs?.length || 0,
       access: ws.access
     }
 
     if (detailLevel === 'detailed') {
       return {
         ...base,
-        org_domain: ws.orgDomain,
-        created_at: ws.createdAt,
-        updated_at: ws.updatedAt
+        orgDomain: ws.orgDomain,
+        createdAt: ws.createdAt,
+        updatedAt: ws.updatedAt
       }
     }
 
@@ -130,8 +311,8 @@ export class GetWorkspacesTool extends PaginatedGristTool<
       total: data.pagination.total,
       offset: data.pagination.offset,
       limit: data.pagination.limit,
-      has_more: data.pagination.has_more,
-      next_offset: data.pagination.next_offset
+      hasMore: data.pagination.hasMore,
+      nextOffset: data.pagination.nextOffset
     })
 
     return super.formatResponse(
@@ -146,38 +327,22 @@ export async function getWorkspaces(context: ToolContext, params: GetWorkspacesI
   return tool.execute(params)
 }
 
-export const GetDocumentsSchema = z
-  .object({
-    docId: DocIdSchema.optional().describe(
-      'Optional: Get specific document by ID. If provided, returns single document. ' +
-        "Example: 'qBbArddFDSrKd2jpv3uZTj'"
-    ),
-    name_contains: z
-      .string()
-      .min(1, 'Search term must be at least 1 character')
-      .max(100, 'Search term cannot exceed 100 characters')
-      .optional()
-      .describe(
-        'Optional: Search documents by name. Case-insensitive partial matching. ' +
-          "Example: 'CRM' matches 'Customer CRM', 'Sales CRM System', etc. " +
-          'Leave empty to list all accessible documents.'
-      ),
-    workspaceId: WorkspaceIdSchema.optional().describe(
-      'Optional: Filter to documents in specific workspace. ' +
-        "Example: 'ws_123' or '3' (numeric ID)"
-    ),
-    detail_level: z
-      .enum(['summary', 'detailed'])
-      .default('summary')
-      .describe(
-        'Control metadata depth:\n' +
-          '- summary: name, id, workspace (fast, minimal tokens)\n' +
-          '- detailed: + permissions, timestamps, urls'
-      ),
-    response_format: ResponseFormatSchema
-  })
-  .extend(PaginationSchema.shape)
-  .strict()
+export const GetDocumentsSchema = z.strictObject({
+  docId: DocIdSchema.optional().describe('Get specific document by ID'),
+  name_contains: z
+    .string()
+    .min(1, 'Search term must be at least 1 character')
+    .max(100, 'Search term cannot exceed 100 characters')
+    .optional()
+    .describe('Filter by name (partial match)'),
+  workspaceId: WorkspaceIdSchema.optional().describe('Filter to workspace'),
+  detail_level: z
+    .enum(['summary', 'detailed'])
+    .default('summary')
+    .describe('summary: basic. detailed: +permissions, timestamps, urls'),
+  response_format: ResponseFormatSchema,
+  ...PaginationSchema.shape
+})
 
 export type GetDocumentsInput = z.infer<typeof GetDocumentsSchema>
 
@@ -185,12 +350,12 @@ interface FormattedDocument {
   id: string
   name: string
   workspace?: string | { id: number; name: string }
-  workspace_id?: number | string
+  workspaceId?: number | string
   access: string
   url?: string
-  is_pinned?: boolean
-  created_at?: string
-  updated_at?: string
+  isPinned?: boolean
+  createdAt?: string
+  updatedAt?: string
   public?: boolean
 }
 
@@ -277,7 +442,7 @@ export class GetDocumentsTool extends PaginatedGristTool<
         id: doc.id,
         name: doc.name,
         workspace: doc.workspace?.name,
-        workspace_id: doc.workspace?.id,
+        workspaceId: doc.workspace?.id,
         access: doc.access
       }
     }
@@ -288,9 +453,9 @@ export class GetDocumentsTool extends PaginatedGristTool<
       workspace: doc.workspace,
       access: doc.access,
       url: `${baseUrl}/doc/${doc.id}`,
-      is_pinned: doc.isPinned || false,
-      created_at: doc.createdAt,
-      updated_at: doc.updatedAt,
+      isPinned: doc.isPinned || false,
+      createdAt: doc.createdAt,
+      updatedAt: doc.updatedAt,
       public: doc.public || false
     }
   }
@@ -303,8 +468,8 @@ export class GetDocumentsTool extends PaginatedGristTool<
       total: data.pagination.total,
       offset: data.pagination.offset,
       limit: data.pagination.limit,
-      has_more: data.pagination.has_more,
-      next_offset: data.pagination.next_offset
+      hasMore: data.pagination.hasMore,
+      nextOffset: data.pagination.nextOffset
     })
 
     return super.formatResponse(
@@ -319,15 +484,13 @@ export async function getDocuments(context: ToolContext, params: GetDocumentsInp
   return tool.execute(params)
 }
 
-export const GetTablesSchema = z
-  .object({
-    docId: DocIdSchema,
-    tableId: TableIdSchema.optional(),
-    detail_level: DetailLevelTableSchema,
-    response_format: ResponseFormatSchema
-  })
-  .extend(PaginationSchema.shape)
-  .strict()
+export const GetTablesSchema = z.strictObject({
+  docId: DocIdSchema,
+  tableId: TableIdSchema.optional(),
+  detail_level: DetailLevelTableSchema,
+  response_format: ResponseFormatSchema,
+  ...PaginationSchema.shape
+})
 
 export type GetTablesInput = z.infer<typeof GetTablesSchema>
 
@@ -339,28 +502,28 @@ interface FormattedTable {
         id: string
         label: string
         type: string
-        is_formula: boolean
+        isFormula: boolean
         formula: string | null
-        widget_options: string | Record<string, unknown> | null
-        visible_col?: number | null
-        visible_col_name?: string | null
+        widgetOptions: string | Record<string, unknown> | null
+        visibleCol?: number | null
+        visibleColName?: string | null
       }>
 }
 
 export class GetTablesTool extends GristTool<
   typeof GetTablesSchema,
   {
-    document_id: string
-    table_count: number
+    docId: string
+    tableCount: number
     items: FormattedTable[]
     total: number
     offset: number
     limit: number
-    has_more: boolean
-    next_offset: number | null
-    page_number: number
-    total_pages: number
-    items_in_page: number
+    hasMore: boolean
+    nextOffset: number | null
+    pageNumber: number
+    totalPages: number
+    itemsInPage: number
   }
 > {
   constructor(context: ToolContext) {
@@ -389,24 +552,24 @@ export class GetTablesTool extends GristTool<
     const limit = params.limit ?? 100
     const total = formattedTables.length
     const paginatedTables = formattedTables.slice(offset, offset + limit)
-    const has_more = offset + limit < total
-    const next_offset = has_more ? offset + limit : null
-    const items_in_page = paginatedTables.length
-    const page_number = Math.floor(offset / limit) + 1
-    const total_pages = Math.ceil(total / limit)
+    const hasMore = offset + limit < total
+    const nextOffset = hasMore ? offset + limit : null
+    const itemsInPage = paginatedTables.length
+    const pageNumber = Math.floor(offset / limit) + 1
+    const totalPages = Math.ceil(total / limit)
 
     return {
-      document_id: params.docId,
-      table_count: items_in_page,
+      docId: params.docId,
+      tableCount: itemsInPage,
       items: paginatedTables,
       total,
       offset,
       limit,
-      has_more,
-      next_offset,
-      page_number,
-      total_pages,
-      items_in_page
+      hasMore,
+      nextOffset,
+      pageNumber,
+      totalPages,
+      itemsInPage
     }
   }
 
@@ -478,11 +641,11 @@ export class GetTablesTool extends GristTool<
                   id: c.id,
                   label: c.fields.label ?? c.id,
                   type: c.fields.type,
-                  is_formula: c.fields.isFormula ?? false,
+                  isFormula: c.fields.isFormula ?? false,
                   formula: c.fields.formula ?? null,
-                  widget_options: parsedWidgetOptions,
-                  visible_col: c.fields.visibleCol ?? null,
-                  visible_col_name: visibleColName
+                  widgetOptions: parsedWidgetOptions,
+                  visibleCol: c.fields.visibleCol ?? null,
+                  visibleColName: visibleColName
                 }
               })
             )
@@ -502,6 +665,47 @@ export async function getTables(context: ToolContext, params: GetTablesInput) {
 
 export const DISCOVERY_TOOLS: ReadonlyArray<ToolDefinition> = [
   {
+    name: 'grist_discover_tools',
+    title: 'Discover Tools',
+    description: 'List available tools with progressive detail levels',
+    purpose: 'Discover tool schemas on demand to reduce token usage',
+    category: 'discovery',
+    inputSchema: DiscoverToolsSchema,
+    outputSchema: z.object({
+      tools: z.array(
+        z.object({
+          name: z.string(),
+          description: z.string().optional(),
+          category: z.string().optional(),
+          inputSchema: z.record(z.string(), z.unknown()).optional()
+        })
+      ),
+      total: z.number(),
+      detail_level: z.string(),
+      category: z.string().optional()
+    }),
+    annotations: READ_ONLY_ANNOTATIONS,
+    handler: discoverTools,
+    core: true,
+    docs: {
+      overview:
+        'Progressive disclosure for tool schemas. Use detail_level="names" (~50 tokens) for tool names, ' +
+        '"descriptions" (~200 tokens) for overview, or "full" for complete JSON schemas. ' +
+        'Filter by category or get specific tool schema with tool_name parameter.',
+      examples: [
+        { desc: 'List all tool names', input: { detail_level: 'names' } },
+        {
+          desc: 'Get schema category',
+          input: { category: 'records', detail_level: 'descriptions' }
+        },
+        { desc: 'Get specific tool schema', input: { tool_name: 'grist_manage_records' } }
+      ],
+      errors: [
+        { error: 'Tool not found', solution: 'Use detail_level="names" to see all available tools' }
+      ]
+    }
+  },
+  {
     name: 'grist_get_workspaces',
     title: 'Get Workspaces',
     description: 'List accessible workspaces',
@@ -511,6 +715,7 @@ export const DISCOVERY_TOOLS: ReadonlyArray<ToolDefinition> = [
     outputSchema: GetWorkspacesOutputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
     handler: getWorkspaces,
+    core: true,
     docs: {
       overview:
         'List workspaces with filtering. Use browse mode ({limit: 20}) to see all, or search mode ({name_contains: "Sales"}) to filter. Detail levels: summary (name, ID, access, doc count ~50 tokens) or detailed (+ timestamps ~150 tokens).',
@@ -536,6 +741,7 @@ export const DISCOVERY_TOOLS: ReadonlyArray<ToolDefinition> = [
     outputSchema: GetDocumentsOutputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
     handler: getDocuments,
+    core: true,
     docs: {
       overview:
         'Find documents by ID (fastest), name search, workspace filter, or browse all. Detail levels: summary (name, id, workspace, access ~50 tokens/doc) or detailed (+ permissions, timestamps, urls ~150 tokens/doc).',
@@ -560,6 +766,7 @@ export const DISCOVERY_TOOLS: ReadonlyArray<ToolDefinition> = [
     outputSchema: GetTablesOutputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
     handler: getTables,
+    core: true,
     docs: {
       overview:
         'Get table structure and schema. Detail levels: names (table IDs only ~20 tokens/table), columns (+ column names ~50 tokens/table), or full_schema (+ types, formulas, widget options ~200 tokens/table). Note: widgetOptions only returned with full_schema.',

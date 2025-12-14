@@ -146,7 +146,7 @@ export async function addTestRecords(
 
   // Get record IDs from structured content
   const data = response.structuredContent as { record_ids?: number[] }
-  return data.record_ids || []
+  return data.recordIds || []
 }
 
 /**

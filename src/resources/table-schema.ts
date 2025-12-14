@@ -24,15 +24,15 @@ interface ColumnSchema {
   type: string
   is_formula: boolean
   formula: string | null
-  widget_options: Record<string, unknown> | null
-  visible_col: number | null
-  visible_col_name: string | null
+  widgetOptions: Record<string, unknown> | null
+  visibleCol: number | null
+  visibleColName: string | null
 }
 
 interface TableSchemaResult {
-  document_id: string
-  table_id: string
-  column_count: number
+  docId: string
+  tableId: string
+  columnCount: number
   columns: ColumnSchema[]
 }
 
@@ -93,17 +93,17 @@ async function fetchTableSchema(
         type: col.fields.type,
         is_formula: col.fields.isFormula ?? false,
         formula: col.fields.formula ?? null,
-        widget_options: parsedWidgetOptions,
-        visible_col: col.fields.visibleCol ?? null,
-        visible_col_name: visibleColName
+        widgetOptions: parsedWidgetOptions,
+        visibleCol: col.fields.visibleCol ?? null,
+        visibleColName: visibleColName
       }
     })
   )
 
   return {
-    document_id: docId,
-    table_id: tableId,
-    column_count: columns.length,
+    docId: docId,
+    tableId: tableId,
+    columnCount: columns.length,
     columns
   }
 }

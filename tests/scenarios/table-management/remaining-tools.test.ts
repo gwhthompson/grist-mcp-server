@@ -63,10 +63,10 @@ describe('Remaining Tools - Complete Integration Tests', () => {
       // Verify response structure
       expect(result.structuredContent).toBeDefined()
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.table_id).toBeValidTableId()
-      expect(result.structuredContent.table_id).toBe('NewTestTable')
-      expect(result.structuredContent.table_name).toBe('NewTestTable')
-      expect(result.structuredContent.columns_created).toBe(3)
+      expect(result.structuredContent.tableId).toBeValidTableId()
+      expect(result.structuredContent.tableId).toBe('NewTestTable')
+      expect(result.structuredContent.tableName).toBe('NewTestTable')
+      expect(result.structuredContent.columnsCreated).toBe(3)
       expect(result.structuredContent.message).toContain('Successfully created table')
 
       // Verify the table actually exists by listing tables
@@ -89,9 +89,9 @@ describe('Remaining Tools - Complete Integration Tests', () => {
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.table_id).toBeValidTableId()
-      expect(result.structuredContent.table_id).toBe('EmptyTable')
-      expect(result.structuredContent.columns_created).toBe(0)
+      expect(result.structuredContent.tableId).toBeValidTableId()
+      expect(result.structuredContent.tableId).toBe('EmptyTable')
+      expect(result.structuredContent.columnsCreated).toBe(0)
     })
 
     it('should return markdown format when requested', async () => {
@@ -141,7 +141,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
         columns: [{ colId: 'TestCol', type: 'Text' }],
         response_format: 'json'
       })
-      testTableId = createResult.structuredContent.table_id
+      testTableId = createResult.structuredContent.tableId
     })
 
     it('should rename a table successfully', async () => {
@@ -157,8 +157,8 @@ describe('Remaining Tools - Complete Integration Tests', () => {
       // Verify response
       expect(result.structuredContent).toBeDefined()
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.old_table_id).toBe(testTableId)
-      expect(result.structuredContent.new_table_id).toBe(newName)
+      expect(result.structuredContent.oldTableId).toBe(testTableId)
+      expect(result.structuredContent.newTableId).toBe(newName)
       expect(result.structuredContent.message).toContain('Successfully renamed table')
 
       // Verify the table exists with new name
@@ -227,7 +227,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
         ],
         response_format: 'json'
       })
-      testTableId = createResult.structuredContent.table_id
+      testTableId = createResult.structuredContent.tableId
 
       // Add some test data to verify it gets deleted
       await addTestRecords(client, context.docId, testTableId, [
@@ -246,7 +246,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
       // Verify response
       expect(result.structuredContent).toBeDefined()
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.table_id).toBe(testTableId)
+      expect(result.structuredContent.tableId).toBe(testTableId)
       expect(result.structuredContent.message).toContain('Successfully deleted table')
       expect(result.structuredContent.warning).toContain('CANNOT BE UNDONE')
 
@@ -320,19 +320,19 @@ describe('Remaining Tools - Complete Integration Tests', () => {
       })
 
       // Track for cleanup
-      createdDocIds.push(result.structuredContent.document_id)
+      createdDocIds.push(result.structuredContent.docId)
 
       // Verify response
       expect(result.structuredContent).toBeDefined()
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.document_id).toBeValidDocId()
-      expect(result.structuredContent.document_name).toBe(docName)
-      expect(result.structuredContent.workspace_id).toBe(context.workspaceId) // Number, not string
-      expect(result.structuredContent.forked_from).toBeNull()
+      expect(result.structuredContent.docId).toBeValidDocId()
+      expect(result.structuredContent.documentName).toBe(docName)
+      expect(result.structuredContent.workspaceId).toBe(context.workspaceId) // Number, not string
+      expect(result.structuredContent.forkedFrom).toBeNull()
       expect(result.structuredContent.message).toContain('Successfully created new document')
       expect(result.structuredContent.url).toContain('/doc/')
-      expect(result.structuredContent.next_steps).toBeInstanceOf(Array)
-      expect(result.structuredContent.next_steps.length).toBeGreaterThan(0)
+      expect(result.structuredContent.nextSteps).toBeInstanceOf(Array)
+      expect(result.structuredContent.nextSteps.length).toBeGreaterThan(0)
 
       // Verify the document exists by listing documents
       const docsResult = await discovery.getDocuments(context.toolContext, {
@@ -342,7 +342,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
       })
 
       const docIds = docsResult.structuredContent.items.map((d: { id: string }) => d.id)
-      expect(docIds).toContain(result.structuredContent.document_id)
+      expect(docIds).toContain(result.structuredContent.docId)
     })
 
     it('should create a forked document', async () => {
@@ -356,12 +356,12 @@ describe('Remaining Tools - Complete Integration Tests', () => {
       })
 
       // Track for cleanup
-      createdDocIds.push(result.structuredContent.document_id)
+      createdDocIds.push(result.structuredContent.docId)
 
       // Verify response
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.document_id).toBeValidDocId()
-      expect(result.structuredContent.forked_from).toBe(context.docId)
+      expect(result.structuredContent.docId).toBeValidDocId()
+      expect(result.structuredContent.forkedFrom).toBe(context.docId)
       expect(result.structuredContent.message).toContain('Successfully forked document')
 
       // Verify the forked document has the same tables as the source
@@ -372,7 +372,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
       })
 
       const forkedTables = await discovery.getTables(context.toolContext, {
-        docId: result.structuredContent.document_id,
+        docId: result.structuredContent.docId,
         detail_level: 'names',
         response_format: 'json'
       })
@@ -394,7 +394,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
       })
 
       // Track for cleanup
-      createdDocIds.push(result.structuredContent.document_id)
+      createdDocIds.push(result.structuredContent.docId)
 
       expect(result.content).toBeDefined()
       expect(result.content[0]).toHaveProperty('type', 'text')
@@ -442,7 +442,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
         response_format: 'json'
       })
 
-      const docId = docResult.structuredContent.document_id
+      const docId = docResult.structuredContent.docId
 
       try {
         // 2. Create table
@@ -505,6 +505,6 @@ describe('Remaining Tools - Complete Integration Tests', () => {
           console.warn(`Failed to clean up document ${docId}:`, error)
         }
       }
-    })
+    }, 60000)
   })
 })

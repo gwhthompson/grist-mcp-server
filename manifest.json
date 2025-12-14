@@ -1,9 +1,9 @@
 {
   "manifest_version": "0.3",
   "name": "grist-mcp-server",
-  "version": "1.2.1",
+  "version": "2.0.2",
   "display_name": "Grist Database Integration",
-  "description": "22 tools for managing Grist documents with AI",
+  "description": "12 tools for managing Grist documents with AI",
   "long_description": "Read and write tables, records, pages, and widgets. Works with Grist Cloud or self-hosted instances.",
   "author": {
     "name": "George Thompson"
@@ -86,6 +86,10 @@
   },
   "tools": [
     {
+      "name": "grist_discover_tools",
+      "description": "Discover tool schemas on demand to reduce token usage"
+    },
+    {
       "name": "grist_get_workspaces",
       "description": "List and filter workspaces"
     },
@@ -106,64 +110,20 @@
       "description": "Fetch records with filters"
     },
     {
-      "name": "grist_add_records",
-      "description": "Insert new records"
+      "name": "grist_manage_records",
+      "description": "CRUD operations on table records"
     },
     {
-      "name": "grist_update_records",
-      "description": "Modify records by row ID"
+      "name": "grist_manage_schema",
+      "description": "Schema operations: tables, columns, summaries"
     },
     {
-      "name": "grist_upsert_records",
-      "description": "Add or update by unique key (sync)"
-    },
-    {
-      "name": "grist_delete_records",
-      "description": "Delete records permanently"
-    },
-    {
-      "name": "grist_create_table",
-      "description": "Create table with columns"
-    },
-    {
-      "name": "grist_rename_table",
-      "description": "Rename table"
-    },
-    {
-      "name": "grist_delete_table",
-      "description": "Delete table permanently"
-    },
-    {
-      "name": "grist_create_summary_table",
-      "description": "Create summary tables for aggregations and chart data sources"
-    },
-    {
-      "name": "grist_manage_columns",
-      "description": "Add, modify, delete, rename columns"
-    },
-    {
-      "name": "grist_manage_conditional_rules",
-      "description": "Add visual formatting rules that highlight cells based on conditions"
+      "name": "grist_manage_pages",
+      "description": "Page and widget operations"
     },
     {
       "name": "grist_create_document",
       "description": "Create new Grist documents or copy existing ones"
-    },
-    {
-      "name": "grist_get_pages",
-      "description": "Introspect document structure including pages, widgets, and summary tables"
-    },
-    {
-      "name": "grist_build_page",
-      "description": "Create pages with pre-configured widget layouts and linking"
-    },
-    {
-      "name": "grist_configure_widget",
-      "description": "Configure widget properties, linking, sorting, and filtering"
-    },
-    {
-      "name": "grist_update_page",
-      "description": "Rename, reorder, or delete existing pages"
     },
     {
       "name": "grist_manage_webhooks",

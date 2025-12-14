@@ -121,14 +121,14 @@ export class MasterDetailBuilder extends PatternBuilder<MasterDetailConfig> {
     // Build result
     const widgets: WidgetInfo[] = [
       {
-        section_id: masterSectionRef,
-        table_ref: masterTableRef,
+        sectionId: masterSectionRef,
+        tableRef: masterTableRef,
         position: 'master',
         title: masterTitle
       },
       {
-        section_id: detailSectionRef,
-        table_ref: detailTableRef,
+        sectionId: detailSectionRef,
+        tableRef: detailTableRef,
         position: 'detail',
         title: detailTitle
       }
@@ -136,8 +136,8 @@ export class MasterDetailBuilder extends PatternBuilder<MasterDetailConfig> {
 
     return {
       success: true,
-      page_name: pageName,
-      view_id: viewRef,
+      pageName: pageName,
+      viewId: viewRef,
       pattern: config.pattern,
       description: `Master-Detail: ${config.master.table} (${config.master.widget_type}) ← ${config.detail.table} (${config.detail.widget_type})`,
       widgets

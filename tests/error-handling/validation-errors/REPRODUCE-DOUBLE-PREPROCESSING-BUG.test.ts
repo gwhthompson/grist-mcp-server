@@ -78,7 +78,7 @@ describe('REPRODUCE: Double Preprocessing Bug', () => {
     }
 
     expect(data.success).toBe(true)
-    expect(data.records_added).toBe(1)
+    expect(data.recordsAdded).toBe(1)
     console.log('   ✅ SUCCESS: Date accepted without error')
   })
 
@@ -109,7 +109,7 @@ describe('REPRODUCE: Double Preprocessing Bug', () => {
     }
 
     expect(data.success).toBe(true)
-    expect(data.records_added).toBe(1)
+    expect(data.recordsAdded).toBe(1)
     console.log('   ✅ SUCCESS: ChoiceList accepted without error')
   })
 
@@ -141,7 +141,7 @@ describe('REPRODUCE: Double Preprocessing Bug', () => {
     }
 
     expect(data.success).toBe(true)
-    expect(data.records_added).toBe(1)
+    expect(data.recordsAdded).toBe(1)
     console.log('   ✅ SUCCESS: Both formats accepted without error')
   })
 })

@@ -133,8 +133,8 @@ export class ChartDashboardBuilder extends PatternBuilder<ChartDashboardConfig> 
 
     return {
       success: true,
-      page_name: pageName,
-      view_id: viewRef,
+      pageName: pageName,
+      viewId: viewRef,
       pattern: config.pattern,
       description: `Chart Dashboard: ${config.charts.length} charts${hasSelector ? ' + selector' : ''}`,
       widgets
@@ -375,8 +375,8 @@ export class ChartDashboardBuilder extends PatternBuilder<ChartDashboardConfig> 
 
     if (hasSelector && config.selector && selectorTableRef !== undefined) {
       widgets.push({
-        section_id: sectionRefs[selectorIndex] as number,
-        table_ref: selectorTableRef,
+        sectionId: sectionRefs[selectorIndex] as number,
+        tableRef: selectorTableRef,
         title: config.selector.title || `Selector: ${config.selector.table}`,
         widget_type: config.selector.widget_type || 'grid',
         position: 'selector'
@@ -387,8 +387,8 @@ export class ChartDashboardBuilder extends PatternBuilder<ChartDashboardConfig> 
       const chart = config.charts[i] as (typeof config.charts)[number]
       const chartSectionIndex = chartStartIndex + i
       widgets.push({
-        section_id: sectionRefs[chartSectionIndex] as number,
-        table_ref: tableRefs[chartSectionIndex] as number,
+        sectionId: sectionRefs[chartSectionIndex] as number,
+        tableRef: tableRefs[chartSectionIndex] as number,
         title: chart.title || `Chart ${i + 1}: ${chart.table}`,
         widget_type: 'chart',
         position: `chart_${i + 1}`

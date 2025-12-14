@@ -100,7 +100,7 @@ describe('Pages & Widgets - Integration Tests', () => {
 
       const data = result.structuredContent as Record<string, unknown>
       expect(data.success).toBe(true)
-      expect(data.page_name).toBe('Customer Orders')
+      expect(data.pageName).toBe('Customer Orders')
       expect(data.pattern).toBe('master_detail')
 
       const widgets = data.widgets as Array<{
@@ -186,7 +186,7 @@ describe('Pages & Widgets - Integration Tests', () => {
       const data = result.structuredContent as Record<string, unknown>
       expect(data.success).toBe(true)
 
-      const viewId = data.view_id as number
+      const viewId = data.viewId as number
       const widgets = data.widgets as Array<{
         section_id: number
         table_ref: number
@@ -207,7 +207,7 @@ describe('Pages & Widgets - Integration Tests', () => {
         `/docs/${docId}/sql`,
         {
           sql: 'SELECT id, title, parentId FROM _grist_Views_section WHERE id IN (?, ?) ORDER BY id',
-          args: [widgets[0].section_id, widgets[1].section_id]
+          args: [widgets[0].sectionId, widgets[1].sectionId]
         }
       )
 
@@ -304,7 +304,7 @@ describe('Pages & Widgets - Integration Tests', () => {
 
       const parsed = JSON.parse(text)
       expect(parsed.success).toBe(true)
-      expect(parsed.page_name).toBe('JSON Format Test')
+      expect(parsed.pageName).toBe('JSON Format Test')
     })
 
     it('should return Markdown format when requested', async () => {
@@ -383,14 +383,14 @@ describe('Pages & Widgets - Integration Tests', () => {
       const markdownData = markdownResult.structuredContent as Record<string, unknown>
 
       expect(jsonData).toHaveProperty('success')
-      expect(jsonData).toHaveProperty('page_name')
-      expect(jsonData).toHaveProperty('view_id')
+      expect(jsonData).toHaveProperty('pageName')
+      expect(jsonData).toHaveProperty('viewId')
       expect(jsonData).toHaveProperty('pattern')
       expect(jsonData).toHaveProperty('widgets')
 
       expect(markdownData).toHaveProperty('success')
-      expect(markdownData).toHaveProperty('page_name')
-      expect(markdownData).toHaveProperty('view_id')
+      expect(markdownData).toHaveProperty('pageName')
+      expect(markdownData).toHaveProperty('viewId')
       expect(markdownData).toHaveProperty('pattern')
       expect(markdownData).toHaveProperty('widgets')
     })
@@ -532,7 +532,7 @@ describe('Pages & Widgets - Integration Tests', () => {
 
       // Get the section_id from the widget (note: property name is section_id, not sectionRef)
       const widgets = data.widgets as Array<{ section_id: number }>
-      const sectionId = widgets[0].section_id
+      const sectionId = widgets[0].sectionId
 
       // Verify chart fields via SQL - should have ONLY OrderID and Amount
       // SQL returns records with { fields: { colId: ... } } wrapper
@@ -576,7 +576,7 @@ describe('Pages & Widgets - Integration Tests', () => {
       expect(result.structuredContent).toBeDefined()
       const data = result.structuredContent as Record<string, unknown>
       expect(data.success).toBe(true)
-      expect(data.operations_completed).toBe(1)
+      expect(data.operationsCompleted).toBe(1)
     })
   })
 

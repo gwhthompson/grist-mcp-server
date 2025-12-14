@@ -466,8 +466,8 @@ describe('Output Schema Validation', () => {
     it('should allow null for next_offset when has_more is false', () => {
       const withNullNextOffset = {
         ...GetWorkspacesFixtures.minimal,
-        has_more: false,
-        next_offset: null
+        hasMore: false,
+        nextOffset: null
       }
       expect(GetWorkspacesOutputSchema.safeParse(withNullNextOffset).success).toBe(true)
     })

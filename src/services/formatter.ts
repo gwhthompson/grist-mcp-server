@@ -53,7 +53,7 @@ export function formatToolResponse<T>(
 export function formatErrorResponse(
   errorMessage: string,
   options?: {
-    error_code?: string
+    errorCode?: string
     context?: Record<string, unknown>
     retryable?: boolean
     suggestions?: string[]
@@ -75,7 +75,7 @@ export function formatErrorResponse(
   const errorResponse: StandardErrorResponse = {
     success: false,
     error: truncatedMessage,
-    ...(options?.error_code && { error_code: options.error_code }),
+    ...(options?.errorCode && { errorCode: options.errorCode }),
     ...(options?.context && { context: options.context }),
     ...(options?.retryable !== undefined && { retryable: options.retryable }),
     ...(options?.suggestions &&
@@ -161,12 +161,12 @@ function extractPaginationData(data: Record<string, unknown>): PaginationData {
   return {
     items: 'items' in data ? data.items : undefined,
     total: 'total' in data && typeof data.total === 'number' ? data.total : undefined,
-    hasMore: 'has_more' in data ? Boolean(data.has_more) : false,
-    nextOffset: 'next_offset' in data ? data.next_offset : undefined,
+    hasMore: 'hasMore' in data ? Boolean(data.hasMore) : false,
+    nextOffset: 'nextOffset' in data ? data.nextOffset : undefined,
     truncated: 'truncated' in data ? Boolean(data.truncated) : false,
     truncationReason:
-      'truncation_reason' in data && typeof data.truncation_reason === 'string'
-        ? data.truncation_reason
+      'truncationReason' in data && typeof data.truncationReason === 'string'
+        ? data.truncationReason
         : undefined,
     suggestions: 'suggestions' in data ? data.suggestions : undefined
   }
@@ -290,9 +290,9 @@ export function truncateIfNeeded<T, D extends Record<string, unknown> = Record<s
     ...additionalData,
     items: items.slice(0, maxItems),
     truncated: true,
-    items_returned: maxItems,
-    items_requested: items.length,
-    truncation_reason: `Response truncated from ${items.length} to ${maxItems} items to fit character limit (${CHARACTER_LIMIT} characters)`,
+    itemsReturned: maxItems,
+    itemsRequested: items.length,
+    truncationReason: `Response truncated from ${items.length} to ${maxItems} items to fit character limit (${CHARACTER_LIMIT} characters)`,
     suggestions: generateTruncationSuggestions(additionalData, maxItems)
   }
 
@@ -304,9 +304,9 @@ export function truncateIfNeeded<T, D extends Record<string, unknown> = Record<s
     text: truncatedText,
     truncationInfo: {
       truncated: true,
-      items_returned: maxItems,
-      items_requested: items.length,
-      truncation_reason: truncatedData.truncation_reason,
+      itemsReturned: maxItems,
+      itemsRequested: items.length,
+      truncationReason: truncatedData.truncationReason,
       suggestions: truncatedData.suggestions
     }
   }

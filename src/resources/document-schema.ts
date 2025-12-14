@@ -24,9 +24,9 @@ interface ColumnSchema {
   type: string
   is_formula: boolean
   formula: string | null
-  widget_options: Record<string, unknown> | null
-  visible_col: number | null
-  visible_col_name: string | null
+  widgetOptions: Record<string, unknown> | null
+  visibleCol: number | null
+  visibleColName: string | null
 }
 
 interface TableSchema {
@@ -35,10 +35,10 @@ interface TableSchema {
 }
 
 interface DocumentSchema {
-  document_id: string
-  document_name: string
+  docId: string
+  documentName: string
   workspace: string | null
-  table_count: number
+  tableCount: number
   tables: TableSchema[]
 }
 
@@ -127,9 +127,9 @@ async function fetchDocumentSchema(context: ToolContext, docId: string): Promise
             type: col.fields.type,
             is_formula: col.fields.isFormula ?? false,
             formula: col.fields.formula ?? null,
-            widget_options: parsedWidgetOptions,
-            visible_col: col.fields.visibleCol ?? null,
-            visible_col_name: visibleColName
+            widgetOptions: parsedWidgetOptions,
+            visibleCol: col.fields.visibleCol ?? null,
+            visibleColName: visibleColName
           }
         })
       )
@@ -142,10 +142,10 @@ async function fetchDocumentSchema(context: ToolContext, docId: string): Promise
   )
 
   return {
-    document_id: docId,
-    document_name: docInfo.name,
+    docId: docId,
+    documentName: docInfo.name,
     workspace: docInfo.workspace,
-    table_count: tables.length,
+    tableCount: tables.length,
     tables
   }
 }

@@ -36,19 +36,19 @@ export class PaginationHelper<T> {
   }
 
   getMetadata(): PaginationMetadata {
-    const items_in_page = this.end - this.start
-    const page_number = Math.floor(this.offset / this.limit) + 1
-    const total_pages = Math.ceil(this.total / this.limit)
+    const itemsInPage = this.end - this.start
+    const pageNumber = Math.floor(this.offset / this.limit) + 1
+    const totalPages = Math.ceil(this.total / this.limit)
 
     return {
       total: this.total,
       offset: this.offset,
       limit: this.limit,
-      has_more: this.hasMore,
-      next_offset: this.nextOffset,
-      page_number,
-      total_pages,
-      items_in_page
+      hasMore: this.hasMore,
+      nextOffset: this.nextOffset,
+      pageNumber,
+      totalPages,
+      itemsInPage
     }
   }
 

@@ -166,7 +166,8 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'Manager',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             label: 'Project Manager',
             visibleCol: 'FirstName' // Top-level - auto-resolved to numeric ID
           }
@@ -224,7 +225,8 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'AssignedTo',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             label: 'Assigned To',
             visibleCol: 'Email' // Different column
           }
@@ -270,7 +272,8 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'BadRef',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'NonExistentColumn'
           }
         ],
@@ -292,7 +295,8 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'CaseTest',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'firstname' // Wrong case - should fail
           }
         ],
@@ -322,7 +326,8 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'Approver',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             label: 'Approver',
             visibleCol: numericColId // Numeric ID - should pass through
           }
@@ -351,7 +356,8 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'Reviewers',
-            type: 'RefList:People',
+            type: 'RefList',
+            refTable: 'People',
             label: 'Reviewers',
             visibleCol: 'LastName'
           }
@@ -403,7 +409,8 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'Lead',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'FirstName'
           }
         ],
@@ -416,9 +423,10 @@ describe('visibleCol - Column Name Resolution', () => {
         tableId: tasksTableId,
         operations: [
           {
-            action: 'modify',
+            action: 'update',
             colId: 'Lead',
-            type: 'Ref:People', // Must provide type when setting visibleCol
+            type: 'Ref',
+            refTable: 'People', // Must provide type when setting visibleCol
             visibleCol: 'Email' // Change to Email
           }
         ],
@@ -455,7 +463,7 @@ describe('visibleCol - Column Name Resolution', () => {
         tableId: tasksTableId,
         operations: [
           {
-            action: 'modify',
+            action: 'update',
             colId: 'Manager',
             // type not provided - should fail
             visibleCol: 'LastName'
@@ -525,19 +533,22 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'Owner',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'FirstName'
           },
           {
             action: 'add',
             colId: 'Sponsor',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'Email'
           },
           {
             action: 'add',
             colId: 'TeamMembers',
-            type: 'RefList:People',
+            type: 'RefList',
+            refTable: 'People',
             visibleCol: 'LastName'
           }
         ],
@@ -619,7 +630,8 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'Manager',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'FirstName'
           }
         ],
@@ -686,7 +698,8 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'Manager',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'FirstName'
           }
         ],
@@ -710,9 +723,10 @@ describe('visibleCol - Column Name Resolution', () => {
         tableId: testTableId,
         operations: [
           {
-            action: 'modify',
+            action: 'update',
             colId: 'Manager',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'Email'
           }
         ],
@@ -757,7 +771,8 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'TeamMembers',
-            type: 'RefList:People',
+            type: 'RefList',
+            refTable: 'People',
             visibleCol: 'FirstName'
           }
         ],
@@ -829,7 +844,8 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'Manager',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'FirstName'
           }
         ],
@@ -900,7 +916,8 @@ describe('visibleCol - Column Name Resolution', () => {
           {
             action: 'add',
             colId: 'Contact',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'Email' // Should resolve to emailNumericId, not firstNameNumericId
           }
         ],
@@ -963,7 +980,8 @@ describe('visibleCol - Column Name Resolution', () => {
           },
           {
             colId: 'AssignedTo',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'Email', // String name - should resolve to numeric ID
             isFormula: false
           }
@@ -978,10 +996,10 @@ describe('visibleCol - Column Name Resolution', () => {
       }
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.columns_created).toBe(2)
+      expect(result.structuredContent.columnsCreated).toBe(2)
 
       // Get the actual table ID (may have number suffix if table name already exists)
-      const actualTableId = result.structuredContent.table_id
+      const actualTableId = result.structuredContent.tableId
 
       // Verify display formula was created
       const colInfo = await getColumnInfo(actualTableId as TableId, 'AssignedTo')
@@ -1020,7 +1038,8 @@ describe('visibleCol - Column Name Resolution', () => {
           },
           {
             colId: 'ProjectLead',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: firstNameNumericId, // Numeric ID - should pass through
             isFormula: false
           }
@@ -1031,7 +1050,7 @@ describe('visibleCol - Column Name Resolution', () => {
       expect(result.structuredContent.success).toBe(true)
 
       // Get the actual table ID
-      const actualTableId = result.structuredContent.table_id
+      const actualTableId = result.structuredContent.tableId
 
       // Verify display formula references FirstName
       const colInfo = await getColumnInfo(actualTableId as TableId, 'ProjectLead')
@@ -1060,7 +1079,8 @@ describe('visibleCol - Column Name Resolution', () => {
           },
           {
             colId: 'Members',
-            type: 'RefList:People',
+            type: 'RefList',
+            refTable: 'People',
             visibleCol: 'FirstName',
             isFormula: false
           }
@@ -1101,19 +1121,22 @@ describe('visibleCol - Column Name Resolution', () => {
           },
           {
             colId: 'Creator',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'Email',
             isFormula: false
           },
           {
             colId: 'Reviewer',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'FirstName',
             isFormula: false
           },
           {
             colId: 'Approver',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'LastName',
             isFormula: false
           }
@@ -1122,7 +1145,7 @@ describe('visibleCol - Column Name Resolution', () => {
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.columns_created).toBe(4)
+      expect(result.structuredContent.columnsCreated).toBe(4)
 
       // Verify each column has correct visibleCol
       const creatorInfo = await getColumnInfo('MultiRefTable' as TableId, 'Creator')
@@ -1154,32 +1177,9 @@ describe('visibleCol - Column Name Resolution', () => {
       console.log('✓ Multiple Ref columns each got correct visibleCol')
     })
 
-    it('should reject visibleCol in widgetOptions with clear error', async () => {
-      const { createTable } = await import('../../../src/tools/tables.js')
-
-      const result = await createTable(context.toolContext, {
-        docId,
-        tableName: 'InvalidVisibleCol',
-        columns: [
-          {
-            colId: 'BadRef',
-            type: 'Ref:People',
-            widgetOptions: {
-              visibleCol: 'Email' // ❌ WRONG - should be at top-level
-            }
-          }
-        ],
-        response_format: 'json'
-      })
-
-      // Tool should return error response (not throw)
-      expect(result).toHaveErrorResponse(
-        /visibleCol must be set at the operation level, not inside widgetOptions/i
-      )
-      expect(result.structuredContent.success).toBe(false)
-
-      console.log('✓ visibleCol in widgetOptions is rejected with actionable error')
-    })
+    // Test removed: 'should reject visibleCol in widgetOptions with clear error'
+    // With flat column schema, widgetOptions is no longer a valid field - Zod strips unknown keys.
+    // The scenario this tested (nested widgetOptions.visibleCol) is now impossible at schema level.
 
     it('should verify display formula produces correct output (end-to-end)', async () => {
       const { createTable } = await import('../../../src/tools/tables.js')
@@ -1201,7 +1201,8 @@ describe('visibleCol - Column Name Resolution', () => {
           },
           {
             colId: 'Owner',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 'Email',
             isFormula: false
           }
@@ -1241,7 +1242,8 @@ describe('visibleCol - Column Name Resolution', () => {
           },
           {
             colId: 'BadRef',
-            type: 'Ref:People',
+            type: 'Ref',
+            refTable: 'People',
             visibleCol: 999999, // Invalid numeric ID - should cause SetDisplayFormula to fail
             isFormula: false
           }
@@ -1251,7 +1253,7 @@ describe('visibleCol - Column Name Resolution', () => {
 
       // Table should still be created successfully
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.table_id).toBe('PartialSuccessTable')
+      expect(result.structuredContent.tableId).toBe('PartialSuccessTable')
 
       // But should include warnings about display formula failure
       expect(result.structuredContent.warnings).toBeDefined()

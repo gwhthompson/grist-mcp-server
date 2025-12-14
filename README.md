@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-1.0-purple.svg)](https://modelcontextprotocol.io)
 
-Model Context Protocol server with 22 tools for the Grist API.
+Model Context Protocol server with 12 tools for the Grist API.
 
 ## Quick Start
 
@@ -70,26 +70,16 @@ Add to your MCP config:
 <!-- TOOLS_TABLE_START -->
 | Tool | Purpose |
 |------|---------|
+| `grist_discover_tools` | Discover tool schemas on demand to reduce token usage |
 | `grist_get_workspaces` | List and filter workspaces |
 | `grist_get_documents` | Find documents by ID, name, or workspace |
 | `grist_get_tables` | Get table structure and schema |
 | `grist_query_sql` | Run SQL queries with JOINs and aggregations |
 | `grist_get_records` | Fetch records with filters |
-| `grist_add_records` | Insert new records |
-| `grist_update_records` | Modify records by row ID |
-| `grist_upsert_records` | Add or update by unique key (sync) |
-| `grist_delete_records` | Delete records permanently |
-| `grist_create_table` | Create table with columns |
-| `grist_rename_table` | Rename table |
-| `grist_delete_table` | Delete table permanently |
-| `grist_create_summary_table` | Create summary tables for aggregations and chart data sources |
-| `grist_manage_columns` | Add, modify, delete, rename columns |
-| `grist_manage_conditional_rules` | Add visual formatting rules that highlight cells based on conditions |
+| `grist_manage_records` | CRUD operations on table records |
+| `grist_manage_schema` | Schema operations: tables, columns, summaries |
+| `grist_manage_pages` | Page and widget operations |
 | `grist_create_document` | Create new Grist documents or copy existing ones |
-| `grist_get_pages` | Introspect document structure including pages, widgets, and summary tables |
-| `grist_build_page` | Create pages with pre-configured widget layouts and linking |
-| `grist_configure_widget` | Configure widget properties, linking, sorting, and filtering |
-| `grist_update_page` | Rename, reorder, or delete existing pages |
 | `grist_manage_webhooks` | Create and manage webhooks for real-time event notifications |
 | `grist_help` | Get detailed documentation and examples for any tool |
 <!-- TOOLS_TABLE_END -->
@@ -99,17 +89,17 @@ Add to your MCP config:
 ### Create a database
 
 ```
-1. grist_list_workspaces → find workspace
+1. grist_get_workspaces → find workspace
 2. grist_create_document → create document
-3. grist_create_table → create tables
+3. grist_manage_schema → create tables with columns
 ```
 
 ### Import data
 
 ```
-1. grist_list_documents → find document
+1. grist_get_documents → find document
 2. grist_get_tables → check structure
-3. grist_upsert_records → sync data (adds new, updates existing)
+3. grist_manage_records → upsert data (adds new, updates existing)
 ```
 
 ### Query data

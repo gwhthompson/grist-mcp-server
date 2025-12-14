@@ -37,11 +37,11 @@ type ToolInput = z.infer<typeof ConditionalRulesInputSchema>
 /** Output type matching ManageConditionalRulesOutputSchema */
 interface ConditionalRulesOutput {
   success: true
-  document_id: string
-  table_id: string
+  docId: string
+  tableId: string
   scope: string
   action: string
-  rules_count?: number
+  rulesCount?: number
   rules?: Array<{
     index: number
     formula: string
@@ -122,11 +122,11 @@ export class ConditionalFormattingTool extends GristTool<
   ): ConditionalRulesOutput {
     return {
       success: true,
-      document_id: docId,
-      table_id: tableId,
+      docId: docId,
+      tableId: tableId,
       scope,
       action,
-      rules_count: result.totalRules,
+      rulesCount: result.totalRules,
       rules: result.rules.map((r) => ({
         index: r.index,
         formula: r.formula,
@@ -146,11 +146,11 @@ export class ConditionalFormattingTool extends GristTool<
   ): ConditionalRulesOutput {
     return {
       success: true,
-      document_id: docId,
-      table_id: tableId,
+      docId: docId,
+      tableId: tableId,
       scope,
       action: 'remove',
-      rules_count: result.remainingRules
+      rulesCount: result.remainingRules
     }
   }
 

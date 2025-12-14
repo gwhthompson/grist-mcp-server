@@ -6,6 +6,7 @@
  */
 
 import { beforeAll, describe, expect, it } from 'vitest'
+import type { SafeParseReturnType } from 'zod'
 import { ensureGristReady } from '../../helpers/docker.js'
 import {
   cleanupTestContext,
@@ -19,6 +20,23 @@ import {
   WorkspaceDetailedContractSchema,
   WorkspaceListContractSchema
 } from './schemas/workspace-contract.js'
+
+/**
+ * Helper to assert schema validation with detailed error output.
+ * Logs actual response and Zod issues on failure for debugging flaky tests.
+ */
+function expectSchemaSuccess<T>(
+  result: SafeParseReturnType<unknown, T>,
+  actualData: unknown,
+  schemaName: string
+): void {
+  if (!result.success) {
+    console.error(`\n[Contract Test] ${schemaName} validation failed`)
+    console.error('Zod issues:', JSON.stringify(result.error.issues, null, 2))
+    console.error('Actual response:', JSON.stringify(actualData, null, 2))
+  }
+  expect(result.success).toBe(true)
+}
 
 describe('Grist API Contract Tests', () => {
   const client = createTestClient()
@@ -42,7 +60,7 @@ describe('Grist API Contract Tests', () => {
       // Validate against contract schema
       const result = WorkspaceListContractSchema.safeParse(workspaces)
 
-      expect(result.success).toBe(true)
+      expectSchemaSuccess(result, workspaces, 'WorkspaceListContractSchema')
     })
 
     it('should validate individual workspace response structure', async () => {
@@ -54,7 +72,7 @@ describe('Grist API Contract Tests', () => {
       const workspace = workspaces[0]
       const result = WorkspaceDetailedContractSchema.safeParse(workspace)
 
-      expect(result.success).toBe(true)
+      expectSchemaSuccess(result, workspace, 'WorkspaceDetailedContractSchema')
     })
 
     it('should validate workspace contains required fields', async () => {
@@ -77,7 +95,7 @@ describe('Grist API Contract Tests', () => {
 
       const result = TableListContractSchema.safeParse(tables)
 
-      expect(result.success).toBe(true)
+      expectSchemaSuccess(result, tables, 'TableListContractSchema')
     })
 
     it('should validate tables array contains table objects', async () => {
@@ -101,7 +119,7 @@ describe('Grist API Contract Tests', () => {
 
       const result = ColumnListContractSchema.safeParse(columns)
 
-      expect(result.success).toBe(true)
+      expectSchemaSuccess(result, columns, 'ColumnListContractSchema')
     })
 
     it('should validate column metadata fields', async () => {
@@ -133,7 +151,7 @@ describe('Grist API Contract Tests', () => {
 
       const result = RecordsListContractSchema.safeParse(records)
 
-      expect(result.success).toBe(true)
+      expectSchemaSuccess(result, records, 'RecordsListContractSchema')
     })
 
     it('should validate record structure', async () => {

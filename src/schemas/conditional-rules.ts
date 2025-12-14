@@ -29,12 +29,10 @@ export const ConditionalFormatOptionsSchema = StylePropertiesSchema
 
 export type ConditionalFormatOptions = z.infer<typeof ConditionalFormatOptionsSchema>
 
-export const BaseConditionalRuleSchema = z
-  .object({
-    formula: RuleFormulaSchema,
-    style: ConditionalFormatOptionsSchema
-  })
-  .strict()
+export const BaseConditionalRuleSchema = z.strictObject({
+  formula: RuleFormulaSchema,
+  style: ConditionalFormatOptionsSchema
+})
 
 export type BaseConditionalRule = z.infer<typeof BaseConditionalRuleSchema>
 
@@ -43,43 +41,35 @@ export type BaseConditionalRule = z.infer<typeof BaseConditionalRuleSchema>
 // ============================================================================
 
 const RawRuleOperationSchema = z.discriminatedUnion('action', [
-  z
-    .object({
-      action: z.literal('add'),
-      rule: BaseConditionalRuleSchema.describe(
-        'Conditional rule to add. Will be appended to end of rules array (lowest priority).'
-      )
-    })
-    .strict(),
+  z.strictObject({
+    action: z.literal('add'),
+    rule: BaseConditionalRuleSchema.describe(
+      'Conditional rule to add. Will be appended to end of rules array (lowest priority).'
+    )
+  }),
 
-  z
-    .object({
-      action: z.literal('update'),
-      ruleIndex: z
-        .number()
-        .int()
-        .min(0)
-        .describe('Zero-based index of rule to update. Get current index from list operation.'),
-      rule: BaseConditionalRuleSchema.describe('Updated rule definition (replaces existing rule).')
-    })
-    .strict(),
+  z.strictObject({
+    action: z.literal('update'),
+    ruleIndex: z
+      .number()
+      .int()
+      .min(0)
+      .describe('Zero-based index of rule to update. Get current index from list operation.'),
+    rule: BaseConditionalRuleSchema.describe('Updated rule definition (replaces existing rule).')
+  }),
 
-  z
-    .object({
-      action: z.literal('remove'),
-      ruleIndex: z
-        .number()
-        .int()
-        .min(0)
-        .describe('Zero-based index of rule to remove. Get current index from list operation.')
-    })
-    .strict(),
+  z.strictObject({
+    action: z.literal('remove'),
+    ruleIndex: z
+      .number()
+      .int()
+      .min(0)
+      .describe('Zero-based index of rule to remove. Get current index from list operation.')
+  }),
 
-  z
-    .object({
-      action: z.literal('list')
-    })
-    .strict()
+  z.strictObject({
+    action: z.literal('list')
+  })
 ])
 
 export const RuleOperationSchema = z.preprocess(parseJsonString, RawRuleOperationSchema)
@@ -95,30 +85,26 @@ export type RuleOperation = z.infer<typeof RuleOperationSchema>
  * Rules apply to the table's Raw Data view section (rawViewSectionRef).
  * No widget ID needed - rules are looked up via tableId.
  */
-const RowScopeSchema = z
-  .object({
-    docId: DocIdSchema,
-    scope: z.literal('row'),
-    tableId: TableIdSchema.describe('Table whose rows to format. Rules apply to Raw Data view.'),
-    operation: RuleOperationSchema,
-    response_format: ResponseFormatSchema
-  })
-  .strict()
+const RowScopeSchema = z.strictObject({
+  docId: DocIdSchema,
+  scope: z.literal('row'),
+  tableId: TableIdSchema.describe('Table whose rows to format. Rules apply to Raw Data view.'),
+  operation: RuleOperationSchema,
+  response_format: ResponseFormatSchema
+})
 
 /**
  * Column scope - format column cells across all views.
  * Rules apply to the column definition in _grist_Tables_column.
  */
-const ColumnScopeSchema = z
-  .object({
-    docId: DocIdSchema,
-    scope: z.literal('column'),
-    tableId: TableIdSchema,
-    colId: ColIdSchema,
-    operation: RuleOperationSchema,
-    response_format: ResponseFormatSchema
-  })
-  .strict()
+const ColumnScopeSchema = z.strictObject({
+  docId: DocIdSchema,
+  scope: z.literal('column'),
+  tableId: TableIdSchema,
+  colId: ColIdSchema,
+  operation: RuleOperationSchema,
+  response_format: ResponseFormatSchema
+})
 
 /**
  * Field scope - format column in one specific widget only.
@@ -127,29 +113,27 @@ const ColumnScopeSchema = z
  * Note: Uses superRefine for widget identification validation since
  * discriminatedUnion doesn't support ZodEffects from .refine().
  */
-const FieldScopeBaseSchema = z
-  .object({
-    docId: DocIdSchema,
-    scope: z.literal('field'),
-    tableId: TableIdSchema,
-    colId: ColIdSchema.describe('Column to format within the specified widget.'),
-    // Widget identification: either sectionId OR page+widget names
-    sectionId: z
-      .number()
-      .int()
-      .positive()
-      .optional()
-      .describe('Widget section ID from grist_get_pages or grist_build_page response.'),
-    pageName: z
-      .string()
-      .min(1)
-      .optional()
-      .describe('Page name containing the widget. Case-sensitive.'),
-    widgetTitle: z.string().min(1).optional().describe('Widget title on the page. Case-sensitive.'),
-    operation: RuleOperationSchema,
-    response_format: ResponseFormatSchema
-  })
-  .strict()
+const FieldScopeBaseSchema = z.strictObject({
+  docId: DocIdSchema,
+  scope: z.literal('field'),
+  tableId: TableIdSchema,
+  colId: ColIdSchema.describe('Column to format within the specified widget.'),
+  // Widget identification: either sectionId OR page+widget names
+  sectionId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe('Widget section ID from grist_get_pages or grist_build_page response.'),
+  pageName: z
+    .string()
+    .min(1)
+    .optional()
+    .describe('Page name containing the widget. Case-sensitive.'),
+  widgetTitle: z.string().min(1).optional().describe('Widget title on the page. Case-sensitive.'),
+  operation: RuleOperationSchema,
+  response_format: ResponseFormatSchema
+})
 
 // ============================================================================
 // Main Input Schema (discriminated union on scope)
@@ -158,7 +142,7 @@ const FieldScopeBaseSchema = z
 // Single flat object schema with superRefine for scope-specific validation
 // Note: MCP requires inputSchema to have type:"object" at root - unions produce "anyOf" which breaks tool registration
 export const ConditionalRulesInputSchema = z
-  .object({
+  .strictObject({
     docId: DocIdSchema,
     scope: z.enum(['row', 'column', 'field']).describe('Scope of conditional formatting rules'),
     tableId: TableIdSchema,
@@ -182,7 +166,6 @@ export const ConditionalRulesInputSchema = z
     operation: RuleOperationSchema,
     response_format: ResponseFormatSchema
   })
-  .strict()
   .superRefine((data, ctx) => {
     // column and field scopes require colId
     if ((data.scope === 'column' || data.scope === 'field') && !data.colId) {

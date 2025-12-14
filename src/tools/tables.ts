@@ -8,11 +8,12 @@ import {
 } from '../registry/types.js'
 import { ApplyResponseSchema } from '../schemas/api-responses.js'
 import {
+  buildGristType,
+  type ColumnDefinition,
   ColumnDefinitionSchema,
-  DocIdSchema,
-  ResponseFormatSchema,
-  TableIdSchema
-} from '../schemas/common.js'
+  extractWidgetOptions
+} from '../schemas/column-types.js'
+import { DocIdSchema, ResponseFormatSchema, TableIdSchema } from '../schemas/common.js'
 import {
   CreateTableOutputSchema,
   DeleteTableOutputSchema,
@@ -23,38 +24,28 @@ import {
   buildRemoveTableAction,
   buildRenameTableAction
 } from '../services/action-builder.js'
-import {
-  extractForeignTable,
-  isReferenceType,
-  resolveVisibleCol
-} from '../services/column-resolver.js'
+import { resolveVisibleCol } from '../services/column-resolver.js'
 import { serializeUserAction } from '../services/grist-client.js'
 import { VisibleColService, type VisibleColSetupParams } from '../services/visiblecol-service.js'
 import { toTableId } from '../types/advanced.js'
-import type { ApplyResponse, ColumnDefinition } from '../types.js'
+import type { ApplyResponse } from '../types.js'
 import { validateRetValues } from '../validators/apply-response.js'
 import { GristTool } from './base/GristTool.js'
 
-export const CreateTableSchema = z
-  .object({
-    docId: DocIdSchema,
-    tableName: z
-      .string()
-      .min(1)
-      .max(100)
-      .describe(
-        'Name for the new table. Use alphanumeric characters and underscores. Example: "Contacts", "Sales_Data"'
-      ),
-    columns: z
-      .array(ColumnDefinitionSchema)
-      .min(0)
-      .max(100)
-      .describe(
-        'Array of column definitions to create with the table. Can be empty to create table with default columns'
-      ),
-    response_format: ResponseFormatSchema
-  })
-  .strict()
+export const CreateTableSchema = z.strictObject({
+  docId: DocIdSchema,
+  tableName: z
+    .string()
+    .min(1)
+    .max(100)
+    .describe('Name for the new table (e.g., "Contacts", "Sales_Data")'),
+  columns: z
+    .array(ColumnDefinitionSchema)
+    .min(0)
+    .max(100)
+    .describe('Column definitions with type-specific options and optional style'),
+  response_format: ResponseFormatSchema
+})
 
 export type CreateTableInput = z.infer<typeof CreateTableSchema>
 
@@ -69,49 +60,64 @@ export class CreateTableTool extends GristTool<typeof CreateTableSchema, unknown
   ): Promise<ColumnDefinition[]> {
     return Promise.all(
       columns.map(async (col) => {
-        // No visibleCol? Return unchanged
+        // visibleCol only exists on Ref/RefList columns (discriminated union)
+        if (col.type !== 'Ref' && col.type !== 'RefList') return col
+
+        // No visibleCol specified? Return unchanged
         if (!col.visibleCol) return col
 
         // Already numeric? Return unchanged
         if (typeof col.visibleCol === 'number') return col
 
-        // Validate prerequisites
-        if (!col.type) {
-          throw new Error(
-            `Column "${col.colId}" has visibleCol but no type. ` +
-              `Provide column type (e.g., "Ref:People") when using visibleCol.`
-          )
-        }
-
-        if (!isReferenceType(col.type)) {
-          throw new Error(
-            `Column "${col.colId}" has visibleCol but type "${col.type}" is not a reference. ` +
-              `visibleCol only applies to Ref/RefList columns.`
-          )
-        }
-
-        // Extract foreign table and resolve string name to numeric ID
-        const foreignTable = extractForeignTable(col.type)
+        // col is now narrowed to Ref|RefList with string visibleCol
+        // refTable is required on Ref/RefList columns
+        const foreignTable = col.refTable
         if (!foreignTable) {
-          throw new Error(
-            `Failed to extract table name from type "${col.type}". ` +
-              `Expected format: "Ref:TableName" or "RefList:TableName"`
-          )
+          throw new Error(`Column "${col.colId}" has visibleCol but no refTable specified.`)
         }
 
         const numericId = await resolveVisibleCol(this.client, docId, foreignTable, col.visibleCol)
 
-        return { ...col, visibleCol: numericId }
+        return { ...col, visibleCol: numericId } as ColumnDefinition
       })
     )
+  }
+
+  // Convert column definitions to Grist API format (with buildGristType transform)
+  private columnsToGristFormat(columns: ColumnDefinition[]): Array<{
+    colId: string
+    type: string
+    label?: string
+    isFormula?: boolean
+    formula?: string
+    visibleCol?: string | number
+    widgetOptions?: Record<string, unknown>
+  }> {
+    return columns.map((col) => {
+      const widgetOptions = extractWidgetOptions(col)
+      // Convert split Ref format to Grist format
+      const gristType = buildGristType(col as { type: string; refTable?: string })
+      return {
+        colId: col.colId,
+        type: gristType,
+        ...(col.label !== undefined && { label: col.label }),
+        ...(col.isFormula !== undefined && { isFormula: col.isFormula }),
+        ...(col.formula !== undefined && { formula: col.formula }),
+        ...('visibleCol' in col && col.visibleCol !== undefined && { visibleCol: col.visibleCol }),
+        ...(widgetOptions && { widgetOptions })
+      }
+    })
   }
 
   protected async executeInternal(params: CreateTableInput) {
     // Resolve any string visibleCol values to numeric IDs
     const resolvedColumns = await this.resolveVisibleColInColumns(params.docId, params.columns)
 
-    // Build action with resolved columns
-    const action = buildAddTableAction(toTableId(params.tableName), resolvedColumns)
+    // Convert to Grist API format (includes buildGristType transform)
+    const gristColumns = this.columnsToGristFormat(resolvedColumns)
+
+    // Build action with columns in Grist format
+    const action = buildAddTableAction(toTableId(params.tableName), gristColumns)
     const response = await this.client.post<ApplyResponse>(
       `/docs/${params.docId}/apply`,
       [serializeUserAction(action)],
@@ -124,6 +130,7 @@ export class CreateTableTool extends GristTool<typeof CreateTableSchema, unknown
     const retValues = validateRetValues(response, { context: `AddTable ${params.tableName}` })
     const retValue = retValues[0]
 
+    // Note: Grist API returns table_id (snake_case) in its response
     if (!retValue || typeof retValue !== 'object' || !('table_id' in retValue)) {
       throw new Error(
         `AddTable action returned unexpected value: ${JSON.stringify(retValue)}. ` +
@@ -139,9 +146,10 @@ export class CreateTableTool extends GristTool<typeof CreateTableSchema, unknown
     }
 
     // Check if any columns have visibleCol that needs SetDisplayFormula
-    const visibleColColumns = resolvedColumns.filter(
-      (col) => col.visibleCol && col.type && isReferenceType(col.type)
-    )
+    // With discriminated union, only Ref/RefList have visibleCol
+    const visibleColColumns = resolvedColumns.filter((col) => {
+      return (col.type === 'Ref' || col.type === 'RefList') && col.visibleCol
+    })
 
     // Track errors from visibleCol setup
     const displayFormulaErrors: Array<{ colId: string; error: string }> = []
@@ -166,13 +174,15 @@ export class CreateTableTool extends GristTool<typeof CreateTableSchema, unknown
           continue
         }
 
+        // Convert split format to Grist format for visibleCol service
+        const colWithRefTable = col as { type: string; refTable?: string; visibleCol: number }
         setupParams.push({
           docId: params.docId,
           tableId,
           colId: col.colId,
           colRef: columnInfo.fields.colRef,
-          visibleCol: col.visibleCol as number,
-          columnType: col.type as string
+          visibleCol: colWithRefTable.visibleCol,
+          columnType: buildGristType(colWithRefTable)
         })
       }
 
@@ -191,10 +201,10 @@ export class CreateTableTool extends GristTool<typeof CreateTableSchema, unknown
 
     return {
       success: true,
-      document_id: params.docId,
-      table_id: tableId,
-      table_name: params.tableName,
-      columns_created: params.columns.length,
+      docId: params.docId,
+      tableId: tableId,
+      tableName: params.tableName,
+      columnsCreated: params.columns.length,
       message:
         displayFormulaErrors.length > 0
           ? `Table "${params.tableName}" created with ${params.columns.length} column(s). ` +
@@ -217,18 +227,16 @@ export async function createTable(context: ToolContext, params: CreateTableInput
   return tool.execute(params)
 }
 
-export const RenameTableSchema = z
-  .object({
-    docId: DocIdSchema,
-    tableId: TableIdSchema,
-    newTableId: z
-      .string()
-      .min(1)
-      .max(100)
-      .describe('New table name. Must be unique within the document'),
-    response_format: ResponseFormatSchema
-  })
-  .strict()
+export const RenameTableSchema = z.strictObject({
+  docId: DocIdSchema,
+  tableId: TableIdSchema,
+  newTableId: z
+    .string()
+    .min(1)
+    .max(100)
+    .describe('New table name. Must be unique within the document'),
+  response_format: ResponseFormatSchema
+})
 
 export type RenameTableInput = z.infer<typeof RenameTableSchema>
 
@@ -254,9 +262,9 @@ export class RenameTableTool extends GristTool<typeof RenameTableSchema, unknown
 
     return {
       success: true,
-      document_id: params.docId,
-      old_table_id: params.tableId,
-      new_table_id: params.newTableId,
+      docId: params.docId,
+      oldTableId: params.tableId,
+      newTableId: params.newTableId,
       message: `Successfully renamed table from "${params.tableId}" to "${params.newTableId}"`,
       note: 'References to this table in formulas will be automatically updated'
     }
@@ -268,13 +276,11 @@ export async function renameTable(context: ToolContext, params: RenameTableInput
   return tool.execute(params)
 }
 
-export const DeleteTableSchema = z
-  .object({
-    docId: DocIdSchema,
-    tableId: TableIdSchema,
-    response_format: ResponseFormatSchema
-  })
-  .strict()
+export const DeleteTableSchema = z.strictObject({
+  docId: DocIdSchema,
+  tableId: TableIdSchema,
+  response_format: ResponseFormatSchema
+})
 
 export type DeleteTableInput = z.infer<typeof DeleteTableSchema>
 
@@ -298,8 +304,8 @@ export class DeleteTableTool extends GristTool<typeof DeleteTableSchema, unknown
 
     return {
       success: true,
-      document_id: params.docId,
-      table_id: params.tableId,
+      docId: params.docId,
+      tableId: params.tableId,
       message: `Successfully deleted table "${params.tableId}"`,
       warning:
         'THIS OPERATION CANNOT BE UNDONE. All data in the table has been permanently deleted.',
@@ -326,7 +332,7 @@ export const TABLE_TOOLS: ReadonlyArray<ToolDefinition> = [
     handler: createTable,
     docs: {
       overview:
-        'Create a table with columns. Column types: Text, Numeric, Int, Bool, Date, DateTime, Choice, ChoiceList, Ref:TableName, RefList:TableName, Attachments.',
+        'Create a table with columns. Type-specific options shown per column type. **Ref columns:** Use `type: "Ref"` with `refTable: "TableName"`.',
       examples: [
         {
           desc: 'Create table with columns',
@@ -339,13 +345,13 @@ export const TABLE_TOOLS: ReadonlyArray<ToolDefinition> = [
               {
                 colId: 'Status',
                 type: 'Choice',
-                widgetOptions: { choices: ['Active', 'Inactive'] }
+                choices: ['Active', 'Inactive']
               }
             ]
           }
         },
         {
-          desc: 'Currency column',
+          desc: 'Currency column with flat options',
           input: {
             docId: 'abc123',
             tableName: 'Orders',
@@ -353,7 +359,9 @@ export const TABLE_TOOLS: ReadonlyArray<ToolDefinition> = [
               {
                 colId: 'Total',
                 type: 'Numeric',
-                widgetOptions: { numMode: 'currency', currency: 'USD', decimals: 2 }
+                numMode: 'currency',
+                currency: 'USD',
+                decimals: 2
               }
             ]
           }

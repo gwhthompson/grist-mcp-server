@@ -81,7 +81,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should accept valid boolean primitive false', async () => {
@@ -94,7 +94,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should accept null for empty cell', async () => {
@@ -107,7 +107,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should reject string "__YES__" in Boolean column', async () => {
@@ -215,7 +215,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should accept negative number', async () => {
@@ -228,7 +228,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should accept zero', async () => {
@@ -241,7 +241,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should accept null for empty cell', async () => {
@@ -254,7 +254,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should reject string "42" in Numeric column', async () => {
@@ -302,7 +302,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should accept decimal number (Grist handles truncation)', async () => {
@@ -316,7 +316,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should accept null for empty cell', async () => {
@@ -329,7 +329,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should reject string "42" in Int column', async () => {
@@ -355,7 +355,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should accept string representation of boolean', async () => {
@@ -368,7 +368,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should accept empty string', async () => {
@@ -381,7 +381,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should accept null for empty cell', async () => {
@@ -394,7 +394,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should reject number in Text column', async () => {
@@ -438,7 +438,7 @@ describe('Type Mismatch Validation', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should reject if any column has type mismatch', async () => {

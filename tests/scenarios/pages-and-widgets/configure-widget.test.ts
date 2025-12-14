@@ -761,7 +761,7 @@ describe('Configure Widget - Integration Tests', () => {
 
       // ✅ CORRECT: Should have business data keys only
       expect(parsed).toHaveProperty('success')
-      expect(parsed).toHaveProperty('operations_completed')
+      expect(parsed).toHaveProperty('operationsCompleted')
       expect(parsed).toHaveProperty('summary')
 
       // Verify structuredContent matches parsed content
@@ -805,7 +805,7 @@ describe('Configure Widget - Integration Tests', () => {
 
       // structuredContent should be object with business data
       expect(result.structuredContent).toHaveProperty('success')
-      expect(result.structuredContent).toHaveProperty('operations_completed')
+      expect(result.structuredContent).toHaveProperty('operationsCompleted')
     })
   })
 })

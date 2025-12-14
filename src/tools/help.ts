@@ -85,10 +85,10 @@ export class GetHelpTool extends GristTool<typeof HelpSchema, HelpOutput> {
     const documentation = formatDocumentation(params.tool_name, topic)
 
     return {
-      tool_name: params.tool_name,
+      toolName: params.tool_name,
       topic,
       documentation,
-      available_topics: HELP_TOPICS
+      availableTopics: HELP_TOPICS
     }
   }
 
@@ -105,7 +105,7 @@ export class GetHelpTool extends GristTool<typeof HelpSchema, HelpOutput> {
       data.topic !== 'full'
         ? `\n\n---\n_Other topics: ${HELP_TOPICS.filter((t) => t !== data.topic).join(', ')}_`
         : ''
-    const markdown = `# ${data.tool_name}${topicInfo}\n\n${data.documentation}${topicHint}`
+    const markdown = `# ${data.toolName}${topicInfo}\n\n${data.documentation}${topicHint}`
 
     return {
       content: [{ type: 'text', text: markdown }],

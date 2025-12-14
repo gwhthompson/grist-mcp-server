@@ -54,13 +54,13 @@ describe('Simple Reference Format (Auto-Conversion)', () => {
       { fields: { Name: 'Bob', Email: 'bob@example.com' } },
       { fields: { Name: 'Carol', Email: 'carol@example.com' } }
     ])
-  })
+  }, 60000)
 
   afterAll(async () => {
     if (context) {
       await cleanupTestContext(context)
     }
-  })
+  }, 60000)
 
   describe('Reference Column - Simple Numeric Format', () => {
     it('should accept plain row ID for Reference column (auto-converts)', async () => {

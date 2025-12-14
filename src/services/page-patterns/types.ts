@@ -22,12 +22,12 @@ export interface PatternContext {
  * Information about a created widget.
  */
 export interface WidgetInfo {
-  readonly section_id: number
-  readonly table_ref: number
+  readonly sectionId: number
+  readonly tableRef: number
   readonly title: string
   readonly widget_type?: string
   readonly position?: string
-  readonly summary_table_id?: string
+  readonly summaryTableId?: string
 }
 
 /**
@@ -35,8 +35,8 @@ export interface WidgetInfo {
  */
 export interface PatternBuildResult {
   readonly success: true
-  readonly page_name: string
-  readonly view_id: number
+  readonly pageName: string
+  readonly viewId: number
   readonly pattern: string
   readonly description: string
   readonly widgets: ReadonlyArray<WidgetInfo>

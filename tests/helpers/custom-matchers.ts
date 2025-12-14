@@ -109,7 +109,7 @@ expect.extend({
    */
   toHaveRecordIds(response: MCPToolResponse, expectedCount: number) {
     const data = response.structuredContent as { record_ids?: number[]; row_ids?: number[] }
-    const actualCount = (data.record_ids || data.row_ids || []).length
+    const actualCount = (data.recordIds || data.row_ids || []).length
 
     return {
       pass: actualCount === expectedCount,

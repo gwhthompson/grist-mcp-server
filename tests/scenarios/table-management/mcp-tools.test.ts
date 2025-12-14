@@ -82,9 +82,9 @@ describe('MCP Tools - All 15 Tools Against Live Grist', () => {
       const workspace = result.structuredContent.items[0]
       expect(workspace).toHaveProperty('id')
       expect(workspace).toHaveProperty('name')
-      expect(workspace).toHaveProperty('org_domain') // Detailed level includes org_domain
-      expect(workspace).toHaveProperty('created_at') // Detailed level includes timestamps
-      expect(workspace).toHaveProperty('updated_at')
+      expect(workspace).toHaveProperty('orgDomain') // Detailed level includes orgDomain
+      expect(workspace).toHaveProperty('createdAt') // Detailed level includes timestamps
+      expect(workspace).toHaveProperty('updatedAt')
     })
 
     it('grist_get_documents - should list documents', async () => {
@@ -239,7 +239,7 @@ describe('MCP Tools - All 15 Tools Against Live Grist', () => {
       })
 
       expect(result.structuredContent.items).toHaveLength(2)
-      expect(result.structuredContent.has_more).toBeDefined()
+      expect(result.structuredContent.hasMore).toBeDefined()
     })
 
     it('grist_read_records - should return records with all fields', async () => {
@@ -295,10 +295,10 @@ describe('MCP Tools - All 15 Tools Against Live Grist', () => {
         response_format: 'json'
       })
 
-      expect(result.structuredContent).toHaveProperty('records_added')
-      expect(result.structuredContent.records_added).toBe(2)
-      expect(result.structuredContent.record_ids).toBeInstanceOf(Array)
-      expect(result.structuredContent.record_ids).toHaveLength(2)
+      expect(result.structuredContent).toHaveProperty('recordsAdded')
+      expect(result.structuredContent.recordsAdded).toBe(2)
+      expect(result.structuredContent.recordIds).toBeInstanceOf(Array)
+      expect(result.structuredContent.recordIds).toHaveLength(2)
     })
 
     it('grist_update_records - should update existing records', async () => {
@@ -310,7 +310,7 @@ describe('MCP Tools - All 15 Tools Against Live Grist', () => {
         response_format: 'json'
       })
 
-      const recordId = addResult.structuredContent.record_ids[0]
+      const recordId = addResult.structuredContent.recordIds[0]
 
       // Now update it
       const updateResult = await records.updateRecords(context.toolContext, {
@@ -321,8 +321,8 @@ describe('MCP Tools - All 15 Tools Against Live Grist', () => {
         response_format: 'json'
       })
 
-      expect(updateResult.structuredContent).toHaveProperty('records_updated')
-      expect(updateResult.structuredContent.records_updated).toBe(1)
+      expect(updateResult.structuredContent).toHaveProperty('recordsUpdated')
+      expect(updateResult.structuredContent.recordsUpdated).toBe(1)
 
       // Verify update - records are flattened
       const readResult = await reading.getRecords(context.toolContext, {
@@ -360,7 +360,7 @@ describe('MCP Tools - All 15 Tools Against Live Grist', () => {
         response_format: 'json'
       })
 
-      const recordId = addResult.structuredContent.record_ids[0]
+      const recordId = addResult.structuredContent.recordIds[0]
 
       // Delete it
       const deleteResult = await records.deleteRecords(context.toolContext, {
@@ -370,8 +370,8 @@ describe('MCP Tools - All 15 Tools Against Live Grist', () => {
         response_format: 'json'
       })
 
-      expect(deleteResult.structuredContent).toHaveProperty('records_deleted')
-      expect(deleteResult.structuredContent.records_deleted).toBe(1)
+      expect(deleteResult.structuredContent).toHaveProperty('recordsDeleted')
+      expect(deleteResult.structuredContent.recordsDeleted).toBe(1)
 
       // Verify deletion
       const readResult = await reading.getRecords(context.toolContext, {
@@ -412,7 +412,7 @@ describe('MCP Tools - All 15 Tools Against Live Grist', () => {
         tableId: context.tableId as string,
         operations: [
           {
-            action: 'modify',
+            action: 'update',
             colId: 'NewColumn',
             label: 'Updated Column Label'
           }
@@ -421,7 +421,7 @@ describe('MCP Tools - All 15 Tools Against Live Grist', () => {
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.summary.modified).toBe(1)
+      expect(result.structuredContent.summary.updated).toBe(1)
     })
 
     it('grist_manage_columns - should delete a column', async () => {

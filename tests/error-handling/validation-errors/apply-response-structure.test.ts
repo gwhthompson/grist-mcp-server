@@ -195,7 +195,7 @@ describe('ApplyUAResult Structure Validation', () => {
       expect(tableInfo).toHaveProperty('columns')
 
       console.log('✓ AddTable returns metadata:', {
-        table_id: tableInfo.table_id,
+        table_id: tableInfo.tableId,
         id: tableInfo.id,
         columnCount: tableInfo.columns?.length
       })

@@ -3,36 +3,47 @@
 ## Commands
 
 ```bash
-npm run build   # Compile TypeScript
-npm test        # Full test suite (Docker required)
-npm run lint    # Check code quality
-npm run format  # Auto-format with Biome
+npm run build       # Compile TypeScript
+npm test            # Full test suite (Docker auto-managed)
+npm run check       # Format + lint with Biome
+npm run grist       # Docker management (see below)
 ```
 
-**Definition of done:** `npm run build && npm run lint && npm test` all pass. No `any` types.
+**Definition of done:** `npm run build && npm run check && npm test` all pass. No `any` types.
 
 ---
 
-## Docker Testing
+## Grist Docker Management
 
 ```bash
-# Option 1: Automatic (tests handle Docker lifecycle)
-npm test
+# Container lifecycle
+npm run grist start              # Start with ephemeral port, print env vars
+npm run grist stop               # Stop container
+npm run grist status             # Show URL and API key if running
 
-# Option 2: Manual startup
-docker run -d --name grist-mcp-test -p 8989:8484 \
-  -e GRIST_BOOT_KEY=test_boot_key \
-  -e GRIST_FORCE_LOGIN=true \
-  -e GRIST_DEFAULT_EMAIL=test@example.com \
-  -e GRIST_SINGLE_ORG=example \
-  gristlabs/grist:latest
+# MCP Inspector
+npm run grist inspect            # GUI mode (web UI)
+npm run grist inspect dev        # GUI + hot reload (tsx)
+npm run grist inspect cli -- --method tools/list
+npm run grist inspect cli -- --method tools/call --tool-name grist_list_tables
+```
 
-# Wait and bootstrap API key
-sleep 10
-API_KEY=$(curl -sf http://localhost:8989/api/profile/apiKey -H "x-boot-key: test_boot_key" | tr -d '"')
-export GRIST_API_KEY=$API_KEY GRIST_BASE_URL=http://localhost:8989
-npm test
-docker rm -f grist-mcp-test
+---
+
+## Testing CLI Args
+
+All test variations use CLI args (no dedicated scripts):
+
+```bash
+npm test                               # Full suite
+npm test -- tests/unit                 # Unit tests only
+npm test -- tests/contracts            # Contract tests
+npm test -- --coverage                 # Coverage report
+npm test -- --reporter=verbose         # Verbose output
+npm test -- --ui                       # Browser UI
+npm run test:watch                     # Watch mode
+npm run test:watch -- tests/unit       # Watch unit tests
+SKIP_CLEANUP=true npm test             # Keep container for debugging
 ```
 
 Tests require `dangerouslyDisableSandbox: true` in Bash tool.

@@ -57,7 +57,7 @@ describe('Webhook Management - Integration Tests', () => {
     if (context) {
       await cleanupTestContext(context)
     }
-  })
+  }, 60000)
 
   describe('List Webhooks', () => {
     it('should list all webhooks for a document (initially empty)', async () => {
@@ -70,8 +70,8 @@ describe('Webhook Management - Integration Tests', () => {
       })
 
       expect(result.structuredContent).toBeDefined()
-      expect(result.structuredContent.document_id).toBe(context.docId)
-      expect(result.structuredContent.webhook_count).toBeGreaterThanOrEqual(0)
+      expect(result.structuredContent.docId).toBe(context.docId)
+      expect(result.structuredContent.webhookCount).toBeGreaterThanOrEqual(0)
       expect(result.structuredContent.webhooks).toBeInstanceOf(Array)
     })
 
@@ -111,13 +111,13 @@ describe('Webhook Management - Integration Tests', () => {
 
       expect(result.structuredContent).toBeDefined()
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.webhook_id).toBeDefined()
-      expect(typeof result.structuredContent.webhook_id).toBe('string')
-      expect(result.structuredContent.webhook_url).toBe('https://webhook.site/test-webhook')
-      expect(result.structuredContent.table_id).toBe(context.tableId)
+      expect(result.structuredContent.webhookId).toBeDefined()
+      expect(typeof result.structuredContent.webhookId).toBe('string')
+      expect(result.structuredContent.webhookUrl).toBe('https://webhook.site/test-webhook')
+      expect(result.structuredContent.tableId).toBe(context.tableId)
 
       // Store for cleanup
-      createdWebhookIds.push(result.structuredContent.webhook_id as string)
+      createdWebhookIds.push(result.structuredContent.webhookId as string)
     })
 
     it('should create a webhook with minimal fields', async () => {
@@ -135,9 +135,9 @@ describe('Webhook Management - Integration Tests', () => {
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.webhook_id).toBeDefined()
+      expect(result.structuredContent.webhookId).toBeDefined()
 
-      createdWebhookIds.push(result.structuredContent.webhook_id as string)
+      createdWebhookIds.push(result.structuredContent.webhookId as string)
     })
 
     it('should create a webhook for only update events', async () => {
@@ -156,9 +156,9 @@ describe('Webhook Management - Integration Tests', () => {
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.event_types).toEqual(['update'])
+      expect(result.structuredContent.eventTypes).toEqual(['update'])
 
-      createdWebhookIds.push(result.structuredContent.webhook_id as string)
+      createdWebhookIds.push(result.structuredContent.webhookId as string)
     })
 
     it('should handle non-existent table', async () => {
@@ -201,7 +201,7 @@ describe('Webhook Management - Integration Tests', () => {
         response_format: 'json'
       })
 
-      webhookId = createResult.structuredContent.webhook_id as string
+      webhookId = createResult.structuredContent.webhookId as string
       createdWebhookIds.push(webhookId)
     })
 
@@ -219,8 +219,8 @@ describe('Webhook Management - Integration Tests', () => {
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.webhook_id).toBe(webhookId)
-      expect(result.structuredContent.fields_updated).toContain('url')
+      expect(result.structuredContent.webhookId).toBe(webhookId)
+      expect(result.structuredContent.fieldsUpdated).toContain('url')
     })
 
     it('should disable a webhook', async () => {
@@ -237,7 +237,7 @@ describe('Webhook Management - Integration Tests', () => {
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.fields_updated).toContain('enabled')
+      expect(result.structuredContent.fieldsUpdated).toContain('enabled')
     })
 
     it('should update multiple fields at once', async () => {
@@ -256,7 +256,7 @@ describe('Webhook Management - Integration Tests', () => {
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.fields_updated).toEqual(
+      expect(result.structuredContent.fieldsUpdated).toEqual(
         expect.arrayContaining(['name', 'memo', 'enabled'])
       )
     })
@@ -296,7 +296,7 @@ describe('Webhook Management - Integration Tests', () => {
         response_format: 'json'
       })
 
-      const webhookId = createResult.structuredContent.webhook_id as string
+      const webhookId = createResult.structuredContent.webhookId as string
 
       // Delete the webhook
       const deleteResult = await webhooks.manageWebhooks(context.toolContext, {
@@ -309,7 +309,7 @@ describe('Webhook Management - Integration Tests', () => {
       })
 
       expect(deleteResult.structuredContent.success).toBe(true)
-      expect(deleteResult.structuredContent.webhook_id).toBe(webhookId)
+      expect(deleteResult.structuredContent.webhookId).toBe(webhookId)
 
       // Verify it's deleted by listing webhooks
       const listResult = await webhooks.manageWebhooks(context.toolContext, {
@@ -352,7 +352,7 @@ describe('Webhook Management - Integration Tests', () => {
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.document_id).toBe(context.docId)
+      expect(result.structuredContent.docId).toBe(context.docId)
       expect(result.structuredContent.action).toBe('cleared_webhook_queue')
     })
 
@@ -388,7 +388,7 @@ describe('Webhook Management - Integration Tests', () => {
       })
 
       expect(createResult.structuredContent.success).toBe(true)
-      const webhookId = createResult.structuredContent.webhook_id as string
+      const webhookId = createResult.structuredContent.webhookId as string
 
       // 2. List and verify webhook exists
       const listResult1 = await webhooks.manageWebhooks(context.toolContext, {
@@ -545,11 +545,11 @@ describe('Webhook Management - Integration Tests', () => {
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.webhook_url).toBe('https://webhook.site/test')
+      expect(result.structuredContent.webhookUrl).toBe('https://webhook.site/test')
 
       // Clean up
-      if (result.structuredContent.webhook_id) {
-        createdWebhookIds.push(result.structuredContent.webhook_id as string)
+      if (result.structuredContent.webhookId) {
+        createdWebhookIds.push(result.structuredContent.webhookId as string)
       }
     })
 
@@ -690,11 +690,11 @@ describe('Webhook Management - Integration Tests', () => {
         response_format: 'json'
       })
 
-      const webhookId = result.structuredContent.webhook_id as string
+      const webhookId = result.structuredContent.webhookId as string
       createdWebhookIds.push(webhookId)
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.webhook_id).toMatch(
+      expect(result.structuredContent.webhookId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
       )
     })

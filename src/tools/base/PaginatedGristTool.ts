@@ -5,8 +5,8 @@ export interface PaginationMetadata {
   total: number
   offset: number
   limit: number
-  has_more: boolean
-  next_offset: number | null
+  hasMore: boolean
+  nextOffset: number | null
 }
 
 export interface PaginatedResponse<TItem> {
@@ -35,8 +35,8 @@ export abstract class PaginatedGristTool<
         total,
         offset,
         limit,
-        has_more: hasMore,
-        next_offset: hasMore ? offset + limit : null
+        hasMore: hasMore,
+        nextOffset: hasMore ? offset + limit : null
       }
     }
   }

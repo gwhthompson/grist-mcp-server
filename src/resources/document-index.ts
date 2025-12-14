@@ -83,7 +83,7 @@ export function registerDocumentIndexResource(server: McpServer, context: ToolCo
           id: doc.id,
           name: doc.name,
           workspace: doc.workspace.name,
-          workspace_id: doc.workspace.id,
+          workspaceId: doc.workspace.id,
           access: doc.access,
           resource_uri: `grist://docs/${doc.id}`
         }))

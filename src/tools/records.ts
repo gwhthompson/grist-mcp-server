@@ -43,20 +43,16 @@ import {
 } from '../validators/record-validator.js'
 import { GristTool } from './base/GristTool.js'
 
-export const AddRecordsSchema = z
-  .object({
-    docId: DocIdSchema,
-    tableId: TableIdSchema,
-    records: z
-      .array(z.record(z.string(), CellValueSchema))
-      .min(1)
-      .max(MAX_RECORDS_PER_BATCH)
-      .describe(
-        `Array of record objects to add (max ${MAX_RECORDS_PER_BATCH}). Each object maps column IDs to values. Example: [{"Name": "John", "Email": "john@example.com"}]`
-      ),
-    response_format: ResponseFormatSchema
-  })
-  .strict()
+export const AddRecordsSchema = z.strictObject({
+  docId: DocIdSchema,
+  tableId: TableIdSchema,
+  records: z
+    .array(z.record(z.string(), CellValueSchema))
+    .min(1)
+    .max(MAX_RECORDS_PER_BATCH)
+    .describe(`Records to add [{col: value}]`),
+  response_format: ResponseFormatSchema
+})
 
 export type AddRecordsInput = z.infer<typeof AddRecordsSchema>
 
@@ -105,10 +101,10 @@ export class AddRecordsTool extends GristTool<typeof AddRecordsSchema, unknown> 
 
     return {
       success: true,
-      document_id: params.docId,
-      table_id: params.tableId,
-      records_added: params.records.length,
-      record_ids: addedIds,
+      docId: params.docId,
+      tableId: params.tableId,
+      recordsAdded: params.records.length,
+      recordIds: addedIds,
       message: `Successfully added ${params.records.length} record(s) to ${params.tableId}`
     }
   }
@@ -119,19 +115,13 @@ export async function addRecords(context: ToolContext, params: AddRecordsInput) 
   return tool.execute(params)
 }
 
-export const UpdateRecordsSchema = z
-  .object({
-    docId: DocIdSchema,
-    tableId: TableIdSchema,
-    rowIds: RowIdsSchema,
-    updates: z
-      .record(z.string(), CellValueSchema)
-      .describe(
-        'Object mapping column IDs to new values. Example: {"Status": "Complete", "UpdatedDate": "2024-01-15"}'
-      ),
-    response_format: ResponseFormatSchema
-  })
-  .strict()
+export const UpdateRecordsSchema = z.strictObject({
+  docId: DocIdSchema,
+  tableId: TableIdSchema,
+  rowIds: RowIdsSchema,
+  updates: z.record(z.string(), CellValueSchema).describe('Column values to update'),
+  response_format: ResponseFormatSchema
+})
 
 export type UpdateRecordsInput = z.infer<typeof UpdateRecordsSchema>
 
@@ -172,9 +162,9 @@ export class UpdateRecordsTool extends GristTool<typeof UpdateRecordsSchema, unk
 
     return {
       success: true,
-      document_id: params.docId,
-      table_id: params.tableId,
-      records_updated: params.rowIds.length,
+      docId: params.docId,
+      tableId: params.tableId,
+      recordsUpdated: params.rowIds.length,
       message: `Successfully updated ${params.rowIds.length} record(s) in ${params.tableId}`
     }
   }
@@ -190,30 +180,20 @@ const UpsertRecordSchema = z.object({
   fields: z.record(z.string(), CellValueSchema).optional()
 })
 
-export const UpsertRecordsSchema = z
-  .object({
-    docId: DocIdSchema,
-    tableId: TableIdSchema,
-    records: z
-      .array(UpsertRecordSchema)
-      .min(1)
-      .max(MAX_RECORDS_PER_BATCH)
-      .describe(
-        `Array of record objects to upsert (max ${MAX_RECORDS_PER_BATCH}). Each record has 'require' (fields to match) and 'fields' (fields to update/add).`
-      ),
-    onMany: z
-      .enum(['first', 'none', 'all'])
-      .default('first')
-      .describe('Strategy when multiple matches found: "first", "none", or "all"'),
-    allowEmptyRequire: z
-      .boolean()
-      .default(false)
-      .describe('Allow upsert with no require fields (adds all as new records)'),
-    add: z.boolean().default(true).describe('Allow adding new records if no match'),
-    update: z.boolean().default(true).describe('Allow updating existing records'),
-    response_format: ResponseFormatSchema
-  })
-  .strict()
+export const UpsertRecordsSchema = z.strictObject({
+  docId: DocIdSchema,
+  tableId: TableIdSchema,
+  records: z
+    .array(UpsertRecordSchema)
+    .min(1)
+    .max(MAX_RECORDS_PER_BATCH)
+    .describe('Records with {require: match, fields: update}'),
+  onMany: z.enum(['first', 'none', 'all']).default('first').describe('Multi-match strategy'),
+  allowEmptyRequire: z.boolean().default(false).describe('Allow empty require (adds all)'),
+  add: z.boolean().default(true).describe('Allow adding if no match'),
+  update: z.boolean().default(true).describe('Allow updating matches'),
+  response_format: ResponseFormatSchema
+})
 
 export type UpsertRecordsInput = z.infer<typeof UpsertRecordsSchema>
 
@@ -279,10 +259,10 @@ export class UpsertRecordsTool extends GristTool<typeof UpsertRecordsSchema, unk
 
     return {
       success: true,
-      document_id: params.docId,
-      table_id: params.tableId,
-      records_processed: params.records.length,
-      record_ids: recordIds,
+      docId: params.docId,
+      tableId: params.tableId,
+      recordsProcessed: params.records.length,
+      recordIds: recordIds,
       message: `Successfully processed ${params.records.length} upsert operation(s) on ${params.tableId}`,
       note:
         recordIds.length === 0
@@ -333,18 +313,13 @@ export async function upsertRecords(context: ToolContext, params: UpsertRecordsI
 }
 
 export const DeleteRecordsSchema = z
-  .object({
+  .strictObject({
     docId: DocIdSchema,
     tableId: TableIdSchema,
-    rowIds: RowIdsSchema.optional().describe(
-      'Array of row IDs to delete. Either rowIds OR filters must be provided.'
-    ),
-    filters: FilterSchema.describe(
-      'Delete records matching these filters. Either rowIds OR filters must be provided. Example: {"Status": "Cancelled"}'
-    ),
+    rowIds: RowIdsSchema.optional().describe('Row IDs to delete (or use filters)'),
+    filters: FilterSchema.describe('Delete matching records (or use rowIds)'),
     response_format: ResponseFormatSchema
   })
-  .strict()
   .refine((data) => data.rowIds || data.filters, {
     message: 'Either rowIds or filters must be provided'
   })
@@ -376,11 +351,11 @@ export class DeleteRecordsTool extends GristTool<typeof DeleteRecordsSchema, unk
       if (rowIdsToDelete.length === 0) {
         return {
           success: true,
-          document_id: params.docId,
-          table_id: params.tableId,
-          records_deleted: 0,
+          docId: params.docId,
+          tableId: params.tableId,
+          recordsDeleted: 0,
           message: 'No records matched the provided filters',
-          filters_used: params.filters
+          filtersUsed: params.filters
         }
       }
     } else {
@@ -402,13 +377,13 @@ export class DeleteRecordsTool extends GristTool<typeof DeleteRecordsSchema, unk
 
     return {
       success: true,
-      document_id: params.docId,
-      table_id: params.tableId,
-      records_deleted: rowIdsToDelete.length,
-      deleted_row_ids: rowIdsToDelete,
+      docId: params.docId,
+      tableId: params.tableId,
+      recordsDeleted: rowIdsToDelete.length,
+      deletedRowIds: rowIdsToDelete,
       message: `Successfully deleted ${rowIdsToDelete.length} record(s) from ${params.tableId}`,
       warning: 'This operation cannot be undone. Deleted records are permanently removed.',
-      ...(params.filters ? { filters_used: params.filters } : {})
+      ...(params.filters ? { filtersUsed: params.filters } : {})
     }
   }
 

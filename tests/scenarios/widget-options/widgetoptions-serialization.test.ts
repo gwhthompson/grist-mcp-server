@@ -9,7 +9,7 @@
  * Fix: Added serializeWidgetOptions() helper and applied to all action builders
  *
  * Test Strategy:
- * 1. Create table with columns containing widgetOptions
+ * 1. Create table with columns containing widgetOptions (flat format)
  * 2. Retrieve column metadata from Grist
  * 3. Verify widgetOptions are stored as valid JSON strings
  * 4. Ensure NO single quotes (Python dict format)
@@ -56,7 +56,7 @@ describe('widgetOptions Serialization Bug Fix', () => {
   })
 
   it('should serialize widgetOptions as JSON strings, not Python dicts', async () => {
-    // Create table with multiple columns that have widgetOptions
+    // Create table with multiple columns that have widgetOptions (flat format)
     await createTable(toolContext, {
       docId,
       tableName: 'Orders',
@@ -75,27 +75,24 @@ describe('widgetOptions Serialization Bug Fix', () => {
           colId: 'Status',
           type: 'Choice',
           label: 'Order Status',
-          widgetOptions: {
-            choices: ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled']
-          }
+          // Flat format: choices at top level
+          choices: ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled']
         },
         {
           colId: 'Priority',
           type: 'Choice',
           label: 'Priority Level',
-          widgetOptions: {
-            choices: ['Low', 'Medium', 'High', 'Critical']
-          }
+          // Flat format: choices at top level
+          choices: ['Low', 'Medium', 'High', 'Critical']
         },
         {
           colId: 'OrderTotal',
           type: 'Numeric',
           label: 'Order Total',
-          widgetOptions: {
-            numMode: 'currency',
-            currency: 'USD',
-            decimals: 2
-          }
+          // Flat format: all options at top level
+          numMode: 'currency',
+          currency: 'USD',
+          decimals: 2
         }
       ],
       response_format: 'json'
@@ -173,7 +170,8 @@ describe('widgetOptions Serialization Bug Fix', () => {
         {
           colId: 'Name',
           type: 'Text',
-          widgetOptions: {
+          // v2.0 format: styling in nested style object
+          style: {
             alignment: 'center'
           }
         }
@@ -210,7 +208,8 @@ describe('widgetOptions Serialization Bug Fix', () => {
         {
           colId: 'Category',
           type: 'Choice',
-          widgetOptions: { choices: ['A', 'B', 'C'] }
+          // Flat format: choices at top level
+          choices: ['A', 'B', 'C']
         },
         {
           colId: 'PlainNumber',
@@ -220,7 +219,9 @@ describe('widgetOptions Serialization Bug Fix', () => {
         {
           colId: 'Currency',
           type: 'Numeric',
-          widgetOptions: { numMode: 'currency', currency: 'EUR' }
+          // Flat format: all options at top level
+          numMode: 'currency',
+          currency: 'EUR'
         }
       ],
       response_format: 'json'
@@ -278,9 +279,8 @@ describe('widgetOptions Serialization Bug Fix', () => {
           colId: 'Status',
           type: 'Choice',
           label: 'Order Status',
-          widgetOptions: {
-            choices: ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled']
-          }
+          // Flat format: choices at top level
+          choices: ['Pending', 'Processing', 'Shipped', 'Delivered', 'Cancelled']
         }
       ],
       response_format: 'json'

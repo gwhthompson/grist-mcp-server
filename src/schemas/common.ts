@@ -1,43 +1,44 @@
 import { z } from 'zod'
-import { WidgetOptionsUnionSchema } from './widget-options.js'
 
-export const ResponseFormatSchema = z
-  .enum(['json', 'markdown'])
-  .default('markdown')
-  .describe('Output format: "json" for structured data, "markdown" for human-readable text')
+// Register shared schemas with meaningful IDs for JSON Schema refs
+// This replaces opaque names like __schema0 with docId, tableId, etc.
+
+export const ResponseFormatSchema = z.enum(['json', 'markdown']).default('markdown')
 
 export const DetailLevelWorkspaceSchema = z
   .enum(['summary', 'detailed'])
   .default('summary')
-  .describe(
-    '"summary": Name, ID, doc count only. "detailed": + permissions, timestamps, full metadata'
-  )
+  .describe('summary: name and basic info. detailed: adds permissions, timestamps')
 
 export const DetailLevelTableSchema = z
   .enum(['names', 'columns', 'full_schema'])
   .default('columns')
   .describe(
-    '"names": Table names only. "columns": + column names. "full_schema": + types, formulas, widgetOptions'
+    'names: table names only. columns: adds column names. full_schema: adds column types and options'
   )
 
-export const PaginationSchema = z
-  .object({
-    offset: z
-      .number()
-      .int()
-      .min(0)
-      .default(0)
-      .describe('Starting position (0-indexed) for pagination'),
+// =============================================================================
+// Base Visual Schemas (registered for named $refs, used by column-types and widget-options)
+// =============================================================================
 
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(1000)
-      .default(100)
-      .describe('Number of items to return (min: 1, max: 1000)')
-  })
-  .strict()
+export const HexColorSchema = z
+  .string()
+  .regex(/^#[0-9A-Fa-f]{6}$/)
+  .describe('Hex color (#RRGGBB)')
+HexColorSchema.register(z.globalRegistry, { id: 'hexColor' })
+
+// Optional variant for fields like textColor, fillColor
+export const HexColorOptionalSchema = HexColorSchema.optional()
+HexColorOptionalSchema.register(z.globalRegistry, { id: 'hexColorOptional' })
+
+export const AlignmentSchema = z.enum(['left', 'center', 'right']).describe('Text alignment')
+AlignmentSchema.register(z.globalRegistry, { id: 'alignment' })
+
+export const PaginationSchema = z.strictObject({
+  offset: z.number().int().min(0).default(0).describe('Start position'),
+
+  limit: z.number().int().min(1).max(1000).default(100).describe('Max items to return')
+})
 
 export type PaginationInput = z.infer<typeof PaginationSchema>
 
@@ -89,9 +90,7 @@ export const DocIdSchema = z
     message:
       'Document ID must be Base58 format (22 chars, excludes 0OIl which are visually ambiguous)'
   })
-  .describe(
-    'Document ID from grist_get_documents. Examples: "aKt7TZe8YGLp3ak8bDL8TZ", "qBbArddFDSrKd2jpv3uZTj", "xYz9123AbcDef456Ghi78J"'
-  )
+  .describe('Document ID (from grist_get_documents)')
 
 export const TableIdSchema = z
   .string()
@@ -105,15 +104,13 @@ export const TableIdSchema = z
     error:
       'Table ID cannot be a Python keyword (for, class, if, def, etc.) because Grist uses Python for formulas'
   })
-  .describe(
-    'Table name from grist_get_tables. Examples: "Contacts", "Sales_Data", "Projects", "Inventory", "Customers"'
-  )
+  .describe('Table name (from grist_get_tables)')
 
 export const WorkspaceIdSchema = z.coerce
   .number()
   .int()
   .positive()
-  .describe('Workspace ID from grist_get_workspaces. Examples: 123, 456, 789 (numeric)')
+  .describe('Workspace ID (from grist_get_workspaces)')
 
 export const ColIdSchema = z
   .string()
@@ -130,122 +127,86 @@ export const ColIdSchema = z
   .refine((id) => !id.startsWith('gristHelper_'), {
     error: 'Column ID cannot start with gristHelper_ (reserved prefix for Grist internal columns)'
   })
-  .describe('Column identifier (e.g., "Email", "Phone_Number"). Use alphanumeric and underscores')
+  .describe('Column ID')
 
-const BaseColumnTypeSchema = z.enum([
-  'Text',
-  'Numeric',
-  'Int',
-  'Bool',
-  'Date',
-  'DateTime',
-  'Choice',
-  'ChoiceList',
-  'Attachments'
-])
-
-const RefColumnTypeSchema = z.string().regex(/^Ref(List)?:[A-Za-z_][A-Za-z0-9_]*$/, {
-  message: 'Reference type must be in format "Ref:TableName" or "RefList:TableName"'
-})
-
-export const ColumnTypeSchema = z
-  .union([BaseColumnTypeSchema, RefColumnTypeSchema])
-  .describe('Column data type in Grist. Use "Ref:TableName" or "RefList:TableName" for references.')
+// Note: Column type schemas are defined in column-types.ts
+// ColumnTypeLiteralSchema is registered as 'columnType' for JSON Schema $refs
 
 // visibleCol is top-level, NOT in widgetOptions
-export const RefWidgetOptionsSchema = z
-  .object({
-    showColumn: z
-      .union([z.string(), z.boolean()])
-      .optional()
-      .describe('UI visibility control (hide/show in views).')
-  })
-  .strict()
+export const RefWidgetOptionsSchema = z.strictObject({
+  showColumn: z
+    .union([z.string(), z.boolean()])
+    .optional()
+    .describe('UI visibility control (hide/show in views).')
+})
 
-export const ChoiceWidgetOptionsSchema = z
-  .object({
-    choices: z
-      .array(z.string())
-      .optional()
-      .describe(
-        'Available options. Examples: ["Red", "Blue", "Green"], ["High", "Medium", "Low"], ["Yes", "No", "Maybe"]'
-      ),
-    choiceColors: z
-      .record(z.string(), z.string())
-      .optional()
-      .describe(
-        'Color each option. Example: {"High": "#FF0000", "Low": "#00FF00"} colors High priority red and Low priority green'
-      )
-  })
-  .strict()
+export const ChoiceWidgetOptionsSchema = z.strictObject({
+  choices: z
+    .array(z.string())
+    .optional()
+    .describe(
+      'Available options. Examples: ["Red", "Blue", "Green"], ["High", "Medium", "Low"], ["Yes", "No", "Maybe"]'
+    ),
+  choiceColors: z
+    .record(z.string(), z.string())
+    .optional()
+    .describe(
+      'Color each option. Example: {"High": "#FF0000", "Low": "#00FF00"} colors High priority red and Low priority green'
+    )
+})
 
-export const NumericWidgetOptionsSchema = z
-  .object({
-    numMode: z
-      .enum(['currency', 'decimal', 'percent', 'scientific'])
-      .optional()
-      .describe('Number display mode'),
-    numSign: z.enum(['parens']).optional().describe('Use parentheses for negative numbers'),
-    decimals: z
-      .number()
-      .int()
-      .min(0)
-      .max(20)
-      .optional()
-      .describe('Number of decimal places to display'),
-    maxDecimals: z
-      .number()
-      .int()
-      .min(0)
-      .max(20)
-      .optional()
-      .describe('Maximum number of decimal places'),
-    currency: z
-      .string()
-      .length(3)
-      .optional()
-      .describe('3-letter currency code like "USD", "EUR", "GBP", "JPY", "CAD"')
-  })
-  .strict()
+export const NumericWidgetOptionsSchema = z.strictObject({
+  numMode: z
+    .enum(['currency', 'decimal', 'percent', 'scientific'])
+    .optional()
+    .describe('Number display mode'),
+  numSign: z.enum(['parens']).optional().describe('Use parentheses for negative numbers'),
+  decimals: z
+    .number()
+    .int()
+    .min(0)
+    .max(20)
+    .optional()
+    .describe('Number of decimal places to display'),
+  maxDecimals: z
+    .number()
+    .int()
+    .min(0)
+    .max(20)
+    .optional()
+    .describe('Maximum number of decimal places'),
+  currency: z
+    .string()
+    .length(3)
+    .optional()
+    .describe('3-letter currency code like "USD", "EUR", "GBP", "JPY", "CAD"')
+})
 
-export const DateWidgetOptionsSchema = z
-  .object({
-    dateFormat: z.string().optional().describe('Date format string (e.g., "YYYY-MM-DD")'),
-    isCustomDateFormat: z.boolean().optional().describe('Whether using custom date format'),
-    timeFormat: z.string().optional().describe('Time format string (e.g., "h:mma")'),
-    isCustomTimeFormat: z.boolean().optional().describe('Whether using custom time format')
-  })
-  .strict()
+export const DateWidgetOptionsSchema = z.strictObject({
+  dateFormat: z.string().optional().describe('Date format string (e.g., "YYYY-MM-DD")'),
+  isCustomDateFormat: z.boolean().optional().describe('Whether using custom date format'),
+  timeFormat: z.string().optional().describe('Time format string (e.g., "h:mma")'),
+  isCustomTimeFormat: z.boolean().optional().describe('Whether using custom time format')
+})
 
-export const TextWidgetOptionsSchema = z
-  .object({
-    alignment: z.enum(['left', 'center', 'right']).optional().describe('Text alignment'),
-    wrap: z.boolean().optional().describe('Enable text wrapping'),
-    fontBold: z.boolean().optional().describe('Bold text'),
-    fontItalic: z.boolean().optional().describe('Italic text'),
-    fontUnderline: z.boolean().optional().describe('Underline text'),
-    fontStrikethrough: z.boolean().optional().describe('Strikethrough text')
-  })
-  .strict()
+export const TextWidgetOptionsSchema = z.strictObject({
+  alignment: z.enum(['left', 'center', 'right']).optional().describe('Text alignment'),
+  wrap: z.boolean().optional().describe('Enable text wrapping'),
+  fontBold: z.boolean().optional().describe('Bold text'),
+  fontItalic: z.boolean().optional().describe('Italic text'),
+  fontUnderline: z.boolean().optional().describe('Underline text'),
+  fontStrikethrough: z.boolean().optional().describe('Strikethrough text')
+})
 
-export const BoolWidgetOptionsSchema = z
-  .object({
-    widget: z.enum(['TextBox', 'CheckBox']).optional().describe('Widget type for boolean display')
-  })
-  .strict()
+export const BoolWidgetOptionsSchema = z.strictObject({
+  widget: z.enum(['TextBox', 'CheckBox']).optional().describe('Widget type for boolean display')
+})
 
-export const AttachmentsWidgetOptionsSchema = z
-  .object({
-    height: z
-      .number()
-      .int()
-      .positive()
-      .optional()
-      .describe('Height of attachment preview in pixels')
-  })
-  .strict()
+export const AttachmentsWidgetOptionsSchema = z.strictObject({
+  height: z.number().int().positive().optional().describe('Height of attachment preview in pixels')
+})
 
-export const EmptyWidgetOptionsSchema = z.object({}).strict()
+export const EmptyWidgetOptionsSchema = z.strictObject({})
 
 export const WidgetOptionsSchema = z.union([
   RefWidgetOptionsSchema,
@@ -283,48 +244,14 @@ export function createWidgetOptionsSchema(columnType: string): z.ZodType<any, an
   return EmptyWidgetOptionsSchema
 }
 
-export const ColumnDefinitionSchema = z
-  .object({
-    colId: ColIdSchema,
-
-    type: ColumnTypeSchema,
-
-    label: z.string().optional().describe('Human-readable column label. If omitted, uses colId'),
-
-    isFormula: z
-      .boolean()
-      .default(false)
-      .describe('Set to true if this is a formula column. Defaults to false (data column)'),
-
-    formula: z
-      .string()
-      .optional()
-      .describe('Formula code (Python) if isFormula is true. Example: "$Price * $Quantity"'),
-
-    widgetOptions: z
-      .union([
-        z.string(), // JSON string (will be parsed and validated by action builder)
-        WidgetOptionsUnionSchema // Strict validation of widget options object
-      ])
-      .optional()
-      .describe(
-        'Type-specific options. Ex: {"numMode":"currency","currency":"USD"} for Numeric, {"choices":["A","B"]} for Choice'
-      ),
-
-    visibleCol: z
-      .union([z.string(), z.number()])
-      .optional()
-      .describe('Display column for Ref/RefList. String name or numeric ID. Ex: "Email" or 456')
-  })
-  .strict()
+// Note: ColumnDefinitionSchema is defined in column-types.ts with flat options structure
+// It's registered as 'ColumnDefinition' for JSON Schema $refs
 
 export const RowIdsSchema = z
   .array(z.number().int().positive())
   .min(1)
   .max(500)
-  .describe(
-    'Array of row IDs to operate on (max 500 per request). Get row IDs from grist_get_records'
-  )
+  .describe('Row IDs (max 500, from grist_get_records)')
 
 const FilterValueSchema = z.union([
   z.string(),
@@ -337,12 +264,12 @@ const FilterValueSchema = z.union([
 export const FilterSchema = z
   .record(z.string(), FilterValueSchema)
   .optional()
-  .describe('Filter by column values. Ex: {"Status": "Active"}, {"Priority": [1,2]}')
+  .describe('Column value filters')
 
 export const ColumnSelectionSchema = z
   .array(z.string())
   .optional()
-  .describe('Columns to return. Omit for all. Ex: ["Name", "Email"]')
+  .describe('Columns to return (omit for all)')
 
 export const StandardToolParams = z.object({
   response_format: ResponseFormatSchema
@@ -365,3 +292,32 @@ export function parseJsonString(val: unknown): unknown {
   }
   return val
 }
+
+// Register schemas with z.globalRegistry for named JSON Schema refs
+// Converts opaque refs like "$ref: #/$defs/__schema0" to "$ref: #/$defs/docId"
+// Note: columnType registration is in column-types.ts (ColumnTypeLiteralSchema)
+// Note: $defs are per-tool (duplicated ~12x), keep descriptions concise
+z.globalRegistry.add(DocIdSchema, {
+  id: 'docId',
+  description: 'Base58 doc ID, e.g. nTnRG1mdpg6BsFJnyMU69U'
+})
+z.globalRegistry.add(TableIdSchema, {
+  id: 'tableId',
+  description: 'Table name, e.g. Contacts'
+})
+z.globalRegistry.add(WorkspaceIdSchema, {
+  id: 'workspaceId',
+  description: 'Workspace ID (integer), e.g. 3'
+})
+z.globalRegistry.add(ColIdSchema, {
+  id: 'colId',
+  description: 'Column ID, e.g. Email'
+})
+z.globalRegistry.add(RowIdsSchema, {
+  id: 'rowIds',
+  description: 'Row ID array, e.g. [1, 2, 3]'
+})
+z.globalRegistry.add(FilterSchema, {
+  id: 'columnFilters',
+  description: 'Filters, e.g. {"Status": "Active"}'
+})

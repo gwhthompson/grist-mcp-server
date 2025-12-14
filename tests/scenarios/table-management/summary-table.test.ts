@@ -67,9 +67,9 @@ describe('grist_create_summary_table - Persistence Tests', () => {
       // Verify the response indicates success
       expect(result.structuredContent).toBeDefined()
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.summary_table_id).toBeDefined()
+      expect(result.structuredContent.summaryTableId).toBeDefined()
 
-      const summaryTableId = result.structuredContent.summary_table_id
+      const summaryTableId = result.structuredContent.summaryTableId
 
       // Verify the summary table exists in grist_get_tables
       const tablesResult = await discovery.getTables(context.toolContext, {
@@ -93,7 +93,7 @@ describe('grist_create_summary_table - Persistence Tests', () => {
       })
 
       expect(result.structuredContent.success).toBe(true)
-      const summaryTableId = result.structuredContent.summary_table_id
+      const summaryTableId = result.structuredContent.summaryTableId
 
       // Get pages with detailed info including widgets
       const pagesResult = await pages.getPages(context.toolContext, {
@@ -105,19 +105,19 @@ describe('grist_create_summary_table - Persistence Tests', () => {
       // Verify no page/widget directly references this specific summary table
       // This is the key behavior: keepPage=false means no visible page shows the summary
       const allPages = pagesResult.structuredContent.pages as Array<{
-        page_name?: string
-        widgets?: Array<{ table_id?: string }>
+        pageName?: string
+        widgets?: Array<{ tableId?: string }>
       }>
       const pagesWithThisTable = allPages.filter((p) =>
-        p.widgets?.some((w) => w.table_id === summaryTableId)
+        p.widgets?.some((w) => w.tableId === summaryTableId)
       )
       expect(pagesWithThisTable.length).toBe(0)
 
       // The summary table should be in raw_data_tables (not displayed on any page)
-      const rawDataTables = pagesResult.structuredContent.raw_data_tables as Array<{
-        table_id?: string
+      const rawDataTables = pagesResult.structuredContent.rawDataTables as Array<{
+        tableId?: string
       }>
-      const summaryInRawData = rawDataTables.find((t) => t.table_id === summaryTableId)
+      const summaryInRawData = rawDataTables.find((t) => t.tableId === summaryTableId)
       expect(summaryInRawData).toBeDefined()
     })
 
@@ -158,9 +158,9 @@ describe('grist_create_summary_table - Persistence Tests', () => {
       })
 
       // Look for the summary page - page_name should include our summary description
-      const allPages = pagesResult.structuredContent.pages as Array<{ page_name?: string }>
+      const allPages = pagesResult.structuredContent.pages as Array<{ pageName?: string }>
       const summaryPage = allPages.find((p) =>
-        p.page_name?.includes('Summary: Products by Category')
+        p.pageName?.includes('Summary: Products by Category')
       )
 
       expect(summaryPage).toBeDefined()
@@ -186,8 +186,8 @@ describe('grist_create_summary_table - Persistence Tests', () => {
       })
 
       // Grist should reuse the same summary table
-      expect(result1.structuredContent.summary_table_id).toBe(
-        result2.structuredContent.summary_table_id
+      expect(result1.structuredContent.summaryTableId).toBe(
+        result2.structuredContent.summaryTableId
       )
     })
   })

@@ -74,7 +74,7 @@ describe('Conditional Formatting Integration', () => {
         if (content.type === 'text') {
           const data = JSON.parse(content.text)
           expect(data.rules).toEqual([])
-          expect(data.rules_count).toBe(0)
+          expect(data.rulesCount).toBe(0)
           expect(data.scope).toBe('column')
         }
       })
@@ -97,8 +97,8 @@ describe('Conditional Formatting Integration', () => {
           expect(content.text).toContain('column')
         }
         // Verify structured content shows 0 rules
-        const data = result.structuredContent as { rules_count?: number }
-        expect(data.rules_count).toBe(0)
+        const data = result.structuredContent as { rulesCount?: number }
+        expect(data.rulesCount).toBe(0)
       })
     })
 
@@ -171,7 +171,7 @@ describe('Conditional Formatting Integration', () => {
           response_format: 'json'
         })
 
-        expect(result).toHaveErrorResponse(/hex/i)
+        expect(result).toHaveErrorResponse(/pattern|#\[0-9A-Fa-f\]/i)
       })
 
       it('should reject empty formula', async () => {
@@ -503,8 +503,8 @@ describe('Conditional Formatting Integration', () => {
         const removeContent = removeResult.content[0]
         if (removeContent.type === 'text') {
           expect(removeContent.text).toContain('success')
-          // rules_count shows remaining rules after removal
-          expect(removeContent.text).toContain('rules_count')
+          // rulesCount shows remaining rules after removal
+          expect(removeContent.text).toContain('rulesCount')
         }
 
         // Verify only one rule remains
@@ -575,7 +575,7 @@ describe('Conditional Formatting Integration', () => {
         if (content.type === 'text') {
           const data = JSON.parse(content.text)
           expect(data.rules).toEqual([])
-          expect(data.rules_count).toBe(0)
+          expect(data.rulesCount).toBe(0)
           expect(data.scope).toBe('row')
         }
       })
@@ -773,7 +773,7 @@ describe('Conditional Formatting Integration', () => {
         if (content.type === 'text') {
           const data = JSON.parse(content.text)
           expect(data.rules).toEqual([])
-          expect(data.rules_count).toBe(0)
+          expect(data.rulesCount).toBe(0)
           expect(data.scope).toBe('field')
         }
       })

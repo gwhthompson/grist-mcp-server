@@ -157,18 +157,18 @@ export class HierarchicalBuilder extends PatternBuilder<HierarchicalConfig> {
 
     // Build result
     const widgets: WidgetInfo[] = config.levels.map((level, i) => ({
-      section_id: sectionRefs[i] as number,
-      table_ref: tableRefs[i] as number,
+      sectionId: sectionRefs[i] as number,
+      tableRef: tableRefs[i] as number,
       title: titles[i] as string,
       widget_type: level.widget_type || 'grid',
       position: `level_${i + 1}`,
-      summary_table_id: summaryTableNames[i] as string
+      summaryTableId: summaryTableNames[i] as string
     }))
 
     return {
       success: true,
-      page_name: pageName,
-      view_id: viewRef,
+      pageName: pageName,
+      viewId: viewRef,
       pattern: config.pattern,
       description: `Hierarchical: ${config.levels.length} levels`,
       widgets

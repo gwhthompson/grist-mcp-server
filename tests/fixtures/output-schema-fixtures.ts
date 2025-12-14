@@ -14,8 +14,8 @@ export const GetWorkspacesFixtures = {
     total: 0,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null
+    hasMore: false,
+    nextOffset: null
   },
   withWorkspaces: {
     items: [
@@ -23,26 +23,26 @@ export const GetWorkspacesFixtures = {
         id: 1,
         name: 'Personal',
         org: 'personal',
-        org_domain: 'docs',
-        doc_count: 5,
+        orgDomain: 'docs',
+        docCount: 5,
         access: 'owners'
       },
       {
         id: 2,
         name: 'Team Workspace',
         org: 'team-org',
-        org_domain: 'team',
-        doc_count: 10,
+        orgDomain: 'team',
+        docCount: 10,
         access: 'editors',
-        created_at: '2024-01-15T10:30:00Z',
-        updated_at: '2024-06-20T14:45:00Z'
+        createdAt: '2024-01-15T10:30:00Z',
+        updatedAt: '2024-06-20T14:45:00Z'
       }
     ],
     total: 2,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null
+    hasMore: false,
+    nextOffset: null
   }
 }
 
@@ -52,8 +52,8 @@ export const GetDocumentsFixtures = {
     total: 0,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null
+    hasMore: false,
+    nextOffset: null
   },
   withDocuments: {
     items: [
@@ -61,7 +61,7 @@ export const GetDocumentsFixtures = {
         id: 'fdCVLvgAPAD1HXhQcGHCyz',
         name: 'Customer CRM',
         workspace: 'Personal',
-        workspace_id: 1,
+        workspaceId: 1,
         access: 'owners',
         url: 'https://docs.getgrist.com/fdCVLvgAPAD1HXhQcGHCyz'
       },
@@ -69,39 +69,39 @@ export const GetDocumentsFixtures = {
         id: 'abc123def456ghi789jkl0',
         name: 'Sales Report',
         workspace: { id: 2, name: 'Team Workspace' },
-        workspace_id: 2,
+        workspaceId: 2,
         access: 'editors',
-        is_pinned: true,
-        created_at: '2024-03-10T08:00:00Z',
-        updated_at: '2024-06-25T16:30:00Z',
+        isPinned: true,
+        createdAt: '2024-03-10T08:00:00Z',
+        updatedAt: '2024-06-25T16:30:00Z',
         public: false
       }
     ],
     total: 2,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null
+    hasMore: false,
+    nextOffset: null
   }
 }
 
 export const GetTablesFixtures = {
   minimal: {
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_count: 0,
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableCount: 0,
     items: [],
     total: 0,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null,
-    page_number: 1,
-    total_pages: 0,
-    items_in_page: 0
+    hasMore: false,
+    nextOffset: null,
+    pageNumber: 1,
+    totalPages: 0,
+    itemsInPage: 0
   },
   withTables: {
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_count: 2,
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableCount: 2,
     items: [
       { id: 'Customers', columns: ['Name', 'Email', 'Phone'] },
       { id: 'Orders', columns: ['OrderId', 'Customer', 'Amount', 'Date'] }
@@ -109,15 +109,15 @@ export const GetTablesFixtures = {
     total: 2,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null,
-    page_number: 1,
-    total_pages: 1,
-    items_in_page: 2
+    hasMore: false,
+    nextOffset: null,
+    pageNumber: 1,
+    totalPages: 1,
+    itemsInPage: 2
   },
   fullSchema: {
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_count: 1,
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableCount: 1,
     items: [
       {
         id: 'Customers',
@@ -126,21 +126,21 @@ export const GetTablesFixtures = {
             id: 'Name',
             label: 'Name',
             type: 'Text',
-            is_formula: false,
+            isFormula: false,
             formula: null,
-            widget_options: null,
-            visible_col: null,
-            visible_col_name: null
+            widgetOptions: null,
+            visibleCol: null,
+            visibleColName: null
           },
           {
             id: 'Email',
             label: 'Email',
             type: 'Text',
-            is_formula: false,
+            isFormula: false,
             formula: null,
-            widget_options: { widget: 'HyperLink' },
-            visible_col: null,
-            visible_col_name: null
+            widgetOptions: { widget: 'HyperLink' },
+            visibleCol: null,
+            visibleColName: null
           }
         ]
       }
@@ -148,11 +148,11 @@ export const GetTablesFixtures = {
     total: 1,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null,
-    page_number: 1,
-    total_pages: 1,
-    items_in_page: 1
+    hasMore: false,
+    nextOffset: null,
+    pageNumber: 1,
+    totalPages: 1,
+    itemsInPage: 1
   }
 }
 
@@ -162,18 +162,18 @@ export const GetTablesFixtures = {
 
 export const GetRecordsFixtures = {
   minimal: {
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Customers',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Customers',
     items: [],
     total: 0,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null
+    hasMore: false,
+    nextOffset: null
   },
   withRecords: {
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Customers',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Customers',
     items: [
       { id: 1, Name: 'Alice', Email: 'alice@example.com' },
       { id: 2, Name: 'Bob', Email: 'bob@example.com' }
@@ -181,23 +181,23 @@ export const GetRecordsFixtures = {
     total: 2,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null,
+    hasMore: false,
+    nextOffset: null,
     filters: { Status: 'Active' },
     columns: ['Name', 'Email']
   },
   withFormulaErrors: {
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Calculations',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Calculations',
     items: [{ id: 1, Value: 10, Result: null }],
     total: 1,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null,
-    formula_errors: {
-      records_with_errors: 1,
-      affected_columns: ['Result']
+    hasMore: false,
+    nextOffset: null,
+    formulaErrors: {
+      recordsWithErrors: 1,
+      affectedColumns: ['Result']
     }
   }
 }
@@ -208,8 +208,8 @@ export const QuerySqlFixtures = {
     total: 0,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null
+    hasMore: false,
+    nextOffset: null
   },
   withResults: {
     records: [
@@ -219,8 +219,8 @@ export const QuerySqlFixtures = {
     total: 2,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null
+    hasMore: false,
+    nextOffset: null
   }
 }
 
@@ -231,27 +231,27 @@ export const QuerySqlFixtures = {
 export const AddRecordsFixtures = {
   single: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Customers',
-    records_added: 1,
-    record_ids: [1],
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Customers',
+    recordsAdded: 1,
+    recordIds: [1],
     message: 'Successfully added 1 record'
   },
   multiple: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Customers',
-    records_added: 3,
-    record_ids: [1, 2, 3]
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Customers',
+    recordsAdded: 3,
+    recordIds: [1, 2, 3]
   }
 }
 
 export const UpdateRecordsFixtures = {
   basic: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Customers',
-    records_updated: 2,
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Customers',
+    recordsUpdated: 2,
     message: 'Successfully updated 2 records'
   }
 }
@@ -259,10 +259,10 @@ export const UpdateRecordsFixtures = {
 export const UpsertRecordsFixtures = {
   basic: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Customers',
-    records_processed: 5,
-    record_ids: [1, 2, 3, 4, 5],
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Customers',
+    recordsProcessed: 5,
+    recordIds: [1, 2, 3, 4, 5],
     message: 'Upsert completed successfully',
     note: '3 records updated, 2 records added'
   }
@@ -271,16 +271,16 @@ export const UpsertRecordsFixtures = {
 export const DeleteRecordsFixtures = {
   basic: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Customers',
-    records_deleted: 2,
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Customers',
+    recordsDeleted: 2,
     message: 'Successfully deleted 2 records'
   },
   withWarning: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Customers',
-    records_deleted: 0,
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Customers',
+    recordsDeleted: 0,
     warning: 'No records matched the provided IDs'
   }
 }
@@ -292,19 +292,19 @@ export const DeleteRecordsFixtures = {
 export const CreateTableFixtures = {
   basic: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'NewTable',
-    table_name: 'NewTable',
-    columns_created: 3,
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'NewTable',
+    tableName: 'NewTable',
+    columnsCreated: 3,
     message: 'Table created successfully',
     url: 'https://docs.getgrist.com/fdCVLvgAPAD1HXhQcGHCyz/p/1'
   },
   withWarnings: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Products',
-    table_name: 'Products',
-    columns_created: 2,
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Products',
+    tableName: 'Products',
+    columnsCreated: 2,
     warnings: [
       {
         column: 'price',
@@ -318,9 +318,9 @@ export const CreateTableFixtures = {
 export const RenameTableFixtures = {
   basic: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    old_table_id: 'OldName',
-    new_table_id: 'NewName',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    oldTableId: 'OldName',
+    newTableId: 'NewName',
     message: 'Table renamed successfully'
   }
 }
@@ -328,8 +328,8 @@ export const RenameTableFixtures = {
 export const DeleteTableFixtures = {
   basic: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'DeletedTable',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'DeletedTable',
     message: 'Table deleted successfully'
   }
 }
@@ -337,9 +337,9 @@ export const DeleteTableFixtures = {
 export const CreateSummaryTableFixtures = {
   basic: {
     success: true as const,
-    summary_table_id: 'Sales_summary_Region_Year',
-    source_table: 'Sales',
-    group_by_columns: ['Region', 'Year'],
+    summaryTableId: 'Sales_summary_Region_Year',
+    sourceTable: 'Sales',
+    groupByColumns: ['Region', 'Year'],
     columns: ['Region', 'Year', 'count', 'Amount'],
     description: 'Summary of Sales grouped by Region, Year'
   }
@@ -352,18 +352,18 @@ export const CreateSummaryTableFixtures = {
 export const ManageColumnsFixtures = {
   singleAdd: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Customers',
-    operations_performed: 1,
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Customers',
+    operationsPerformed: 1,
     actions: ['Added column Phone (Text)'],
     summary: { added: 1, modified: 0, deleted: 0, renamed: 0 },
     message: 'Successfully completed 1 operation'
   },
   multipleOperations: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Customers',
-    operations_performed: 3,
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Customers',
+    operationsPerformed: 3,
     actions: [
       'Added column Phone (Text)',
       'Modified column Email widgetOptions',
@@ -379,19 +379,19 @@ export const ManageColumnsFixtures = {
 export const ManageConditionalRulesFixtures = {
   add: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Sales',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Sales',
     scope: 'column',
     action: 'add',
-    rules_count: 2
+    rulesCount: 2
   },
   list: {
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    table_id: 'Sales',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    tableId: 'Sales',
     scope: 'column',
     action: 'list',
-    rules_count: 2,
+    rulesCount: 2,
     rules: [
       { index: 0, formula: '$Amount > 1000', style: { fillColor: '#00FF00' } },
       { index: 1, formula: '$Amount < 0', style: { fillColor: '#FF0000', textColor: '#FFFFFF' } }
@@ -406,21 +406,21 @@ export const ManageConditionalRulesFixtures = {
 export const CreateDocumentFixtures = {
   basic: {
     success: true as const,
-    document_id: 'newDocId12345678901234',
-    document_name: 'New Project',
-    workspace_id: 1,
+    docId: 'newDocId12345678901234',
+    documentName: 'New Project',
+    workspaceId: 1,
     url: 'https://docs.getgrist.com/newDocId12345678901234',
-    forked_from: null,
+    forkedFrom: null,
     message: 'Document created successfully',
-    next_steps: ['Create tables with grist_create_table', 'Add records with grist_add_records']
+    nextSteps: ['Create tables with grist_create_table', 'Add records with grist_add_records']
   },
   forked: {
     success: true as const,
-    document_id: 'forkedDocId12345678901',
-    document_name: 'Project Copy',
-    workspace_id: 2,
+    docId: 'forkedDocId12345678901',
+    documentName: 'Project Copy',
+    workspaceId: 2,
     url: 'https://docs.getgrist.com/forkedDocId12345678901',
-    forked_from: 'originalDocId123456789'
+    forkedFrom: 'originalDocId123456789'
   }
 }
 
@@ -431,190 +431,190 @@ export const CreateDocumentFixtures = {
 export const GetPagesFixtures = {
   minimal: {
     success: true as const,
-    doc_id: 'fdCVLvgAPAD1HXhQcGHCyz',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
     pages: [],
-    raw_data_tables: [],
+    rawDataTables: [],
     summary: {
-      total_pages: 0,
-      total_widgets: 0,
-      total_tables: 0,
-      summary_tables: 0
+      totalPages: 0,
+      totalWidgets: 0,
+      totalTables: 0,
+      summaryTables: 0
     },
     pagination: {
       total: 0,
       offset: 0,
       limit: 50,
-      has_more: false,
-      next_offset: null
+      hasMore: false,
+      nextOffset: null
     }
   },
   withWidgets: {
     success: true as const,
-    doc_id: 'fdCVLvgAPAD1HXhQcGHCyz',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
     pages: [
       {
-        page_id: 1,
-        page_name: 'Dashboard',
+        pageId: 1,
+        pageName: 'Dashboard',
         widgets: [
           {
-            widget_id: 101,
+            widgetId: 101,
             title: 'Customer Grid',
-            widget_type: 'grid',
-            table_id: 'Customers',
-            table_ref: 5,
-            is_summary_table: false
+            widgetType: 'grid',
+            tableId: 'Customers',
+            tableRef: 5,
+            isSummaryTable: false
           },
           {
-            widget_id: 102,
+            widgetId: 102,
             title: 'Order Details',
-            widget_type: 'card',
-            table_id: 'Orders',
-            table_ref: 6,
-            is_summary_table: false
+            widgetType: 'card',
+            tableId: 'Orders',
+            tableRef: 6,
+            isSummaryTable: false
           }
         ]
       }
     ],
-    raw_data_tables: [
+    rawDataTables: [
       {
-        table_id: 'Hidden_Config',
-        table_ref: 10,
-        is_summary_table: false,
-        referenced_on_pages: []
+        tableId: 'Hidden_Config',
+        tableRef: 10,
+        isSummaryTable: false,
+        referencedOnPages: []
       }
     ],
     summary: {
-      total_pages: 1,
-      total_widgets: 2,
-      total_tables: 3,
-      summary_tables: 0
+      totalPages: 1,
+      totalWidgets: 2,
+      totalTables: 3,
+      summaryTables: 0
     },
     pagination: {
       total: 1,
       offset: 0,
       limit: 50,
-      has_more: false,
-      next_offset: null
+      hasMore: false,
+      nextOffset: null
     }
   },
   withSummaryTables: {
     success: true as const,
-    doc_id: 'fdCVLvgAPAD1HXhQcGHCyz',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
     pages: [
       {
-        page_id: 1,
-        page_name: 'Sales Analysis',
+        pageId: 1,
+        pageName: 'Sales Analysis',
         widgets: [
           {
-            widget_id: 201,
+            widgetId: 201,
             title: 'Sales by Region',
-            widget_type: 'grid',
-            table_id: 'Sales_summary_Region',
-            table_ref: 15,
-            is_summary_table: true,
-            summary_source_table: 'Sales',
-            group_by_columns: ['Region']
+            widgetType: 'grid',
+            tableId: 'Sales_summary_Region',
+            tableRef: 15,
+            isSummaryTable: true,
+            summarySourceTable: 'Sales',
+            groupByColumns: ['Region']
           }
         ]
       }
     ],
-    raw_data_tables: [],
+    rawDataTables: [],
     summary: {
-      total_pages: 1,
-      total_widgets: 1,
-      total_tables: 2,
-      summary_tables: 1
+      totalPages: 1,
+      totalWidgets: 1,
+      totalTables: 2,
+      summaryTables: 1
     },
     pagination: {
       total: 1,
       offset: 0,
       limit: 50,
-      has_more: false,
-      next_offset: null
+      hasMore: false,
+      nextOffset: null
     }
   },
   withLinking: {
     success: true as const,
-    doc_id: 'fdCVLvgAPAD1HXhQcGHCyz',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
     pages: [
       {
-        page_id: 1,
-        page_name: 'Master Detail',
+        pageId: 1,
+        pageName: 'Master Detail',
         widgets: [
           {
-            widget_id: 301,
+            widgetId: 301,
             title: 'Customers',
-            widget_type: 'grid',
-            table_id: 'Customers',
-            table_ref: 5,
-            is_summary_table: false
+            widgetType: 'grid',
+            tableId: 'Customers',
+            tableRef: 5,
+            isSummaryTable: false
           },
           {
-            widget_id: 302,
+            widgetId: 302,
             title: 'Orders',
-            widget_type: 'grid',
-            table_id: 'Orders',
-            table_ref: 6,
-            is_summary_table: false,
-            linked_to: {
-              source_widget_id: 301,
-              source_col_ref: 0,
-              target_col_ref: 25
+            widgetType: 'grid',
+            tableId: 'Orders',
+            tableRef: 6,
+            isSummaryTable: false,
+            linkedTo: {
+              sourceWidgetId: 301,
+              sourceColRef: 0,
+              targetColRef: 25
             }
           }
         ]
       }
     ],
-    raw_data_tables: [],
+    rawDataTables: [],
     summary: {
-      total_pages: 1,
-      total_widgets: 2,
-      total_tables: 2,
-      summary_tables: 0
+      totalPages: 1,
+      totalWidgets: 2,
+      totalTables: 2,
+      summaryTables: 0
     },
     pagination: {
       total: 1,
       offset: 0,
       limit: 50,
-      has_more: false,
-      next_offset: null
+      hasMore: false,
+      nextOffset: null
     }
   },
   withChartConfig: {
     success: true as const,
-    doc_id: 'fdCVLvgAPAD1HXhQcGHCyz',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
     pages: [
       {
-        page_id: 1,
-        page_name: 'Charts',
+        pageId: 1,
+        pageName: 'Charts',
         widgets: [
           {
-            widget_id: 401,
+            widgetId: 401,
             title: 'Sales Chart',
-            widget_type: 'chart',
-            table_id: 'Sales',
-            table_ref: 8,
-            is_summary_table: false,
-            chart_config: {
-              chart_type: 'bar'
+            widgetType: 'chart',
+            tableId: 'Sales',
+            tableRef: 8,
+            isSummaryTable: false,
+            chartConfig: {
+              chartType: 'bar'
             }
           }
         ]
       }
     ],
-    raw_data_tables: [],
+    rawDataTables: [],
     summary: {
-      total_pages: 1,
-      total_widgets: 1,
-      total_tables: 1,
-      summary_tables: 0
+      totalPages: 1,
+      totalWidgets: 1,
+      totalTables: 1,
+      summaryTables: 0
     },
     pagination: {
       total: 1,
       offset: 0,
       limit: 50,
-      has_more: false,
-      next_offset: null
+      hasMore: false,
+      nextOffset: null
     }
   }
 }
@@ -622,13 +622,13 @@ export const GetPagesFixtures = {
 export const BuildPageFixtures = {
   basic: {
     success: true as const,
-    page_name: 'New Dashboard',
-    view_id: 10,
+    pageName: 'New Dashboard',
+    viewId: 10,
     pattern: 'master_detail',
     description: 'Master-detail page with Customers and Orders',
     widgets: [
-      { section_id: 101, table_ref: 5, position: 'left', title: 'Customers' },
-      { section_id: 102, table_ref: 6, position: 'right', title: 'Orders' }
+      { sectionId: 101, tableRef: 5, position: 'left', title: 'Customers' },
+      { sectionId: 102, tableRef: 6, position: 'right', title: 'Orders' }
     ]
   }
 }
@@ -636,7 +636,7 @@ export const BuildPageFixtures = {
 export const ConfigureWidgetFixtures = {
   basic: {
     success: true as const,
-    operations_completed: 2,
+    operationsCompleted: 2,
     summary: ['Linked Orders to Customers', 'Added sort by Date DESC']
   }
 }
@@ -644,7 +644,7 @@ export const ConfigureWidgetFixtures = {
 export const UpdatePageFixtures = {
   basic: {
     success: true as const,
-    operations_completed: 1,
+    operationsCompleted: 1,
     summary: ['Renamed page from "Old Name" to "New Name"']
   }
 }
@@ -656,49 +656,49 @@ export const UpdatePageFixtures = {
 export const WebhookListFixtures = {
   empty: {
     operation: 'list' as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    webhook_count: 0,
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    webhookCount: 0,
     total: 0,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null,
-    page_number: 1,
-    total_pages: 0,
-    items_in_page: 0,
+    hasMore: false,
+    nextOffset: null,
+    pageNumber: 1,
+    totalPages: 0,
+    itemsInPage: 0,
     webhooks: []
   },
   withWebhooks: {
     operation: 'list' as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    webhook_count: 2,
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    webhookCount: 2,
     total: 2,
     offset: 0,
     limit: 100,
-    has_more: false,
-    next_offset: null,
-    page_number: 1,
-    total_pages: 1,
-    items_in_page: 2,
+    hasMore: false,
+    nextOffset: null,
+    pageNumber: 1,
+    totalPages: 1,
+    itemsInPage: 2,
     webhooks: [
       {
         id: 'webhook-uuid-1234',
         name: 'New Customer Alert',
         url: 'https://hooks.example.com/customers',
-        table_id: 'Customers',
-        event_types: ['add'],
+        tableId: 'Customers',
+        eventTypes: ['add'],
         enabled: true,
-        is_ready_column: null,
+        isReadyColumn: null,
         memo: 'Sends notification when new customer added'
       },
       {
         id: 'webhook-uuid-5678',
         name: 'Order Update',
         url: 'https://hooks.example.com/orders',
-        table_id: 'Orders',
-        event_types: ['add', 'update'],
+        tableId: 'Orders',
+        eventTypes: ['add', 'update'],
         enabled: true,
-        is_ready_column: 'IsReady',
+        isReadyColumn: 'IsReady',
         memo: null
       }
     ]
@@ -709,11 +709,11 @@ export const WebhookCreateFixtures = {
   basic: {
     operation: 'create' as const,
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    webhook_id: 'new-webhook-uuid',
-    webhook_url: 'https://hooks.example.com/new',
-    table_id: 'Customers',
-    event_types: ['add', 'update']
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    webhookId: 'new-webhook-uuid',
+    webhookUrl: 'https://hooks.example.com/new',
+    tableId: 'Customers',
+    eventTypes: ['add', 'update']
   }
 }
 
@@ -721,9 +721,9 @@ export const WebhookUpdateFixtures = {
   basic: {
     operation: 'update' as const,
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    webhook_id: 'webhook-uuid-1234',
-    fields_updated: ['url', 'enabled']
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    webhookId: 'webhook-uuid-1234',
+    fieldsUpdated: ['url', 'enabled']
   }
 }
 
@@ -731,8 +731,8 @@ export const WebhookDeleteFixtures = {
   basic: {
     operation: 'delete' as const,
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
-    webhook_id: 'webhook-uuid-1234'
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
+    webhookId: 'webhook-uuid-1234'
   }
 }
 
@@ -740,7 +740,7 @@ export const WebhookClearQueueFixtures = {
   basic: {
     operation: 'clear_queue' as const,
     success: true as const,
-    document_id: 'fdCVLvgAPAD1HXhQcGHCyz',
+    docId: 'fdCVLvgAPAD1HXhQcGHCyz',
     action: 'cleared_webhook_queue' as const
   }
 }
@@ -751,9 +751,9 @@ export const WebhookClearQueueFixtures = {
 
 export const HelpFixtures = {
   basic: {
-    tool_name: 'grist_add_records',
+    toolName: 'grist_add_records',
     topic: 'full',
     documentation: 'Adds new records to a table...',
-    available_topics: ['overview', 'examples', 'errors', 'parameters', 'full']
+    availableTopics: ['overview', 'examples', 'errors', 'parameters', 'full']
   }
 }

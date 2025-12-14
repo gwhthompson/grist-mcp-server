@@ -90,15 +90,15 @@ export class FormTableBuilder extends PatternBuilder<FormTableConfig> {
     // Build result
     const widgets: WidgetInfo[] = [
       {
-        section_id: formSectionRef,
-        table_ref: formTableRef,
+        sectionId: formSectionRef,
+        tableRef: formTableRef,
         title: formTitle,
         widget_type: 'form',
         position: 'form'
       },
       {
-        section_id: tableSectionRef,
-        table_ref: tableTableRef,
+        sectionId: tableSectionRef,
+        tableRef: tableTableRef,
         title: tableTitle,
         widget_type: config.table.widget_type || 'grid',
         position: 'table'
@@ -107,8 +107,8 @@ export class FormTableBuilder extends PatternBuilder<FormTableConfig> {
 
     return {
       success: true,
-      page_name: pageName,
-      view_id: viewRef,
+      pageName: pageName,
+      viewId: viewRef,
       pattern: config.pattern,
       description: `Form-Table: ${config.form.table} form + ${config.table.table} table`,
       widgets

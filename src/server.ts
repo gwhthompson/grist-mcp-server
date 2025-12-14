@@ -13,6 +13,55 @@ import { SchemaCache } from './services/schema-cache.js'
 import { sharedLogger } from './utils/shared-logger.js'
 
 /**
+ * Server instructions for LLMs using this MCP server.
+ * Provides workflow guidance, tool relationships, and constraints.
+ *
+ * Reference: https://blog.modelcontextprotocol.io/2025-11-03-using-server-instructions
+ */
+const SERVER_INSTRUCTIONS = `## Grist MCP Server
+
+Grist is a modern relational spreadsheet with database features. This server provides 12 tools organized into discovery, reading, and management categories.
+
+### Workflow Prerequisites
+- Call grist_get_workspaces before grist_get_documents (to get workspaceId)
+- Call grist_get_tables before grist_manage_records (to understand schema)
+- Use grist_discover_tools to get full schemas for specific tools on demand
+
+### Tool Categories
+- **Discovery**: grist_get_workspaces → grist_get_documents → grist_get_tables (follow this order)
+- **Reading**: grist_query_sql (JOINs, aggregations), grist_get_records (simple filters)
+- **Management**: grist_manage_records (CRUD), grist_manage_schema (tables/columns), grist_manage_pages (UI)
+
+### Cross-Tool Relationships
+- Tables created via grist_manage_schema appear immediately for grist_manage_pages
+- Summary tables produce tableId like "Source_summary_GroupBy1_GroupBy2"
+- Widgets reference tables by tableId, not display name
+- Use operations arrays to batch related changes in single calls
+
+### ID Formats & Constraints
+- docId: Base58, exactly 22 chars (excludes 0, O, I, l for readability)
+- tableId: Must start with uppercase letter, valid Python identifier
+- colId: Valid Python identifier, cannot start with "gristHelper_"
+- Max 500 records per add/update operation, max 10 operations per batch
+
+### Token Efficiency
+- Use response_format="json" for programmatic processing, "markdown" for display
+- Use grist_discover_tools with detail_level="names" for quick discovery
+- Paginate large record sets with limit/offset instead of fetching all
+- Use grist_help with topic="overview" (~500B) before "full" documentation
+
+### Batching Guidance
+- Group related record operations in single grist_manage_records call
+- Combine table creation with columns in single grist_manage_schema call
+- Create multiple pages/widgets together in single grist_manage_pages call
+
+### Error Recovery
+- For partial batch failures, completed operations persist (no rollback)
+- Check operationIndex in error response to know where to resume
+- If widget linking fails, verify both widgets exist on same page first
+- If column modification fails, check column type compatibility`
+
+/**
  * Configuration for creating a Grist MCP server.
  */
 export interface ServerConfig {
@@ -93,11 +142,16 @@ export async function createGristMcpServer(
   // Create or use injected schema cache
   const schemaCache = deps?.schemaCache ?? new SchemaCache(client)
 
-  // Create MCP server
-  const server = new McpServer({
-    name: config.name,
-    version: config.version
-  })
+  // Create MCP server with instructions for LLMs
+  const server = new McpServer(
+    {
+      name: config.name,
+      version: config.version
+    },
+    {
+      instructions: SERVER_INSTRUCTIONS
+    }
+  )
 
   // Setup metrics if enabled
   let metricsCollector: MetricsCollector | undefined = deps?.metrics

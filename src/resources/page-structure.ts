@@ -19,8 +19,8 @@ interface WidgetInfo {
   id: number
   title: string
   type: string
-  table_id: string
-  table_ref: number
+  tableId: string
+  tableRef: number
 }
 
 interface PageInfo {
@@ -30,8 +30,8 @@ interface PageInfo {
 }
 
 interface PageStructureResult {
-  document_id: string
-  page_count: number
+  docId: string
+  pageCount: number
   pages: PageInfo[]
 }
 
@@ -92,8 +92,8 @@ async function fetchPageStructure(
       id: widget.id,
       title: widget.title || `Untitled (${widget.parentKey})`,
       type: mapWidgetType(widget.parentKey),
-      table_id: tableMetadata.get(widget.tableRef) || `table_ref_${widget.tableRef}`,
-      table_ref: widget.tableRef
+      tableId: tableMetadata.get(widget.tableRef) || `table_ref_${widget.tableRef}`,
+      tableRef: widget.tableRef
     }))
 
     pages.push({
@@ -104,8 +104,8 @@ async function fetchPageStructure(
   }
 
   return {
-    document_id: docId,
-    page_count: pages.length,
+    docId: docId,
+    pageCount: pages.length,
     pages
   }
 }

@@ -102,8 +102,8 @@ export interface TestGetRecordsResponse {
     total: number
     offset: number
     limit: number
-    has_more: boolean
-    next_offset: number | null
+    hasMore: boolean
+    nextOffset: number | null
   }
 }
 
@@ -119,14 +119,14 @@ export interface TestGetRecordsResponse {
  *   response_format: 'json'
  * })
  * const data = result.structuredContent as TestAddRecordsResponse
- * expect(data.records_added).toBe(1)
+ * expect(data.recordsAdded).toBe(1)
  * expect(data.row_ids).toHaveLength(1)
  * ```
  */
 export interface TestAddRecordsResponse {
   success: boolean
-  records_added: number
-  row_ids: number[]
+  recordsAdded: number
+  rowIds: number[]
 }
 
 /**
@@ -144,14 +144,14 @@ export interface TestAddRecordsResponse {
  *   response_format: 'json'
  * })
  * const data = result.structuredContent as TestUpsertRecordsResponse
- * expect(data.records_updated).toBe(1)
+ * expect(data.recordsUpdated).toBe(1)
  * ```
  */
 export interface TestUpsertRecordsResponse {
   success: boolean
-  records_added: number
-  records_updated: number
-  row_ids: number[]
+  recordsAdded: number
+  recordsUpdated: number
+  rowIds: number[]
 }
 
 /**
@@ -167,12 +167,12 @@ export interface TestUpsertRecordsResponse {
  *   response_format: 'json'
  * })
  * const data = result.structuredContent as TestUpdateRecordsResponse
- * expect(data.records_updated).toBe(3)
+ * expect(data.recordsUpdated).toBe(3)
  * ```
  */
 export interface TestUpdateRecordsResponse {
   success: boolean
-  records_updated: number
+  recordsUpdated: number
 }
 
 /**
@@ -187,12 +187,12 @@ export interface TestUpdateRecordsResponse {
  *   response_format: 'json'
  * })
  * const data = result.structuredContent as TestDeleteRecordsResponse
- * expect(data.records_deleted).toBe(3)
+ * expect(data.recordsDeleted).toBe(3)
  * ```
  */
 export interface TestDeleteRecordsResponse {
   success: boolean
-  records_deleted: number
+  recordsDeleted: number
 }
 
 /**

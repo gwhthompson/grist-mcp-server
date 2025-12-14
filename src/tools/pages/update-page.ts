@@ -172,7 +172,7 @@ class UpdatePageTool extends GristTool<typeof UpdatePageSchema, unknown> {
     // Return plain data - GristTool base class will handle formatting via formatResponse()
     return {
       success: true,
-      operations_completed: operations.length,
+      operationsCompleted: operations.length,
       summary
     } as unknown
   }

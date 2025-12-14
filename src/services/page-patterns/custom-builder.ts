@@ -127,16 +127,16 @@ export class CustomBuilder extends PatternBuilder<CustomConfig> {
       // Safe: sectionRefs and config.widgets have same length from construction
       const widget = config.widgets[i] as (typeof config.widgets)[number]
       return {
-        section_id: sectionRef,
-        table_ref: tableRefsMap.get(widget.table) ?? 0,
+        sectionId: sectionRef,
+        tableRef: tableRefsMap.get(widget.table) ?? 0,
         title: widget.title ?? widget.table
       }
     })
 
     return {
       success: true,
-      page_name: pageName,
-      view_id: viewRef,
+      pageName: pageName,
+      viewId: viewRef,
       pattern: config.pattern,
       description: `Custom pattern: ${config.widgets.length} widgets`,
       widgets

@@ -9,6 +9,10 @@ export const WebhookIdSchema = z
       'Get webhook IDs from grist_manage_webhooks with action="list".'
   })
   .describe('UUID of the webhook')
+WebhookIdSchema.register(z.globalRegistry, {
+  id: 'webhookId',
+  description: 'UUID of the webhook, e.g. a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+})
 
 // ALLOWED_WEBHOOK_DOMAINS provides server-side SSRF protection
 const WebhookUrlSchema = z
@@ -42,6 +46,7 @@ const WebhookUrlSchema = z
       "Must be publicly accessible and in the server's ALLOWED_WEBHOOK_DOMAINS list. " +
       '(HTTPS recommended for security).'
   )
+WebhookUrlSchema.register(z.globalRegistry, { id: 'webhookUrl' })
 
 const SQL_RESERVED_KEYWORDS = new Set([
   'SELECT',
@@ -91,6 +96,7 @@ const WebhookColumnIdSchema = z
       'Column must exist in the target table. Use for conditional webhooks ' +
       '(e.g., only send webhook when Status="Approved").'
   )
+WebhookColumnIdSchema.register(z.globalRegistry, { id: 'webhookColumnId' })
 
 export const WebhookEventTypeSchema = z.enum(['add', 'update'], {
   error:
@@ -99,49 +105,45 @@ export const WebhookEventTypeSchema = z.enum(['add', 'update'], {
     '["update"] for changes to existing records, ' +
     'or ["add", "update"] for both.'
 })
+WebhookEventTypeSchema.register(z.globalRegistry, { id: 'webhookEventType' })
 
-export const WebhookFieldsSchema = z
-  .object({
-    name: z
-      .string()
-      .min(1, { message: 'Webhook name cannot be empty' })
-      .max(255, { message: 'Webhook name must be 255 characters or less' })
-      .nullable()
-      .optional()
-      .describe('Human-readable name for the webhook (1-255 characters)'),
+export const WebhookFieldsSchema = z.strictObject({
+  name: z
+    .string()
+    .min(1, { message: 'Webhook name cannot be empty' })
+    .max(255, { message: 'Webhook name must be 255 characters or less' })
+    .nullable()
+    .optional()
+    .describe('Human-readable name for the webhook (1-255 characters)'),
 
-    memo: z
-      .string()
-      .max(1000, { message: 'Webhook memo must be 1000 characters or less' })
-      .nullable()
-      .optional()
-      .describe('Description or notes about the webhook (max 1000 characters)'),
+  memo: z
+    .string()
+    .max(1000, { message: 'Webhook memo must be 1000 characters or less' })
+    .nullable()
+    .optional()
+    .describe('Description or notes about the webhook (max 1000 characters)'),
 
-    url: WebhookUrlSchema,
+  url: WebhookUrlSchema,
 
-    enabled: z
-      .boolean()
-      .optional()
-      .describe('Whether the webhook is active. Default: true if omitted'),
+  enabled: z.boolean().optional().describe('Whether the webhook is active (default: true)'),
 
-    eventTypes: z
-      .array(WebhookEventTypeSchema)
-      .min(1, {
-        message: 'At least one event type required. Use ["add"], ["update"], or ["add", "update"].'
-      })
-      .refine((types) => new Set(types).size === types.length, {
-        error: 'Event types must be unique. Remove duplicate entries.'
-      })
-      .describe('Array of event types that trigger this webhook: "add", "update"'),
+  eventTypes: z
+    .array(WebhookEventTypeSchema)
+    .min(1, {
+      message: 'At least one event type required. Use ["add"], ["update"], or ["add", "update"].'
+    })
+    .refine((types) => new Set(types).size === types.length, {
+      error: 'Event types must be unique. Remove duplicate entries.'
+    })
+    .describe('Array of event types that trigger this webhook: "add", "update"'),
 
-    isReadyColumn: WebhookColumnIdSchema,
+  isReadyColumn: WebhookColumnIdSchema,
 
-    tableId: TableIdSchema
-  })
-  .strict()
+  tableId: TableIdSchema
+})
 
 export const ListWebhooksOperationSchema = z
-  .object({
+  .strictObject({
     action: z.literal('list'),
     offset: z
       .number()
@@ -159,19 +161,17 @@ export const ListWebhooksOperationSchema = z
       .optional()
       .describe('Maximum webhooks to return (default: 100, max: 1000)')
   })
-  .strict()
   .describe('List all webhooks for a document with usage statistics')
 
 export const CreateWebhookOperationSchema = z
-  .object({
+  .strictObject({
     action: z.literal('create'),
     fields: WebhookFieldsSchema
   })
-  .strict()
   .describe('Create a new webhook subscription for table changes')
 
 const WebhookUpdateFieldsSchema = z
-  .object({
+  .strictObject({
     name: z
       .string()
       .min(1, { message: 'Webhook name cannot be empty' })
@@ -206,7 +206,6 @@ const WebhookUpdateFieldsSchema = z
 
     tableId: TableIdSchema.optional()
   })
-  .strict()
   .refine((fields) => Object.keys(fields).length > 0, {
     error:
       'At least one field must be provided for update. ' +
@@ -214,29 +213,26 @@ const WebhookUpdateFieldsSchema = z
   })
 
 export const UpdateWebhookOperationSchema = z
-  .object({
+  .strictObject({
     action: z.literal('update'),
     webhookId: WebhookIdSchema,
     fields: WebhookUpdateFieldsSchema.describe(
       'Fields to update. Only provided fields will be modified'
     )
   })
-  .strict()
   .describe('Update an existing webhook configuration')
 
 export const DeleteWebhookOperationSchema = z
-  .object({
+  .strictObject({
     action: z.literal('delete'),
     webhookId: WebhookIdSchema
   })
-  .strict()
   .describe('Delete a webhook subscription permanently')
 
 export const ClearQueueOperationSchema = z
-  .object({
+  .strictObject({
     action: z.literal('clear_queue')
   })
-  .strict()
   .describe(
     'Clear all pending webhook payloads in the queue. ' +
       'WARNING: This is destructive and cannot be undone. ' +
@@ -253,15 +249,13 @@ const RawWebhookOperationSchema = z.discriminatedUnion('action', [
 
 export const WebhookOperationSchema = z.preprocess(parseJsonString, RawWebhookOperationSchema)
 
-export const ManageWebhooksSchema = z
-  .object({
-    docId: DocIdSchema,
-    operation: WebhookOperationSchema.describe(
-      'Webhook operation to perform: list, create, update, delete, or clear_queue'
-    ),
-    response_format: ResponseFormatSchema
-  })
-  .strict()
+export const ManageWebhooksSchema = z.strictObject({
+  docId: DocIdSchema,
+  operation: WebhookOperationSchema.describe(
+    'Webhook operation to perform: list, create, update, delete, or clear_queue'
+  ),
+  response_format: ResponseFormatSchema
+})
 
 export type ManageWebhooksInput = z.infer<typeof ManageWebhooksSchema>
 export type WebhookOperation = z.infer<typeof WebhookOperationSchema>

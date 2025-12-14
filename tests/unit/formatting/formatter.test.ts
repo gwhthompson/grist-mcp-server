@@ -68,7 +68,7 @@ describe('Formatter - Error Message Constraints', () => {
     it('should preserve error metadata in structured response', () => {
       const errorMessage = 'Test error'
       const options = {
-        error_code: 'TEST_ERROR',
+        errorCode: 'TEST_ERROR',
         context: { detail: 'Additional context' },
         retryable: true
       }
@@ -77,7 +77,7 @@ describe('Formatter - Error Message Constraints', () => {
 
       expect(response.structuredContent.success).toBe(false)
       expect(response.structuredContent.error).toBe(errorMessage)
-      expect(response.structuredContent.error_code).toBe('TEST_ERROR')
+      expect(response.structuredContent.errorCode).toBe('TEST_ERROR')
       expect(response.structuredContent.context).toEqual({ detail: 'Additional context' })
       expect(response.structuredContent.retryable).toBe(true)
     })

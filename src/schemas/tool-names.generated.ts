@@ -6,26 +6,16 @@
  * Generated from ALL_TOOLS at build time.
  */
 export const TOOL_NAMES = [
+  'grist_discover_tools',
   'grist_get_workspaces',
   'grist_get_documents',
   'grist_get_tables',
   'grist_query_sql',
   'grist_get_records',
-  'grist_add_records',
-  'grist_update_records',
-  'grist_upsert_records',
-  'grist_delete_records',
-  'grist_create_table',
-  'grist_rename_table',
-  'grist_delete_table',
-  'grist_create_summary_table',
-  'grist_manage_columns',
-  'grist_manage_conditional_rules',
+  'grist_manage_records',
+  'grist_manage_schema',
+  'grist_manage_pages',
   'grist_create_document',
-  'grist_get_pages',
-  'grist_build_page',
-  'grist_configure_widget',
-  'grist_update_page',
   'grist_manage_webhooks',
   'grist_help'
 ] as const

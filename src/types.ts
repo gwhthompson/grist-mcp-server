@@ -12,11 +12,11 @@ export interface PaginationMetadata {
   total: number
   offset: number
   limit: number
-  has_more: boolean
-  next_offset: number | null
-  page_number: number
-  total_pages: number
-  items_in_page: number
+  hasMore: boolean
+  nextOffset: number | null
+  pageNumber: number
+  totalPages: number
+  itemsInPage: number
 }
 
 export interface MCPToolResponse {
@@ -31,16 +31,16 @@ export interface MCPToolResponse {
 
 export interface TruncationInfo {
   truncated: boolean
-  items_returned: number
-  items_requested: number
-  truncation_reason: string
+  itemsReturned: number
+  itemsRequested: number
+  truncationReason: string
   suggestions: string[]
 }
 
 export interface StandardErrorResponse {
   success: false
   error: string
-  error_code?: string
+  errorCode?: string
   context?: Record<string, unknown>
   retryable?: boolean
   suggestions?: string[]

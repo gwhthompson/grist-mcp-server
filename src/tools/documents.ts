@@ -4,34 +4,32 @@ import { DocIdSchema, ResponseFormatSchema, WorkspaceIdSchema } from '../schemas
 import { CreateDocumentOutputSchema } from '../schemas/output-schemas.js'
 import { GristTool } from './base/GristTool.js'
 
-export const CreateDocumentSchema = z
-  .object({
-    name: z
-      .string()
-      .min(1)
-      .max(200)
-      .describe(
-        'Name for the new document. Example: "Customer CRM", "Q4 Sales Report", "Project Tracker"'
-      ),
-    workspaceId: WorkspaceIdSchema,
-    forkFromDocId: DocIdSchema.optional().describe(
-      'Optional: Document ID to fork from. Creates a copy with same structure and data. Omit to create blank document'
+export const CreateDocumentSchema = z.strictObject({
+  name: z
+    .string()
+    .min(1)
+    .max(200)
+    .describe(
+      'Name for the new document. Example: "Customer CRM", "Q4 Sales Report", "Project Tracker"'
     ),
-    response_format: ResponseFormatSchema
-  })
-  .strict()
+  workspaceId: WorkspaceIdSchema,
+  forkFromDocId: DocIdSchema.optional().describe(
+    'Optional: Document ID to fork from. Creates a copy with same structure and data. Omit to create blank document'
+  ),
+  response_format: ResponseFormatSchema
+})
 
 export type CreateDocumentInput = z.infer<typeof CreateDocumentSchema>
 
 interface CreateDocumentOutput {
   success: boolean
-  document_id: string
-  document_name: string
-  workspace_id: number
+  docId: string
+  documentName: string
+  workspaceId: number
   url: string
-  forked_from: string | null
+  forkedFrom: string | null
   message: string
-  next_steps: string[]
+  nextSteps: string[]
 }
 
 export class CreateDocumentTool extends GristTool<
@@ -63,15 +61,15 @@ export class CreateDocumentTool extends GristTool<
 
     return {
       success: true,
-      document_id: docId,
-      document_name: params.name,
-      workspace_id: params.workspaceId,
+      docId: docId,
+      documentName: params.name,
+      workspaceId: params.workspaceId,
       url: docUrl,
-      forked_from: params.forkFromDocId || null,
+      forkedFrom: params.forkFromDocId || null,
       message: params.forkFromDocId
         ? `Successfully forked document "${params.name}" from ${params.forkFromDocId}`
         : `Successfully created new document "${params.name}"`,
-      next_steps: [
+      nextSteps: [
         `Use grist_get_tables with docId="${docId}" to see table structure`,
         `Use grist_create_table to add tables`,
         `Access document at: ${docUrl}`

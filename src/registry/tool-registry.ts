@@ -7,7 +7,7 @@ interface McpToolOptions {
   readonly title: string
   readonly description: string
   readonly inputSchema: z.ZodRawShape
-  readonly outputSchema?: z.ZodRawShape
+  readonly outputSchema?: z.ZodTypeAny
   readonly annotations?: {
     readonly readOnlyHint?: boolean
     readonly destructiveHint?: boolean
@@ -53,7 +53,7 @@ export async function registerTool<TSchema extends z.ZodType<any, any>>(
       description: definition.description,
       inputSchema: definition.inputSchema as unknown as z.ZodRawShape,
       ...(definition.outputSchema && {
-        outputSchema: definition.outputSchema as unknown as z.ZodRawShape
+        outputSchema: definition.outputSchema
       }),
       annotations: definition.annotations
     }
@@ -91,7 +91,6 @@ export async function registerTool<TSchema extends z.ZodType<any, any>>(
       }
 
       try {
-        // MCP SDK parses params with inputSchema, so type assertion is safe
         const result = await definition.handler(context, params as z.infer<TSchema>)
 
         if (shouldLogCalls) {

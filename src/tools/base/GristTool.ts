@@ -102,7 +102,7 @@ export abstract class GristTool<TInput extends z.ZodType<any, any>, TOutput = un
   protected handleError(error: unknown): MCPToolResponse {
     if (isGristError(error)) {
       return formatErrorResponse(error.toUserMessage(), {
-        error_code: error.code,
+        errorCode: error.code,
         retryable: error.isRetryable(),
         suggestions: error.getSuggestions(),
         context: error.context

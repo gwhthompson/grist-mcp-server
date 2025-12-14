@@ -1,0 +1,244 @@
+/**
+ * MCP Protocol Tests - Schema Generation
+ *
+ * Validates that JSON schemas generated from Zod schemas
+ * are compliant with MCP spec and JSON Schema 2020-12.
+ */
+
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createMCPTestClient, type MCPTestContext } from '../helpers/mcp-test-client.js'
+
+describe('MCP Protocol - Schema Generation', () => {
+  let ctx: MCPTestContext
+
+  beforeAll(async () => {
+    ctx = await createMCPTestClient({ skipResources: true })
+  })
+
+  afterAll(async () => {
+    await ctx.cleanup()
+  })
+
+  describe('JSON Schema 2020-12 compliance', () => {
+    it('should include $schema reference for JSON Schema 2020-12', async () => {
+      const result = await ctx.client.listTools()
+
+      for (const tool of result.tools) {
+        const schema = tool.inputSchema as Record<string, unknown>
+
+        // MCP spec says default is 2020-12 if no $schema field
+        // If present, should be 2020-12
+        if (schema.$schema) {
+          expect(schema.$schema).toContain('2020-12')
+        }
+      }
+    })
+
+    it('should have type: object for all tool schemas', async () => {
+      const result = await ctx.client.listTools()
+
+      for (const tool of result.tools) {
+        expect(tool.inputSchema.type).toBe('object')
+      }
+    })
+
+    it('should have valid additionalProperties setting', async () => {
+      const result = await ctx.client.listTools()
+
+      for (const tool of result.tools) {
+        const schema = tool.inputSchema as Record<string, unknown>
+        // Should either be false or not present
+        if (schema.additionalProperties !== undefined) {
+          expect(schema.additionalProperties).toBe(false)
+        }
+      }
+    })
+  })
+
+  describe('$defs reference resolution', () => {
+    it('should have resolvable $refs in schemas with $defs', async () => {
+      const result = await ctx.client.listTools()
+
+      // grist_manage_records uses $defs for docId, tableId, etc.
+      const manageRecordsTool = result.tools.find((t) => t.name === 'grist_manage_records')
+      expect(manageRecordsTool).toBeDefined()
+
+      const schema = manageRecordsTool?.inputSchema as Record<string, unknown>
+      const defs = schema.$defs as Record<string, unknown> | undefined
+
+      if (defs) {
+        // Check that docId and tableId are defined
+        expect(defs.docId || defs.tableId).toBeDefined()
+      }
+    })
+
+    it('should have valid schema structure after $ref resolution', async () => {
+      const result = await ctx.client.listTools()
+
+      for (const tool of result.tools) {
+        const schema = tool.inputSchema as Record<string, unknown>
+
+        // Properties should be defined (unless tool has no parameters)
+        if (schema.properties) {
+          expect(typeof schema.properties).toBe('object')
+        }
+
+        // If $defs exist, they should be objects
+        if (schema.$defs) {
+          expect(typeof schema.$defs).toBe('object')
+          for (const [defName, defSchema] of Object.entries(
+            schema.$defs as Record<string, unknown>
+          )) {
+            expect(defSchema, `$defs.${defName} should be an object`).toBeDefined()
+            expect(typeof defSchema).toBe('object')
+          }
+        }
+      }
+    })
+  })
+
+  describe('required fields', () => {
+    it('should mark required parameters correctly', async () => {
+      const result = await ctx.client.listTools()
+
+      // grist_get_records requires docId and tableId
+      const getRecordsTool = result.tools.find((t) => t.name === 'grist_get_records')
+      expect(getRecordsTool).toBeDefined()
+
+      const schema = getRecordsTool?.inputSchema as Record<string, unknown>
+      const required = schema.required as string[]
+
+      expect(required).toBeDefined()
+      expect(required).toContain('docId')
+      expect(required).toContain('tableId')
+    })
+
+    it('should not require optional parameters', async () => {
+      const result = await ctx.client.listTools()
+
+      const getRecordsTool = result.tools.find((t) => t.name === 'grist_get_records')
+      expect(getRecordsTool).toBeDefined()
+
+      const schema = getRecordsTool?.inputSchema as Record<string, unknown>
+      const required = schema.required as string[] | undefined
+
+      // response_format, filters, columns should NOT be required
+      expect(required).not.toContain('response_format')
+      expect(required).not.toContain('filters')
+      expect(required).not.toContain('columns')
+    })
+  })
+
+  describe('enum constraints', () => {
+    it('should include enum values for constrained parameters', async () => {
+      const result = await ctx.client.listTools()
+
+      const getWorkspacesTool = result.tools.find((t) => t.name === 'grist_get_workspaces')
+      expect(getWorkspacesTool).toBeDefined()
+
+      const schema = getWorkspacesTool?.inputSchema as Record<string, unknown>
+      const properties = schema.properties as Record<string, Record<string, unknown>>
+
+      // detail_level should have enum constraint
+      const detailLevel = properties.detail_level
+      expect(detailLevel?.enum).toBeDefined()
+      expect(Array.isArray(detailLevel?.enum)).toBe(true)
+      expect(detailLevel?.enum).toContain('summary')
+      expect(detailLevel?.enum).toContain('detailed')
+    })
+
+    it('should include enum values for response_format', async () => {
+      const result = await ctx.client.listTools()
+
+      const getRecordsTool = result.tools.find((t) => t.name === 'grist_get_records')
+      expect(getRecordsTool).toBeDefined()
+
+      const schema = getRecordsTool?.inputSchema as Record<string, unknown>
+      const properties = schema.properties as Record<string, Record<string, unknown>>
+
+      const responseFormat = properties.response_format
+      expect(responseFormat?.enum).toBeDefined()
+      expect(responseFormat?.enum).toContain('json')
+      expect(responseFormat?.enum).toContain('markdown')
+    })
+  })
+
+  describe('default values', () => {
+    it('should include default values where specified', async () => {
+      const result = await ctx.client.listTools()
+
+      const getWorkspacesTool = result.tools.find((t) => t.name === 'grist_get_workspaces')
+      expect(getWorkspacesTool).toBeDefined()
+
+      const schema = getWorkspacesTool?.inputSchema as Record<string, unknown>
+      const properties = schema.properties as Record<string, Record<string, unknown>>
+
+      // response_format should default to 'markdown'
+      const responseFormat = properties.response_format
+      expect(responseFormat?.default).toBe('markdown')
+
+      // limit should have a default
+      const limit = properties.limit
+      expect(limit?.default).toBeDefined()
+    })
+  })
+
+  describe('schema structure validation', () => {
+    it('should have valid structure for grist_discover_tools schema', async () => {
+      const result = await ctx.client.listTools()
+
+      const discoverTool = result.tools.find((t) => t.name === 'grist_discover_tools')
+      expect(discoverTool).toBeDefined()
+
+      const schema = discoverTool?.inputSchema as Record<string, unknown>
+      const properties = schema.properties as Record<string, Record<string, unknown>>
+
+      // Should have detail_level, category, tool_name, response_format properties
+      expect(properties.detail_level).toBeDefined()
+      expect(properties.category).toBeDefined()
+      expect(properties.tool_name).toBeDefined()
+      expect(properties.response_format).toBeDefined()
+    })
+
+    it('should have valid structure for grist_get_records schema', async () => {
+      const result = await ctx.client.listTools()
+
+      const getRecordsTool = result.tools.find((t) => t.name === 'grist_get_records')
+      expect(getRecordsTool).toBeDefined()
+
+      const schema = getRecordsTool?.inputSchema as Record<string, unknown>
+      const properties = schema.properties as Record<string, Record<string, unknown>>
+      const required = schema.required as string[]
+
+      // Required fields
+      expect(required).toContain('docId')
+      expect(required).toContain('tableId')
+
+      // Should have expected properties
+      expect(properties.docId).toBeDefined()
+      expect(properties.tableId).toBeDefined()
+      expect(properties.filters).toBeDefined()
+      expect(properties.columns).toBeDefined()
+      expect(properties.response_format).toBeDefined()
+      expect(properties.limit).toBeDefined()
+      expect(properties.offset).toBeDefined()
+    })
+
+    it('should have correct type definitions in properties', async () => {
+      const result = await ctx.client.listTools()
+
+      const getWorkspacesTool = result.tools.find((t) => t.name === 'grist_get_workspaces')
+      expect(getWorkspacesTool).toBeDefined()
+
+      const schema = getWorkspacesTool?.inputSchema as Record<string, unknown>
+      const properties = schema.properties as Record<string, Record<string, unknown>>
+
+      // limit should be integer type
+      expect(properties.limit?.type).toBe('integer')
+
+      // response_format should be string with enum
+      expect(properties.response_format?.type).toBe('string')
+      expect(properties.response_format?.enum).toBeDefined()
+    })
+  })
+})

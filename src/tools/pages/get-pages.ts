@@ -14,21 +14,21 @@ import { GristTool } from '../base/GristTool.js'
  * Widget information with summary table detection
  */
 interface WidgetDetail {
-  widget_id: number
+  widgetId: number
   title: string
-  widget_type: string
-  table_id: string
-  table_ref: number
-  is_summary_table: boolean
-  summary_source_table?: string
-  group_by_columns?: string[]
-  linked_to?: {
-    source_widget_id: number
-    source_col_ref: number
-    target_col_ref: number
+  widgetType: string
+  tableId: string
+  tableRef: number
+  isSummaryTable: boolean
+  summarySourceTable?: string
+  groupByColumns?: string[]
+  linkedTo?: {
+    sourceWidgetId: number
+    sourceColRef: number
+    targetColRef: number
   }
-  chart_config?: {
-    chart_type: string
+  chartConfig?: {
+    chartType: string
   }
 }
 
@@ -36,8 +36,8 @@ interface WidgetDetail {
  * Page information with widgets
  */
 interface PageDetail {
-  page_id: number
-  page_name: string
+  pageId: number
+  pageName: string
   widgets: WidgetDetail[]
 }
 
@@ -45,12 +45,12 @@ interface PageDetail {
  * Tables in Raw Data (not on any page)
  */
 interface RawDataTable {
-  table_id: string
-  table_ref: number
-  is_summary_table: boolean
-  summary_source_table?: string
-  group_by_columns?: string[]
-  referenced_on_pages: number[]
+  tableId: string
+  tableRef: number
+  isSummaryTable: boolean
+  summarySourceTable?: string
+  groupByColumns?: string[]
+  referencedOnPages: number[]
 }
 
 /**
@@ -58,21 +58,21 @@ interface RawDataTable {
  */
 interface GetPagesResponse {
   success: true
-  doc_id: string
+  docId: string
   pages: PageDetail[]
-  raw_data_tables: RawDataTable[]
+  rawDataTables: RawDataTable[]
   summary: {
-    total_pages: number
-    total_widgets: number
-    total_tables: number
-    summary_tables: number
+    totalPages: number
+    totalWidgets: number
+    totalTables: number
+    summaryTables: number
   }
   pagination: {
     total: number
     offset: number
     limit: number
-    has_more: boolean
-    next_offset: number | null
+    hasMore: boolean
+    nextOffset: number | null
   }
 }
 
@@ -114,19 +114,19 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
         tablesOnPages.add(widget.tableRef)
 
         const detail: WidgetDetail = {
-          widget_id: widget.id,
+          widgetId: widget.id,
           title: widget.title || `Untitled (${widget.parentKey})`,
-          widget_type: this.mapWidgetType(widget.parentKey),
-          table_id: tableInfo?.tableId || `unknown_${widget.tableRef}`,
-          table_ref: widget.tableRef,
-          is_summary_table: tableInfo?.isSummary || false
+          widgetType: this.mapWidgetType(widget.parentKey),
+          tableId: tableInfo?.tableId || `unknown_${widget.tableRef}`,
+          tableRef: widget.tableRef,
+          isSummaryTable: tableInfo?.isSummary || false
         }
 
         // Add summary table info
         if (tableInfo?.isSummary) {
-          detail.summary_source_table = tableInfo.sourceTableId
+          detail.summarySourceTable = tableInfo.sourceTableId
           if (detail_level === 'detailed' && tableInfo.groupByColumns) {
-            detail.group_by_columns = tableInfo.groupByColumns
+            detail.groupByColumns = tableInfo.groupByColumns
           }
         }
 
@@ -134,12 +134,12 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
         if (detail_level === 'detailed') {
           const linking = widgetLinking.get(widget.id)
           if (linking) {
-            detail.linked_to = linking
+            detail.linkedTo = linking
           }
 
           const chartConfig = chartConfigs.get(widget.id)
           if (chartConfig) {
-            detail.chart_config = chartConfig
+            detail.chartConfig = chartConfig
           }
         }
 
@@ -147,8 +147,8 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
       })
 
       pageDetails.push({
-        page_id: page.id,
-        page_name: page.name,
+        pageId: page.id,
+        pageName: page.name,
         widgets: widgetDetails
       })
     }
@@ -158,12 +158,12 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
     for (const [tableRef, info] of tableMetadata) {
       if (!tablesOnPages.has(tableRef)) {
         rawDataTables.push({
-          table_id: info.tableId,
-          table_ref: tableRef,
-          is_summary_table: info.isSummary,
-          summary_source_table: info.isSummary ? info.sourceTableId : undefined,
-          group_by_columns: info.isSummary ? info.groupByColumns : undefined,
-          referenced_on_pages: [] // Could be populated with page IDs if needed
+          tableId: info.tableId,
+          tableRef: tableRef,
+          isSummaryTable: info.isSummary,
+          summarySourceTable: info.isSummary ? info.sourceTableId : undefined,
+          groupByColumns: info.isSummary ? info.groupByColumns : undefined,
+          referencedOnPages: [] // Could be populated with page IDs if needed
         })
       }
     }
@@ -173,21 +173,21 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
 
     return {
       success: true,
-      doc_id: docId,
+      docId: docId,
       pages: pageDetails,
-      raw_data_tables: rawDataTables,
+      rawDataTables: rawDataTables,
       summary: {
-        total_pages: totalPages,
-        total_widgets: pageDetails.reduce((sum, p) => sum + p.widgets.length, 0),
-        total_tables: tableMetadata.size,
-        summary_tables: summaryTableCount
+        totalPages: totalPages,
+        totalWidgets: pageDetails.reduce((sum, p) => sum + p.widgets.length, 0),
+        totalTables: tableMetadata.size,
+        summaryTables: summaryTableCount
       },
       pagination: {
         total: totalPages,
         offset,
         limit,
-        has_more: hasMore,
-        next_offset: hasMore ? offset + limit : null
+        hasMore: hasMore,
+        nextOffset: hasMore ? offset + limit : null
       }
     }
   }
@@ -288,9 +288,7 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
    */
   private async getWidgetLinking(
     docId: string
-  ): Promise<
-    Map<number, { source_widget_id: number; source_col_ref: number; target_col_ref: number }>
-  > {
+  ): Promise<Map<number, { sourceWidgetId: number; sourceColRef: number; targetColRef: number }>> {
     const response = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
       sql: `
         SELECT id, linkSrcSectionRef, linkSrcColRef, linkTargetColRef
@@ -302,7 +300,7 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
 
     const result = new Map<
       number,
-      { source_widget_id: number; source_col_ref: number; target_col_ref: number }
+      { sourceWidgetId: number; sourceColRef: number; targetColRef: number }
     >()
 
     for (const record of response.records) {
@@ -313,9 +311,9 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
       const linkTargetColRef = fields.linkTargetColRef as number
 
       result.set(id, {
-        source_widget_id: linkSrcSectionRef,
-        source_col_ref: linkSrcColRef,
-        target_col_ref: linkTargetColRef
+        sourceWidgetId: linkSrcSectionRef,
+        sourceColRef: linkSrcColRef,
+        targetColRef: linkTargetColRef
       })
     }
 
@@ -325,7 +323,7 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
   /**
    * Get chart configurations
    */
-  private async getChartConfigs(docId: string): Promise<Map<number, { chart_type: string }>> {
+  private async getChartConfigs(docId: string): Promise<Map<number, { chartType: string }>> {
     const response = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
       sql: `
         SELECT id, chartType
@@ -335,7 +333,7 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
       args: []
     })
 
-    const result = new Map<number, { chart_type: string }>()
+    const result = new Map<number, { chartType: string }>()
 
     for (const record of response.records) {
       const fields = extractFields(record)
@@ -343,7 +341,7 @@ class GetPagesTool extends GristTool<typeof GetPagesSchema, GetPagesResponse> {
       const chartType = fields.chartType as string
 
       if (chartType) {
-        result.set(id, { chart_type: chartType })
+        result.set(id, { chartType: chartType })
       }
     }
 

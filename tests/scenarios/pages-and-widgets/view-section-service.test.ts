@@ -48,8 +48,8 @@ describe('ViewSectionService (Docker Integration)', () => {
 
     const buildData = buildResult.structuredContent as Record<string, unknown>
     const widgets = buildData.widgets as Array<{ section_id: number }>
-    testSectionId = widgets[0].section_id
-    testViewId = buildData.view_id as number
+    testSectionId = widgets[0].sectionId
+    testViewId = buildData.viewId as number
   }, 60000) // Increase timeout for setup
 
   afterAll(async () => {

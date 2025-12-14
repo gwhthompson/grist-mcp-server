@@ -12,34 +12,32 @@ import { DocIdSchema, ResponseFormatSchema, TableIdSchema } from './common.js'
  * Other aggregations (AVERAGE, MIN, MAX, etc.) can be added as formula columns
  * after summary table creation using formulas like `AVERAGE($group.column)`.
  */
-export const CreateSummaryTableSchema = z
-  .object({
-    docId: DocIdSchema,
+export const CreateSummaryTableSchema = z.strictObject({
+  docId: DocIdSchema,
 
-    sourceTable: TableIdSchema.describe(
-      'Source table to create summary from. Example: "Investments", "Sales", "Customers"'
+  sourceTable: TableIdSchema.describe(
+    'Source table to create summary from. Example: "Investments", "Sales", "Customers"'
+  ),
+
+  groupByColumns: z
+    .array(z.string().min(1))
+    .min(1)
+    .max(10)
+    .describe(
+      'Columns to group by (1-10 columns). Example: ["category", "year"] creates summary grouped by category and year'
     ),
 
-    groupByColumns: z
-      .array(z.string().min(1))
-      .min(1)
-      .max(10)
-      .describe(
-        'Columns to group by (1-10 columns). Example: ["category", "year"] creates summary grouped by category and year'
-      ),
+  keepPage: z
+    .boolean()
+    .optional()
+    .default(false)
+    .describe(
+      'Keep the auto-created page visible in Grist UI. ' +
+        'Default: false (summary table in Raw Data only). ' +
+        'Set true to create a visible page named "Summary: {table} by {columns}"'
+    ),
 
-    keepPage: z
-      .boolean()
-      .optional()
-      .default(false)
-      .describe(
-        'Keep the auto-created page visible in Grist UI. ' +
-          'Default: false (summary table in Raw Data only). ' +
-          'Set true to create a visible page named "Summary: {table} by {columns}"'
-      ),
-
-    response_format: ResponseFormatSchema.optional().default('markdown')
-  })
-  .strict()
+  response_format: ResponseFormatSchema.optional().default('markdown')
+})
 
 export type CreateSummaryTableInput = z.infer<typeof CreateSummaryTableSchema>

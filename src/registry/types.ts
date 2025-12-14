@@ -99,6 +99,12 @@ export interface ToolDefinition<
   readonly handler: ToolHandler<TSchema>
   /** Structured documentation for help */
   readonly docs: ToolDocumentation
+  /**
+   * Core tool flag for progressive disclosure.
+   * Core tools are shown by default in grist_discover_tools.
+   * Non-core tools are available but require explicit discovery.
+   */
+  readonly core?: boolean
 }
 
 /**

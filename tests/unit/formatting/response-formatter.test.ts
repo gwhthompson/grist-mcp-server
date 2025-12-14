@@ -173,8 +173,8 @@ describe('Formatter Service', () => {
         const data = {
           items: [{ id: 1 }],
           total: 5,
-          has_more: true,
-          next_offset: 1
+          hasMore: true,
+          nextOffset: 1
         }
         const result = formatAsMarkdown(data)
 
@@ -186,7 +186,7 @@ describe('Formatter Service', () => {
         const data = {
           items: [{ id: 1 }],
           truncated: true,
-          truncation_reason: 'Too many items',
+          truncationReason: 'Too many items',
           suggestions: ['Use pagination', 'Reduce limit']
         }
         const result = formatAsMarkdown(data)
@@ -279,9 +279,9 @@ describe('Formatter Service', () => {
         const result = truncateIfNeeded(largeItems, 'json', {})
 
         expect(result.data.truncated).toBe(true)
-        expect(result.data.items_returned).toBeDefined()
-        expect(result.data.items_requested).toBe(1000)
-        expect(result.data.truncation_reason).toContain('truncated')
+        expect(result.data.itemsReturned).toBeDefined()
+        expect(result.data.itemsRequested).toBe(1000)
+        expect(result.data.truncationReason).toContain('truncated')
         expect(result.data.suggestions).toBeDefined()
       })
     })

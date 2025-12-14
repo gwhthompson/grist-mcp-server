@@ -28,3 +28,14 @@ manifest.json
 logs/
 inspector-config.json
 tsconfig.tsbuildinfo
+
+# Temp files and test scripts
+temp/
+test-*.mjs
+check-*.mjs
+generated-tools.json
+*.tgz
+
+# Feedback docs (not needed in package)
+*FEEDBACK*.md
+MCP_TEST_REPORT.md

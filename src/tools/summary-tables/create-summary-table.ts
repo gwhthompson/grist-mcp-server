@@ -21,9 +21,9 @@ import { GristTool } from '../base/GristTool.js'
  */
 interface CreateSummaryTableResponse {
   success: true
-  summary_table_id: string
-  source_table: string
-  group_by_columns: string[]
+  summaryTableId: string
+  sourceTable: string
+  groupByColumns: string[]
   columns: string[]
   description: string
 }
@@ -93,9 +93,9 @@ class CreateSummaryTableTool extends GristTool<
 
     return {
       success: true,
-      summary_table_id: summaryTableId,
-      source_table: sourceTable,
-      group_by_columns: groupByColumns,
+      summaryTableId: summaryTableId,
+      sourceTable: sourceTable,
+      groupByColumns: groupByColumns,
       columns,
       description:
         `Created summary table "${summaryTableId}" from "${sourceTable}" ` +

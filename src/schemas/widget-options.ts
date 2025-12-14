@@ -1,35 +1,28 @@
 import { z } from 'zod'
 import { getCurrencyCodeError, isValidCurrency } from '../constants/iso-4217-currencies.js'
 import { log } from '../utils/shared-logger.js'
+import { HexColorOptionalSchema } from './common.js'
 
-export const HexColorSchema = z
-  .string()
-  .regex(/^#[0-9A-Fa-f]{6}$/, 'Color must be hex format (#RRGGBB, e.g., "#FF0000" for red)')
-  .optional()
-
-export const StylePropertiesSchema = z
-  .object({
-    textColor: HexColorSchema.describe('Text color in hex format (e.g., "#FF0000")'),
-    fillColor: HexColorSchema.describe('Background/fill color in hex format (e.g., "#FFFF00")'),
-    fontBold: z.boolean().optional().describe('Bold text formatting'),
-    fontItalic: z.boolean().optional().describe('Italic text formatting'),
-    fontUnderline: z.boolean().optional().describe('Underline text formatting'),
-    fontStrikethrough: z.boolean().optional().describe('Strikethrough text formatting')
-  })
-  .strict()
+// Use registered HexColorOptionalSchema to avoid unnamed $ref wrappers
+export const StylePropertiesSchema = z.strictObject({
+  textColor: HexColorOptionalSchema,
+  fillColor: HexColorOptionalSchema,
+  fontBold: z.boolean().optional(),
+  fontItalic: z.boolean().optional(),
+  fontUnderline: z.boolean().optional(),
+  fontStrikethrough: z.boolean().optional()
+})
 
 export type StyleProperties = z.infer<typeof StylePropertiesSchema>
 
-const HeaderStylePropertiesSchema = z
-  .object({
-    headerTextColor: HexColorSchema.describe('Header text color in hex format'),
-    headerFillColor: HexColorSchema.describe('Header background color in hex format'),
-    headerFontBold: z.boolean().optional().describe('Bold header text'),
-    headerFontUnderline: z.boolean().optional().describe('Underline header text'),
-    headerFontItalic: z.boolean().optional().describe('Italic header text'),
-    headerFontStrikethrough: z.boolean().optional().describe('Strikethrough header text')
-  })
-  .strict()
+const HeaderStylePropertiesSchema = z.strictObject({
+  headerTextColor: HexColorOptionalSchema,
+  headerFillColor: HexColorOptionalSchema,
+  headerFontBold: z.boolean().optional(),
+  headerFontUnderline: z.boolean().optional(),
+  headerFontItalic: z.boolean().optional(),
+  headerFontStrikethrough: z.boolean().optional()
+})
 
 const AlignmentSchema = z.enum(['left', 'center', 'right']).optional()
 
@@ -37,7 +30,9 @@ const TextWidgetTypeSchema = z.enum(['TextBox', 'Markdown', 'HyperLink']).option
 const NumericWidgetTypeSchema = z.enum(['Spinner']).optional()
 const BoolWidgetTypeSchema = z.enum(['CheckBox', 'Switch']).optional()
 
-export const TextWidgetOptionsSchema = StylePropertiesSchema.extend({
+export const TextWidgetOptionsSchema = z.strictObject({
+  ...StylePropertiesSchema.shape,
+  ...HeaderStylePropertiesSchema.shape,
   widget: TextWidgetTypeSchema.describe('Widget type for display'),
   alignment: AlignmentSchema.describe('Text alignment'),
   wrap: z.boolean().optional().describe('Enable text wrapping'),
@@ -46,8 +41,6 @@ export const TextWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .extend(HeaderStylePropertiesSchema.shape)
-  .strict()
 
 export type TextWidgetOptions = z.infer<typeof TextWidgetOptionsSchema>
 
@@ -56,47 +49,48 @@ const NumberFormatSchema = z
   .nullable()
   .optional()
 
-export const NumericWidgetOptionsSchema = StylePropertiesSchema.extend({
-  widget: NumericWidgetTypeSchema.describe('Widget type for display'),
-  numMode: NumberFormatSchema.describe(
-    'Number display mode (currency, decimal, percent, scientific)'
-  ),
-  currency: z
-    .string()
-    .length(3)
-    .transform((code) => code.toUpperCase())
-    .refine(isValidCurrency, {
-      error: (issue) => getCurrencyCodeError(issue.input as string)
-    })
-    .optional()
-    .describe('ISO 4217 currency code (e.g., "USD", "EUR", "GBP" - case-insensitive)'),
-  numSign: z
-    .enum(['parens'])
-    .nullable()
-    .optional()
-    .describe('Number sign display (null for minus, "parens" for parentheses)'),
-  decimals: z
-    .number()
-    .int()
-    .min(0)
-    .max(20)
-    .optional()
-    .describe('Minimum number of decimal places to display (0-20)'),
-  maxDecimals: z
-    .number()
-    .int()
-    .min(0)
-    .max(20)
-    .optional()
-    .describe('Maximum number of decimal places to display (0-20)'),
-  alignment: AlignmentSchema.describe('Number alignment'),
-  rulesOptions: z
-    .array(StylePropertiesSchema)
-    .optional()
-    .describe('Conditional formatting styles (array index matches rules array)')
-})
-  .extend(HeaderStylePropertiesSchema.shape)
-  .strict()
+export const NumericWidgetOptionsSchema = z
+  .strictObject({
+    ...StylePropertiesSchema.shape,
+    ...HeaderStylePropertiesSchema.shape,
+    widget: NumericWidgetTypeSchema.describe('Widget type for display'),
+    numMode: NumberFormatSchema.describe(
+      'Number display mode (currency, decimal, percent, scientific)'
+    ),
+    currency: z
+      .string()
+      .length(3)
+      .transform((code) => code.toUpperCase())
+      .refine(isValidCurrency, {
+        error: (issue) => getCurrencyCodeError(issue.input as string)
+      })
+      .optional()
+      .describe('ISO 4217 currency code (e.g., "USD", "EUR", "GBP" - case-insensitive)'),
+    numSign: z
+      .enum(['parens'])
+      .nullable()
+      .optional()
+      .describe('Number sign display (null for minus, "parens" for parentheses)'),
+    decimals: z
+      .number()
+      .int()
+      .min(0)
+      .max(20)
+      .optional()
+      .describe('Minimum number of decimal places to display (0-20)'),
+    maxDecimals: z
+      .number()
+      .int()
+      .min(0)
+      .max(20)
+      .optional()
+      .describe('Maximum number of decimal places to display (0-20)'),
+    alignment: AlignmentSchema.describe('Number alignment'),
+    rulesOptions: z
+      .array(StylePropertiesSchema)
+      .optional()
+      .describe('Conditional formatting styles (array index matches rules array)')
+  })
   .superRefine((data, ctx) => {
     if (data.numMode === 'currency' && !data.currency) {
       ctx.addIssue({
@@ -109,7 +103,9 @@ export const NumericWidgetOptionsSchema = StylePropertiesSchema.extend({
 
 export type NumericWidgetOptions = z.infer<typeof NumericWidgetOptionsSchema>
 
-export const BoolWidgetOptionsSchema = StylePropertiesSchema.extend({
+export const BoolWidgetOptionsSchema = z.strictObject({
+  ...StylePropertiesSchema.shape,
+  ...HeaderStylePropertiesSchema.shape,
   widget: BoolWidgetTypeSchema.describe('Widget type for boolean display (CheckBox or Switch)'),
   alignment: AlignmentSchema.describe('Widget alignment'),
   rulesOptions: z
@@ -117,26 +113,25 @@ export const BoolWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .extend(HeaderStylePropertiesSchema.shape)
-  .strict()
 
 export type BoolWidgetOptions = z.infer<typeof BoolWidgetOptionsSchema>
 
-export const DateWidgetOptionsSchema = StylePropertiesSchema.extend({
-  dateFormat: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Date format string (e.g., "YYYY-MM-DD", "MMM D, YYYY") - max 100 chars'),
-  isCustomDateFormat: z.boolean().optional().describe('Whether the date format is custom'),
-  alignment: AlignmentSchema.describe('Date alignment'),
-  rulesOptions: z
-    .array(StylePropertiesSchema)
-    .optional()
-    .describe('Conditional formatting styles (array index matches rules array)')
-})
-  .extend(HeaderStylePropertiesSchema.shape)
-  .strict()
+export const DateWidgetOptionsSchema = z
+  .strictObject({
+    ...StylePropertiesSchema.shape,
+    ...HeaderStylePropertiesSchema.shape,
+    dateFormat: z
+      .string()
+      .max(100)
+      .optional()
+      .describe('Date format string (e.g., "YYYY-MM-DD", "MMM D, YYYY") - max 100 chars'),
+    isCustomDateFormat: z.boolean().optional().describe('Whether the date format is custom'),
+    alignment: AlignmentSchema.describe('Date alignment'),
+    rulesOptions: z
+      .array(StylePropertiesSchema)
+      .optional()
+      .describe('Conditional formatting styles (array index matches rules array)')
+  })
   .superRefine((data, ctx) => {
     if (data.isCustomDateFormat === true && !data.dateFormat) {
       ctx.addIssue({
@@ -149,23 +144,24 @@ export const DateWidgetOptionsSchema = StylePropertiesSchema.extend({
 
 export type DateWidgetOptions = z.infer<typeof DateWidgetOptionsSchema>
 
-export const DateTimeWidgetOptionsSchema = StylePropertiesSchema.extend({
-  dateFormat: z.string().max(100).optional().describe('Date format string - max 100 chars'),
-  isCustomDateFormat: z.boolean().optional().describe('Whether the date format is custom'),
-  timeFormat: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Time format string (e.g., "HH:mm:ss", "h:mm A") - max 100 chars'),
-  isCustomTimeFormat: z.boolean().optional().describe('Whether the time format is custom'),
-  alignment: AlignmentSchema.describe('DateTime alignment'),
-  rulesOptions: z
-    .array(StylePropertiesSchema)
-    .optional()
-    .describe('Conditional formatting styles (array index matches rules array)')
-})
-  .extend(HeaderStylePropertiesSchema.shape)
-  .strict()
+export const DateTimeWidgetOptionsSchema = z
+  .strictObject({
+    ...StylePropertiesSchema.shape,
+    ...HeaderStylePropertiesSchema.shape,
+    dateFormat: z.string().max(100).optional().describe('Date format string - max 100 chars'),
+    isCustomDateFormat: z.boolean().optional().describe('Whether the date format is custom'),
+    timeFormat: z
+      .string()
+      .max(100)
+      .optional()
+      .describe('Time format string (e.g., "HH:mm:ss", "h:mm A") - max 100 chars'),
+    isCustomTimeFormat: z.boolean().optional().describe('Whether the time format is custom'),
+    alignment: AlignmentSchema.describe('DateTime alignment'),
+    rulesOptions: z
+      .array(StylePropertiesSchema)
+      .optional()
+      .describe('Conditional formatting styles (array index matches rules array)')
+  })
   .superRefine((data, ctx) => {
     if (data.isCustomDateFormat === true && !data.dateFormat) {
       ctx.addIssue({
@@ -187,7 +183,9 @@ export type DateTimeWidgetOptions = z.infer<typeof DateTimeWidgetOptionsSchema>
 
 const ChoiceOptionsSchema = z.record(z.string(), StylePropertiesSchema).optional()
 
-export const ChoiceWidgetOptionsSchema = StylePropertiesSchema.extend({
+export const ChoiceWidgetOptionsSchema = z.strictObject({
+  ...StylePropertiesSchema.shape,
+  ...HeaderStylePropertiesSchema.shape,
   choices: z
     .array(z.string().min(1).max(255))
     .max(1000)
@@ -200,8 +198,6 @@ export const ChoiceWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .extend(HeaderStylePropertiesSchema.shape)
-  .strict()
 
 export type ChoiceWidgetOptions = z.infer<typeof ChoiceWidgetOptionsSchema>
 
@@ -209,7 +205,9 @@ export const ChoiceListWidgetOptionsSchema = ChoiceWidgetOptionsSchema
 
 export type ChoiceListWidgetOptions = z.infer<typeof ChoiceListWidgetOptionsSchema>
 
-export const RefWidgetOptionsSchema = StylePropertiesSchema.extend({
+export const RefWidgetOptionsSchema = z.strictObject({
+  ...StylePropertiesSchema.shape,
+  ...HeaderStylePropertiesSchema.shape,
   alignment: AlignmentSchema.describe('Reference display alignment'),
   visibleCol: z
     .union([z.string(), z.number()])
@@ -220,8 +218,6 @@ export const RefWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .extend(HeaderStylePropertiesSchema.shape)
-  .strict()
 
 export type RefWidgetOptions = z.infer<typeof RefWidgetOptionsSchema>
 
@@ -229,7 +225,9 @@ export const RefListWidgetOptionsSchema = RefWidgetOptionsSchema.extend({})
 
 export type RefListWidgetOptions = z.infer<typeof RefListWidgetOptionsSchema>
 
-export const AttachmentsWidgetOptionsSchema = StylePropertiesSchema.extend({
+export const AttachmentsWidgetOptionsSchema = z.strictObject({
+  ...StylePropertiesSchema.shape,
+  ...HeaderStylePropertiesSchema.shape,
   height: z
     .number()
     .int()
@@ -243,8 +241,6 @@ export const AttachmentsWidgetOptionsSchema = StylePropertiesSchema.extend({
     .optional()
     .describe('Conditional formatting styles (array index matches rules array)')
 })
-  .extend(HeaderStylePropertiesSchema.shape)
-  .strict()
 
 export type AttachmentsWidgetOptions = z.infer<typeof AttachmentsWidgetOptionsSchema>
 

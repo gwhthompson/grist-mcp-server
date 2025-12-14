@@ -67,9 +67,9 @@ describe('Upsert Error Handling', () => {
       // biome-ignore lint/suspicious/noExplicitAny: Testing runtime validation with invalid data
       const result = response.structuredContent as any
       expect(result.success).toBe(true)
-      expect(result.records_processed).toBe(1)
-      expect(result.record_ids).toBeDefined()
-      expect(Array.isArray(result.record_ids)).toBe(true)
+      expect(result.recordsProcessed).toBe(1)
+      expect(result.recordIds).toBeDefined()
+      expect(Array.isArray(result.recordIds)).toBe(true)
     })
 
     it('should handle valid response from Grist API', async () => {
@@ -97,8 +97,8 @@ describe('Upsert Error Handling', () => {
       // biome-ignore lint/suspicious/noExplicitAny: Testing runtime validation with invalid data
       const result = response.structuredContent as any
       expect(result.success).toBe(true)
-      expect(result.record_ids).toBeDefined()
-      expect(Array.isArray(result.record_ids)).toBe(true)
+      expect(result.recordIds).toBeDefined()
+      expect(Array.isArray(result.recordIds)).toBe(true)
       // Note: Grist upsert returns null, so record_ids will be empty array
     })
   })
@@ -188,8 +188,8 @@ describe('Upsert Error Handling', () => {
       // biome-ignore lint/suspicious/noExplicitAny: Testing runtime validation with invalid data
       const result = response.structuredContent as any
       // Should have validated response structure
-      expect(result.record_ids).toBeDefined()
-      expect(Array.isArray(result.record_ids)).toBe(true)
+      expect(result.recordIds).toBeDefined()
+      expect(Array.isArray(result.recordIds)).toBe(true)
       // Note: Grist upsert returns null, so record_ids will be empty array
     })
   })

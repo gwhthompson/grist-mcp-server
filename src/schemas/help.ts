@@ -9,35 +9,33 @@ export const HELP_TOPICS = ['overview', 'examples', 'errors', 'parameters', 'ful
 
 export type HelpTopic = (typeof HELP_TOPICS)[number]
 
-export const HelpSchema = z
-  .object({
-    tool_name: z
-      .enum(TOOL_NAMES)
-      .describe(
-        'Name of the Grist tool to get detailed documentation for. ' +
-          'Example: "grist_get_records", "grist_add_records", "grist_upsert_records"'
-      ),
+export const HelpSchema = z.strictObject({
+  tool_name: z
+    .enum(TOOL_NAMES)
+    .describe(
+      'Name of the Grist tool to get detailed documentation for. ' +
+        'Example: "grist_get_records", "grist_manage_records", "grist_manage_schema"'
+    ),
 
-    topic: z
-      .enum(HELP_TOPICS)
-      .optional()
-      .default('full')
-      .describe(
-        'Filter documentation by topic: "overview" (~500B quick summary), ' +
-          '"examples" (~800B code samples), "errors" (~400B troubleshooting), ' +
-          '"parameters" (~600B detailed params), "full" (complete docs, default)'
-      ),
+  topic: z
+    .enum(HELP_TOPICS)
+    .optional()
+    .default('full')
+    .describe(
+      'Filter documentation by topic: "overview" (~500B quick summary), ' +
+        '"examples" (~800B code samples), "errors" (~400B troubleshooting), ' +
+        '"parameters" (~600B detailed params), "full" (complete docs, default)'
+    ),
 
-    response_format: ResponseFormatSchema
-  })
-  .strict()
+  response_format: ResponseFormatSchema
+})
 
 export type HelpInput = z.infer<typeof HelpSchema>
 
 export interface HelpOutput {
-  tool_name: string
+  toolName: string
   topic: HelpTopic
   documentation: string
-  available_topics: readonly string[]
+  availableTopics: readonly string[]
   [key: string]: unknown // Index signature for compatibility with MCPToolResponse
 }

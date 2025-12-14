@@ -75,8 +75,8 @@ export const MCPPaginatedResponseSchema = z
     total: z.number().int().nonnegative().optional().describe('Total count'),
     offset: z.number().int().nonnegative().optional().describe('Current offset'),
     limit: z.number().int().positive().optional().describe('Items per page'),
-    has_more: z.boolean().optional().describe('More items available'),
-    next_offset: z.number().int().nonnegative().optional().describe('Next page offset')
+    hasMore: z.boolean().optional().describe('More items available'),
+    nextOffset: z.number().int().nonnegative().optional().describe('Next page offset')
   })
   .passthrough()
 

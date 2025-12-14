@@ -36,48 +36,46 @@ interface SqlResponseData {
   total: number
   offset: number
   limit: number
-  has_more: boolean
-  next_offset: number | null
+  hasMore: boolean
+  nextOffset: number | null
   records: Array<Record<string, CellValue>>
 }
 
 interface GetRecordsResponseData {
-  document_id: string
-  table_id: string
+  docId: string
+  tableId: string
   total: number
   offset: number
   limit: number
-  has_more: boolean
-  next_offset: number | null
+  hasMore: boolean
+  nextOffset: number | null
   filters: Record<string, CellValue | CellValue[]>
   columns: string | string[]
   items: FlattenedRecord[]
-  formula_errors?: {
-    records_with_errors: number
-    affected_columns: string[]
+  formulaErrors?: {
+    recordsWithErrors: number
+    affectedColumns: string[]
   }
 }
 
-export const QuerySQLSchema = z
-  .object({
-    docId: DocIdSchema,
-    sql: z
-      .string()
-      .min(1, 'SQL query cannot be empty')
-      .max(10000, 'SQL query too long (max 10,000 characters)')
-      .describe(
-        'SQL query to execute. Supports SELECT, JOINs, WHERE, GROUP BY, ORDER BY. Table names should match Grist table IDs. Example: "SELECT Name, Email FROM Contacts WHERE Status = \'Active\'"'
-      ),
-    parameters: z
-      .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
-      .optional()
-      .describe(
-        'Optional parameterized query values. Use ? placeholders in SQL (SQLite style). Example SQL: "WHERE Status = ? AND Priority > ?" with parameters: ["Active", 1]'
-      ),
-    response_format: ResponseFormatSchema
-  })
-  .extend(PaginationSchema.shape)
-  .strict()
+export const QuerySQLSchema = z.strictObject({
+  docId: DocIdSchema,
+  sql: z
+    .string()
+    .min(1, 'SQL query cannot be empty')
+    .max(10000, 'SQL query too long (max 10,000 characters)')
+    .describe(
+      'SQL query to execute. Supports SELECT, JOINs, WHERE, GROUP BY, ORDER BY. Table names should match Grist table IDs. Example: "SELECT Name, Email FROM Contacts WHERE Status = \'Active\'"'
+    ),
+  parameters: z
+    .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
+    .optional()
+    .describe(
+      'Optional parameterized query values. Use ? placeholders in SQL (SQLite style). Example SQL: "WHERE Status = ? AND Priority > ?" with parameters: ["Active", 1]'
+    ),
+  response_format: ResponseFormatSchema,
+  ...PaginationSchema.shape
+})
 
 export type QuerySQLInput = z.infer<typeof QuerySQLSchema>
 
@@ -151,8 +149,8 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, unknown> {
         total,
         offset: params.offset,
         limit: params.limit,
-        has_more: hasMore,
-        next_offset: hasMore ? params.offset + params.limit : null,
+        hasMore: hasMore,
+        nextOffset: hasMore ? params.offset + params.limit : null,
         records
       }
     } catch (error) {
@@ -166,8 +164,8 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, unknown> {
       total: data.total,
       offset: data.offset,
       limit: data.limit,
-      has_more: data.has_more,
-      next_offset: data.next_offset
+      hasMore: data.hasMore,
+      nextOffset: data.nextOffset
     })
 
     interface TruncatedDataWithItems {
@@ -189,16 +187,14 @@ export async function querySql(context: ToolContext, params: QuerySQLInput) {
   return tool.execute(params)
 }
 
-export const GetRecordsSchema = z
-  .object({
-    docId: DocIdSchema,
-    tableId: TableIdSchema,
-    filters: FilterSchema,
-    columns: ColumnSelectionSchema,
-    response_format: ResponseFormatSchema
-  })
-  .extend(PaginationSchema.shape)
-  .strict()
+export const GetRecordsSchema = z.strictObject({
+  docId: DocIdSchema,
+  tableId: TableIdSchema,
+  filters: FilterSchema,
+  columns: ColumnSelectionSchema,
+  response_format: ResponseFormatSchema,
+  ...PaginationSchema.shape
+})
 
 export type GetRecordsInput = z.infer<typeof GetRecordsSchema>
 
@@ -255,21 +251,21 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
     })
 
     return {
-      document_id: params.docId,
-      table_id: params.tableId,
+      docId: params.docId,
+      tableId: params.tableId,
       total,
       offset: params.offset,
       limit: params.limit,
-      has_more: hasMore,
-      next_offset: nextOffset,
+      hasMore: hasMore,
+      nextOffset: nextOffset,
       filters: params.filters || {},
       columns: params.columns || 'all',
       items: formattedRecords,
       ...(recordsWithErrors.length > 0
         ? {
-            formula_errors: {
-              records_with_errors: recordsWithErrors.length,
-              affected_columns: Array.from(errorColumns)
+            formulaErrors: {
+              recordsWithErrors: recordsWithErrors.length,
+              affectedColumns: Array.from(errorColumns)
             }
           }
         : {})
@@ -278,13 +274,13 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
 
   protected formatResponse(data: GetRecordsResponseData, format: 'json' | 'markdown') {
     const { data: truncatedData } = truncateIfNeeded(data.items, format, {
-      document_id: data.document_id,
-      table_id: data.table_id,
+      docId: data.docId,
+      tableId: data.tableId,
       total: data.total,
       offset: data.offset,
       limit: data.limit,
-      has_more: data.has_more,
-      next_offset: data.next_offset,
+      hasMore: data.hasMore,
+      nextOffset: data.nextOffset,
       filters: data.filters,
       columns: data.columns
     })
@@ -424,6 +420,7 @@ export const READING_TOOLS: ReadonlyArray<ToolDefinition> = [
     outputSchema: GetRecordsOutputSchema,
     annotations: READ_ONLY_ANNOTATIONS,
     handler: getRecords,
+    core: true,
     docs: {
       overview:
         'Fetch records with filters. No SQL needed. Use grist_query_sql for JOINs and aggregations. Filter syntax: {"Status": "Active"}, {"Priority": 1}, {"IsActive": true}, {"Status": ["Open", "In Progress"]}.',

@@ -65,24 +65,24 @@ type OperationResult =
 
 interface ListWebhooksResult {
   operation: 'list'
-  document_id: string
-  webhook_count: number
+  docId: string
+  webhookCount: number
   total: number
   offset: number
   limit: number
-  has_more: boolean
-  next_offset: number | null
-  page_number: number
-  total_pages: number
-  items_in_page: number
+  hasMore: boolean
+  nextOffset: number | null
+  pageNumber: number
+  totalPages: number
+  itemsInPage: number
   webhooks: Array<{
     id: string
     name: string | null
     url: string
     enabled: boolean
-    table_id: string
-    event_types: string[]
-    is_ready_column: string | null
+    tableId: string
+    eventTypes: string[]
+    isReadyColumn: string | null
     memo: string | null
     usage: WebhookUsageOutput | null
   }>
@@ -91,43 +91,43 @@ interface ListWebhooksResult {
 interface CreateWebhookResult {
   operation: 'create'
   success: true
-  document_id: string
-  webhook_id: string
-  webhook_url: string
-  table_id: string
-  event_types: string[]
+  docId: string
+  webhookId: string
+  webhookUrl: string
+  tableId: string
+  eventTypes: string[]
 }
 
 interface UpdateWebhookResult {
   operation: 'update'
   success: true
-  document_id: string
-  webhook_id: string
-  fields_updated: string[]
+  docId: string
+  webhookId: string
+  fieldsUpdated: string[]
 }
 
 interface DeleteWebhookResult {
   operation: 'delete'
   success: true
-  document_id: string
-  webhook_id: string
+  docId: string
+  webhookId: string
 }
 
 interface ClearQueueResult {
   operation: 'clear_queue'
   success: true
-  document_id: string
+  docId: string
   action: 'cleared_webhook_queue'
 }
 
 interface WebhookUsageOutput {
-  num_waiting: number
+  numWaiting: number
   status: string
-  updated_time?: number | null
-  last_success_time?: number | null
-  last_failure_time?: number | null
-  last_error_message?: string | null
-  last_http_status?: number | null
+  updatedTime?: number | null
+  lastSuccessTime?: number | null
+  lastFailureTime?: number | null
+  lastErrorMessage?: string | null
+  lastHttpStatus?: number | null
 }
 
 /**
@@ -169,41 +169,41 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
     const limit = operation.limit ?? 100
     const total = allWebhooks.length
     const paginatedWebhooks = allWebhooks.slice(offset, offset + limit)
-    const has_more = offset + limit < total
-    const next_offset = has_more ? offset + limit : null
-    const items_in_page = paginatedWebhooks.length
-    const page_number = Math.floor(offset / limit) + 1
-    const total_pages = Math.ceil(total / limit)
+    const hasMore = offset + limit < total
+    const nextOffset = hasMore ? offset + limit : null
+    const itemsInPage = paginatedWebhooks.length
+    const pageNumber = Math.floor(offset / limit) + 1
+    const totalPages = Math.ceil(total / limit)
 
     return {
       operation: 'list',
-      document_id: docId,
-      webhook_count: items_in_page,
+      docId: docId,
+      webhookCount: itemsInPage,
       total,
       offset,
       limit,
-      has_more,
-      next_offset,
-      page_number,
-      total_pages,
-      items_in_page,
+      hasMore,
+      nextOffset,
+      pageNumber,
+      totalPages,
+      itemsInPage,
       webhooks: paginatedWebhooks.map((w) => ({
         id: w.id,
         name: w.fields.name,
         url: w.fields.url,
         enabled: w.fields.enabled,
-        table_id: w.fields.tableId,
-        event_types: w.fields.eventTypes,
-        is_ready_column: w.fields.isReadyColumn,
+        tableId: w.fields.tableId,
+        eventTypes: w.fields.eventTypes,
+        isReadyColumn: w.fields.isReadyColumn,
         memo: w.fields.memo,
         usage: w.usage
           ? {
-              num_waiting: w.usage.numWaiting,
+              numWaiting: w.usage.numWaiting,
               status: w.usage.status,
-              last_success_time: w.usage.lastSuccessTime,
-              last_failure_time: w.usage.lastFailureTime,
-              last_error_message: w.usage.lastErrorMessage,
-              last_http_status: w.usage.lastHttpStatus
+              lastSuccessTime: w.usage.lastSuccessTime,
+              lastFailureTime: w.usage.lastFailureTime,
+              lastErrorMessage: w.usage.lastErrorMessage,
+              lastHttpStatus: w.usage.lastHttpStatus
             }
           : null
       }))
@@ -226,11 +226,11 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
     return {
       operation: 'create',
       success: true,
-      document_id: docId,
-      webhook_id: createdWebhook.id,
-      webhook_url: operation.fields.url,
-      table_id: operation.fields.tableId,
-      event_types: operation.fields.eventTypes
+      docId: docId,
+      webhookId: createdWebhook.id,
+      webhookUrl: operation.fields.url,
+      tableId: operation.fields.tableId,
+      eventTypes: operation.fields.eventTypes
     }
   }
 
@@ -243,9 +243,9 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
     return {
       operation: 'update',
       success: true,
-      document_id: docId,
-      webhook_id: operation.webhookId,
-      fields_updated: Object.keys(operation.fields)
+      docId: docId,
+      webhookId: operation.webhookId,
+      fieldsUpdated: Object.keys(operation.fields)
     }
   }
 
@@ -260,8 +260,8 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
     return {
       operation: 'delete',
       success: true,
-      document_id: docId,
-      webhook_id: operation.webhookId
+      docId: docId,
+      webhookId: operation.webhookId
     }
   }
 
@@ -271,7 +271,7 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
     return {
       operation: 'clear_queue',
       success: true,
-      document_id: docId,
+      docId: docId,
       action: 'cleared_webhook_queue'
     }
   }
@@ -313,23 +313,23 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
 
   private formatListSummary(result: ListWebhooksResult): string {
     if (result.webhooks.length === 0) {
-      return `No webhooks found for document ${result.document_id}`
+      return `No webhooks found for document ${result.docId}`
     }
 
     const enabledCount = result.webhooks.filter((w) => w.enabled).length
-    let summary = `Found ${result.total} webhook(s) in document ${result.document_id} (showing ${result.webhooks.length})\n\n`
+    let summary = `Found ${result.total} webhook(s) in document ${result.docId} (showing ${result.webhooks.length})\n\n`
 
     summary += result.webhooks
       .map((w, i) => {
         let info = `${i + 1}. **${w.name || 'Unnamed'}** (${w.id})\n`
         info += `   - URL: ${w.url}\n`
-        info += `   - Table: ${w.table_id}\n`
-        info += `   - Events: ${w.event_types.join(', ')}\n`
+        info += `   - Table: ${w.tableId}\n`
+        info += `   - Events: ${w.eventTypes.join(', ')}\n`
         info += `   - Status: ${w.enabled ? 'Enabled' : 'Disabled'}\n`
         if (w.usage) {
-          info += `   - Queue: ${w.usage.num_waiting} waiting, status: ${w.usage.status}\n`
-          if (w.usage.last_error_message) {
-            info += `   - Last Error: ${w.usage.last_error_message}\n`
+          info += `   - Queue: ${w.usage.numWaiting} waiting, status: ${w.usage.status}\n`
+          if (w.usage.lastErrorMessage) {
+            info += `   - Last Error: ${w.usage.lastErrorMessage}\n`
           }
         }
         return info
@@ -343,26 +343,26 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
   private formatCreateSummary(result: CreateWebhookResult): string {
     return (
       `Successfully created webhook\n\n` +
-      `**Webhook ID:** ${result.webhook_id}\n` +
-      `**URL:** ${result.webhook_url}\n` +
-      `**Table:** ${result.table_id}\n` +
-      `**Events:** ${result.event_types.join(', ')}`
+      `**Webhook ID:** ${result.webhookId}\n` +
+      `**URL:** ${result.webhookUrl}\n` +
+      `**Table:** ${result.tableId}\n` +
+      `**Events:** ${result.eventTypes.join(', ')}`
     )
   }
 
   private formatUpdateSummary(result: UpdateWebhookResult): string {
     return (
-      `Successfully updated webhook ${result.webhook_id}\n\n` +
-      `**Updated fields:** ${result.fields_updated.join(', ')}`
+      `Successfully updated webhook ${result.webhookId}\n\n` +
+      `**Updated fields:** ${result.fieldsUpdated.join(', ')}`
     )
   }
 
   private formatDeleteSummary(result: DeleteWebhookResult): string {
-    return `Successfully deleted webhook ${result.webhook_id}`
+    return `Successfully deleted webhook ${result.webhookId}`
   }
 
   private formatClearQueueSummary(result: ClearQueueResult): string {
-    return `Successfully cleared webhook queue for document ${result.document_id}`
+    return `Successfully cleared webhook queue for document ${result.docId}`
   }
 
   /**

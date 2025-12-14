@@ -466,7 +466,7 @@ class ConfigureWidgetTool extends GristTool<typeof ConfigureWidgetSchema, unknow
     // Prepare response
     const structuredContent = {
       success: true,
-      operations_completed: operations.length,
+      operationsCompleted: operations.length,
       summary
     }
 

@@ -20,15 +20,25 @@
             "WebFetch(domain:www.npmjs.com)",
             "Bash(git log:*)",
             "Bash(cut:*)",
-            "Bash(done)"
+            "Bash(done)",
+            "Bash(npm run grist:*)",
+            "Bash(docker rm -f grist-mcp-:*)",
+            "Bash(docker run:*)",
+            "Bash(docker ps:*)",
+            "Bash(docker logs:*)",
+            "Bash(docker exec:*)",
+            "Bash(curl:*)"
         ],
         "deny": [],
         "ask": []
     },
     "enableAllProjectMcpServers": true,
     "sandbox": {
-        "excludedCommands": ["docker", "docker-compose", "npm"],
+        "excludedCommands": [],
         "autoAllowBashIfSandboxed": true,
-        "enabled": true
+        "enabled": true,
+        "network": {
+            "allowUnixSockets": ["/Users/george/.orbstack/run/docker.sock"]
+        }
     }
 }

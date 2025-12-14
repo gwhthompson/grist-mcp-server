@@ -92,7 +92,7 @@ describe('Formula Column Write Protection', () => {
     expect(result.isError).toBeFalsy()
     // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
     const data = result.structuredContent as any
-    recordId = data.record_ids[0]
+    recordId = data.recordIds[0]
   }, 60000)
 
   afterAll(async () => {
@@ -186,7 +186,7 @@ describe('Formula Column Write Protection', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should allow writing to trigger formula column on update', async () => {
@@ -220,7 +220,7 @@ describe('Formula Column Write Protection', () => {
       expect(result.isError).toBeFalsy()
       // biome-ignore lint/suspicious/noExplicitAny: Dynamic API response structure in test code
       const data = result.structuredContent as any
-      expect(data.record_ids).toHaveLength(1)
+      expect(data.recordIds).toHaveLength(1)
     })
 
     it('should allow writing to data columns on update', async () => {

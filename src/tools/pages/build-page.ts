@@ -38,7 +38,7 @@ class BuildPageTool extends GristTool<typeof BuildPageSchema, unknown> {
     }
 
     // Custom markdown format for pages
-    const markdown = `# Page Created: ${pageData.page_name}
+    const markdown = `# Page Created: ${pageData.pageName}
 
 **Pattern:** ${pageData.pattern}
 **Description:** ${pageData.description}
@@ -47,8 +47,8 @@ class BuildPageTool extends GristTool<typeof BuildPageSchema, unknown> {
 
 | Resource | ID | Details |
 |----------|-----|---------|
-| Page (View) | ${pageData.view_id} | "${pageData.page_name}" |
-${(pageData.widgets as Array<{ section_id: number; table_ref: number }>).map((w, i) => `| Widget ${i + 1} | ${w.section_id} | Table: ${w.table_ref} |`).join('\n')}
+| Page (View) | ${pageData.viewId} | "${pageData.pageName}" |
+${(pageData.widgets as Array<{ sectionId: number; tableRef: number }>).map((w, i) => `| Widget ${i + 1} | ${w.sectionId} | Table: ${w.tableRef} |`).join('\n')}
 
 ## Next Steps
 

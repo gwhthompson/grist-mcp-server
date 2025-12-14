@@ -95,9 +95,13 @@ describe('Negative Tests - Validation & Error Detection', () => {
             action: 'add',
             colId: 'BadNumeric',
             type: 'Numeric',
-            widgetOptions: {
-              numMode: 'invalid_mode' as unknown as string // Force invalid value for testing
-            }
+            // Flat format: numMode at top level
+            numMode: 'invalid_mode' as unknown as
+              | 'currency'
+              | 'decimal'
+              | 'percent'
+              | 'scientific'
+              | 'text' // Force invalid value for testing
           }
         ],
         response_format: 'json'
@@ -137,10 +141,9 @@ describe('Negative Tests - Validation & Error Detection', () => {
             action: 'add',
             colId: 'BadCurrency',
             type: 'Numeric',
-            widgetOptions: {
-              numMode: 'currency',
-              currency: 'INVALID_CODE'
-            }
+            // Flat format: options at top level
+            numMode: 'currency',
+            currency: 'INVALID_CODE' as unknown as string
           }
         ],
         response_format: 'json'
@@ -174,9 +177,8 @@ describe('Negative Tests - Validation & Error Detection', () => {
             action: 'add',
             colId: 'NegativeDecimals',
             type: 'Numeric',
-            widgetOptions: {
-              decimals: -5
-            }
+            // Flat format: decimals at top level
+            decimals: -5 as unknown as number
           }
         ],
         response_format: 'json'
@@ -200,9 +202,10 @@ describe('Negative Tests - Validation & Error Detection', () => {
     it('A4. should validate hex color formats', async () => {
       /**
        * TEST: Invalid hex color 'NOTACOLOR' vs valid '#FF0000'
-       * EXPECTATION: Grist may accept any string but not render invalid colors
+       * With v2.0 schema, invalid colors are rejected at validation level
        */
-      const result = await manageColumns(context.toolContext, {
+      // Test 1: Invalid hex format should be rejected by schema validation
+      const invalidResult = await manageColumns(context.toolContext, {
         docId,
         tableId: mainTableId,
         operations: [
@@ -210,15 +213,31 @@ describe('Negative Tests - Validation & Error Detection', () => {
             action: 'add',
             colId: 'InvalidColor',
             type: 'Text',
-            widgetOptions: {
-              textColor: 'NOTACOLOR' // Invalid hex format
+            // v2.0 format: textColor in nested style object
+            style: {
+              textColor: 'NOTACOLOR' as unknown as string // Invalid hex format
             }
-          },
+          }
+        ],
+        response_format: 'json'
+      })
+
+      // Schema validation should reject invalid hex color
+      expect(invalidResult.isError).toBe(true)
+      expect(invalidResult.content[0].text).toMatch(/hex|color|invalid|pattern/i)
+      console.log('✓ Schema validates color format (rejects NOTACOLOR)')
+
+      // Test 2: Valid hex format should be accepted
+      const validResult = await manageColumns(context.toolContext, {
+        docId,
+        tableId: mainTableId,
+        operations: [
           {
             action: 'add',
             colId: 'ValidColor',
             type: 'Text',
-            widgetOptions: {
+            // v2.0 format: textColor in nested style object
+            style: {
               textColor: '#FF0000' // Valid hex format
             }
           }
@@ -226,25 +245,13 @@ describe('Negative Tests - Validation & Error Detection', () => {
         response_format: 'json'
       })
 
-      if (result.isError) {
-        // Grist validates color format
-        expect(result.content[0].text).toMatch(/color|invalid|hex/i)
-        console.log('✓ Grist validates color format')
-      } else {
-        // Grist stores both colors - check what was stored
-        const invalidCol = await getColumnInfo(mainTableId, 'InvalidColor')
-        const validCol = await getColumnInfo(mainTableId, 'ValidColor')
+      expect(validResult.isError).not.toBe(true)
 
-        const invalidOpts = JSON.parse(invalidCol.fields.widgetOptions || '{}')
-        const validOpts = JSON.parse(validCol.fields.widgetOptions || '{}')
-
-        expect(invalidOpts.textColor).toBe('NOTACOLOR')
-        expect(validOpts.textColor).toBe('#FF0000')
-
-        console.log('⚠ Grist accepts invalid color format (may not render)')
-        console.log(`  Invalid: ${invalidOpts.textColor}`)
-        console.log(`  Valid: ${validOpts.textColor}`)
-      }
+      // Verify color was stored correctly
+      const validCol = await getColumnInfo(mainTableId, 'ValidColor')
+      const validOpts = JSON.parse(validCol.fields.widgetOptions || '{}')
+      expect(validOpts.textColor).toBe('#FF0000')
+      console.log(`✓ Valid hex color stored: ${validOpts.textColor}`)
     })
   })
 
@@ -274,15 +281,14 @@ describe('Negative Tests - Validation & Error Detection', () => {
             action: 'add',
             colId: 'Priority',
             type: 'Choice',
-            widgetOptions: {
-              choices: ['Low', 'Medium', 'High'],
-              choiceOptions: {
-                // Styling for choices that exist
-                Low: { fillColor: '#00FF00' },
-                High: { fillColor: '#FF0000' },
-                // Styling for choice that DOESN'T exist!
-                Critical: { fillColor: '#FF00FF' }
-              }
+            // Flat format: choices and choiceOptions at top level
+            choices: ['Low', 'Medium', 'High'],
+            choiceOptions: {
+              // Styling for choices that exist
+              Low: { fillColor: '#00FF00' },
+              High: { fillColor: '#FF0000' },
+              // Styling for choice that DOESN'T exist!
+              Critical: { fillColor: '#FF00FF' }
             }
           }
         ],
@@ -339,7 +345,8 @@ describe('Negative Tests - Validation & Error Detection', () => {
           {
             action: 'add',
             colId: 'RefToB',
-            type: 'Ref:RefTableB',
+            type: 'Ref',
+            refTable: 'RefTableB',
             label: 'Reference to B'
           }
         ],
@@ -354,7 +361,8 @@ describe('Negative Tests - Validation & Error Detection', () => {
           {
             action: 'add',
             colId: 'RefToA',
-            type: 'Ref:RefTableA',
+            type: 'Ref',
+            refTable: 'RefTableA',
             label: 'Reference to A'
           }
         ],
@@ -645,7 +653,7 @@ describe('Negative Tests - Validation & Error Detection', () => {
         tableId: convTableId,
         operations: [
           {
-            action: 'modify',
+            action: 'update',
             colId: 'Data',
             type: 'Numeric'
           }
@@ -725,9 +733,10 @@ describe('Negative Tests - Validation & Error Detection', () => {
         tableId: sourceTable,
         operations: [
           {
-            action: 'modify',
+            action: 'update',
             colId: 'RefCol',
-            type: 'Ref:TargetB' // Change reference target!
+            type: 'Ref',
+            refTable: 'TargetB' // Change reference target!
           }
         ],
         response_format: 'json'

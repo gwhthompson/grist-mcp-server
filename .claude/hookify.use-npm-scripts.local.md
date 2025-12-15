@@ -2,7 +2,7 @@
 name: use-npm-scripts
 enabled: true
 event: bash
-pattern: npx\s+@modelcontextprotocol/inspector|curl.*localhost:8484
+pattern: npx\s+@modelcontextprotocol/inspector|npx\s+@anthropic-ai/mcpb|curl.*localhost:8484
 action: block
 ---
 

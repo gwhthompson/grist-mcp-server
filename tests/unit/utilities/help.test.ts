@@ -82,11 +82,11 @@ describe('Help Tool - Schema Validation', () => {
       expect(markdownResult.success).toBe(true)
     })
 
-    it('should default response_format to markdown', () => {
+    it('should default response_format to json', () => {
       const result = HelpSchema.safeParse({ tool_name: 'grist_get_records' })
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.data.response_format).toBe('markdown')
+        expect(result.data.response_format).toBe('json')
       }
     })
   })

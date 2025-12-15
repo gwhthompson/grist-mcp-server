@@ -1,28 +1,32 @@
 import { z } from 'zod'
 import { getCurrencyCodeError, isValidCurrency } from '../constants/iso-4217-currencies.js'
 import { log } from '../utils/shared-logger.js'
-import { HexColorOptionalSchema } from './common.js'
+import { HexColorSchema } from './common.js'
 
-// Use registered HexColorOptionalSchema to avoid unnamed $ref wrappers
-export const StylePropertiesSchema = z.strictObject({
-  textColor: HexColorOptionalSchema,
-  fillColor: HexColorOptionalSchema,
-  fontBold: z.boolean().optional(),
-  fontItalic: z.boolean().optional(),
-  fontUnderline: z.boolean().optional(),
-  fontStrikethrough: z.boolean().optional()
+// Base schemas - .partial() makes all properties optional
+const StylePropertiesBase = z.strictObject({
+  textColor: HexColorSchema,
+  fillColor: HexColorSchema,
+  fontBold: z.boolean(),
+  fontItalic: z.boolean(),
+  fontUnderline: z.boolean(),
+  fontStrikethrough: z.boolean()
 })
+
+export const StylePropertiesSchema = StylePropertiesBase.partial()
 
 export type StyleProperties = z.infer<typeof StylePropertiesSchema>
 
-const HeaderStylePropertiesSchema = z.strictObject({
-  headerTextColor: HexColorOptionalSchema,
-  headerFillColor: HexColorOptionalSchema,
-  headerFontBold: z.boolean().optional(),
-  headerFontUnderline: z.boolean().optional(),
-  headerFontItalic: z.boolean().optional(),
-  headerFontStrikethrough: z.boolean().optional()
+const HeaderStylePropertiesBase = z.strictObject({
+  headerTextColor: HexColorSchema,
+  headerFillColor: HexColorSchema,
+  headerFontBold: z.boolean(),
+  headerFontUnderline: z.boolean(),
+  headerFontItalic: z.boolean(),
+  headerFontStrikethrough: z.boolean()
 })
+
+const HeaderStylePropertiesSchema = HeaderStylePropertiesBase.partial()
 
 const AlignmentSchema = z.enum(['left', 'center', 'right']).optional()
 

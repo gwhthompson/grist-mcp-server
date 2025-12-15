@@ -58,7 +58,7 @@ export const GetDocumentsFixtures = {
   withDocuments: {
     items: [
       {
-        id: 'fdCVLvgAPAD1HXhQcGHCyz',
+        docId: 'fdCVLvgAPAD1HXhQcGHCyz',
         name: 'Customer CRM',
         workspace: 'Personal',
         workspaceId: 1,
@@ -66,7 +66,7 @@ export const GetDocumentsFixtures = {
         url: 'https://docs.getgrist.com/fdCVLvgAPAD1HXhQcGHCyz'
       },
       {
-        id: 'abc123def456ghi789jkl0',
+        docId: 'abc123def456ghi789jkl0',
         name: 'Sales Report',
         workspace: { id: 2, name: 'Team Workspace' },
         workspaceId: 2,

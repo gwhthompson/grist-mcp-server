@@ -101,7 +101,7 @@ describe('Output Schema Validation', () => {
         ...GetDocumentsFixtures.minimal,
         items: [
           {
-            id: 'abc123',
+            docId: 'abc123',
             name: 'Test',
             workspace: 'Personal',
             access: 'owner'
@@ -115,7 +115,7 @@ describe('Output Schema Validation', () => {
         ...GetDocumentsFixtures.minimal,
         items: [
           {
-            id: 'abc123',
+            docId: 'abc123',
             name: 'Test',
             workspace: { id: 1, name: 'Personal' },
             access: 'owner'

@@ -9,13 +9,9 @@ export const WebhookIdSchema = z
       'Get webhook IDs from grist_manage_webhooks with action="list".'
   })
   .describe('UUID of the webhook')
-WebhookIdSchema.register(z.globalRegistry, {
-  id: 'webhookId',
-  description: 'UUID of the webhook, e.g. a1b2c3d4-e5f6-7890-abcd-ef1234567890'
-})
 
 // ALLOWED_WEBHOOK_DOMAINS provides server-side SSRF protection
-const WebhookUrlSchema = z
+export const WebhookUrlSchema = z
   .string()
   .url({ message: 'Must be a valid URL (e.g., "https://example.com/webhook")' })
   .max(2000, {
@@ -46,7 +42,6 @@ const WebhookUrlSchema = z
       "Must be publicly accessible and in the server's ALLOWED_WEBHOOK_DOMAINS list. " +
       '(HTTPS recommended for security).'
   )
-WebhookUrlSchema.register(z.globalRegistry, { id: 'webhookUrl' })
 
 const SQL_RESERVED_KEYWORDS = new Set([
   'SELECT',
@@ -77,7 +72,7 @@ const SQL_RESERVED_KEYWORDS = new Set([
   'NULL'
 ])
 
-const WebhookColumnIdSchema = z
+export const WebhookColumnIdSchema = z
   .string()
   .min(1, { message: 'Column ID cannot be empty if specified' })
   .max(64, { message: 'Column ID must be 64 characters or less' })
@@ -96,7 +91,6 @@ const WebhookColumnIdSchema = z
       'Column must exist in the target table. Use for conditional webhooks ' +
       '(e.g., only send webhook when Status="Approved").'
   )
-WebhookColumnIdSchema.register(z.globalRegistry, { id: 'webhookColumnId' })
 
 export const WebhookEventTypeSchema = z.enum(['add', 'update'], {
   error:
@@ -105,7 +99,6 @@ export const WebhookEventTypeSchema = z.enum(['add', 'update'], {
     '["update"] for changes to existing records, ' +
     'or ["add", "update"] for both.'
 })
-WebhookEventTypeSchema.register(z.globalRegistry, { id: 'webhookEventType' })
 
 export const WebhookFieldsSchema = z.strictObject({
   name: z

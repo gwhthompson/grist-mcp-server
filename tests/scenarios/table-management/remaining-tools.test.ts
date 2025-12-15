@@ -341,7 +341,7 @@ describe('Remaining Tools - Complete Integration Tests', () => {
         response_format: 'json'
       })
 
-      const docIds = docsResult.structuredContent.items.map((d: { id: string }) => d.id)
+      const docIds = docsResult.structuredContent.items.map((d: { docId: string }) => d.docId)
       expect(docIds).toContain(result.structuredContent.docId)
     })
 

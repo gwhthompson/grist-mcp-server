@@ -10,13 +10,16 @@
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
-import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import { inject } from 'vitest'
-import { z } from 'zod'
 import { ALL_TOOLS } from '../../src/registry/tool-definitions.js'
 import { registerToolsBatch, silentStrategy } from '../../src/registry/tool-registry.js'
 import { registerResources } from '../../src/resources/index.js'
+import { registerSchemas } from '../../src/schemas/registry.js'
+import { setupToolsListHandler } from '../../src/schemas/schema-utils.js'
 import { createGristMcpServer, type ServerInstance } from '../../src/server.js'
+
+// Register schemas once at module load - mirrors production behavior in src/index.ts
+registerSchemas()
 
 /**
  * Test context containing MCP client and server instance.
@@ -98,46 +101,8 @@ export async function createMCPTestClient(
   // Register all tools (silently - no console output)
   await registerToolsBatch(serverInstance.server, serverInstance.context, ALL_TOOLS, silentStrategy)
 
-  // Clean JSON Schema for token optimization - mirrors cleanAndValidateSchema in src/index.ts
-  const cleanSchema = (schema: Record<string, unknown>) => {
-    delete schema.$schema
-    const defs = schema.$defs as Record<string, Record<string, unknown>> | undefined
-    if (defs) {
-      for (const def of Object.values(defs)) {
-        delete def.id
-        // Remove redundant type when const is present
-        if (def.const !== undefined && def.type !== undefined) {
-          delete def.type
-        }
-        // Remove minLength/maxLength when pattern enforces exact length
-        if (def.pattern && def.minLength === def.maxLength && def.minLength !== undefined) {
-          delete def.minLength
-          delete def.maxLength
-        }
-        // Remove redundant pattern when format: "uuid" is present
-        if (def.format === 'uuid' && def.pattern) {
-          delete def.pattern
-        }
-      }
-    }
-    return schema
-  }
-
-  // Override tools/list handler for optimized JSON Schema with $defs
-  serverInstance.server.server.setRequestHandler(ListToolsRequestSchema, () => ({
-    tools: ALL_TOOLS.map((tool) => ({
-      name: tool.name,
-      title: tool.title,
-      description: tool.description,
-      inputSchema: cleanSchema(z.toJSONSchema(tool.inputSchema, { reused: 'ref', io: 'input' })),
-      ...(tool.outputSchema && {
-        outputSchema: cleanSchema(
-          z.toJSONSchema(tool.outputSchema, { reused: 'ref', io: 'output' })
-        )
-      }),
-      annotations: tool.annotations
-    }))
-  }))
+  // Setup tools/list handler - uses SAME function as production (no duplication)
+  setupToolsListHandler(serverInstance.server, ALL_TOOLS)
 
   // Register resources (unless skipped)
   if (!options.skipResources) {

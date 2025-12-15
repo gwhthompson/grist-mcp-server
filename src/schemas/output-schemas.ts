@@ -66,10 +66,10 @@ export const GetWorkspacesOutputSchema = z.object({
 export const GetDocumentsOutputSchema = z.object({
   items: z.array(
     z.object({
-      id: z.string().describe('Document ID'),
+      docId: z.string().describe('Document ID'),
       name: z.string().describe('Document name'),
       workspace: z
-        .union([z.string(), z.object({ id: z.number(), name: z.string() })])
+        .union([z.string(), z.looseObject({ id: z.number(), name: z.string() })])
         .optional()
         .describe('Workspace name or details'),
       workspaceId: z.number().optional().describe('Workspace ID'),

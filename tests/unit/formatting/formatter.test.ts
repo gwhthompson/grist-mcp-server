@@ -5,6 +5,10 @@
  * - Error message size limiting
  * - Error message truncation
  * - No emoji characters in error messages
+ *
+ * NOTE: Error responses no longer include structuredContent.
+ * MCP SDK validates structuredContent against outputSchema if present,
+ * even when isError: true. Omitting it avoids schema validation failures.
  */
 
 import { describe, expect, it } from 'vitest'
@@ -18,7 +22,6 @@ describe('Formatter - Error Message Constraints', () => {
       const response = formatErrorResponse(shortError)
 
       expect(response.content[0].text).toBe(shortError)
-      expect(response.structuredContent.error).toBe(shortError)
       expect(response.isError).toBe(true)
     })
 
@@ -30,7 +33,6 @@ describe('Formatter - Error Message Constraints', () => {
       const expectedTruncated = `${'A'.repeat(MAX_ERROR_LENGTH)}\n\n[Error message truncated - exceeded maximum length]`
 
       expect(response.content[0].text).toBe(expectedTruncated)
-      expect(response.structuredContent.error).toBe(expectedTruncated)
       expect(response.content[0].text.length).toBeLessThan(longError.length)
     })
 
@@ -40,7 +42,6 @@ describe('Formatter - Error Message Constraints', () => {
 
       // Should not be truncated since it's exactly at the limit
       expect(response.content[0].text).toBe(exactLengthError)
-      expect(response.structuredContent.error).toBe(exactLengthError)
     })
 
     it('should truncate multi-line error messages', () => {
@@ -65,21 +66,22 @@ describe('Formatter - Error Message Constraints', () => {
       expect(errorWithoutEmoji.content[0].text).not.toContain('📖')
     })
 
-    it('should preserve error metadata in structured response', () => {
+    it('should append suggestions to text content when provided', () => {
       const errorMessage = 'Test error'
       const options = {
         errorCode: 'TEST_ERROR',
         context: { detail: 'Additional context' },
-        retryable: true
+        retryable: true,
+        suggestions: ['Try this', 'Or try that']
       }
 
       const response = formatErrorResponse(errorMessage, options)
 
-      expect(response.structuredContent.success).toBe(false)
-      expect(response.structuredContent.error).toBe(errorMessage)
-      expect(response.structuredContent.errorCode).toBe('TEST_ERROR')
-      expect(response.structuredContent.context).toEqual({ detail: 'Additional context' })
-      expect(response.structuredContent.retryable).toBe(true)
+      // Suggestions should be appended to text content
+      expect(response.content[0].text).toContain('Test error')
+      expect(response.content[0].text).toContain('**Suggestions:**')
+      expect(response.content[0].text).toContain('- Try this')
+      expect(response.content[0].text).toContain('- Or try that')
     })
 
     it('should handle error messages with special characters', () => {
@@ -88,7 +90,6 @@ describe('Formatter - Error Message Constraints', () => {
       const response = formatErrorResponse(errorWithSpecialChars)
 
       expect(response.content[0].text).toBe(errorWithSpecialChars)
-      expect(response.structuredContent.error).toBe(errorWithSpecialChars)
     })
   })
 
@@ -108,12 +109,13 @@ describe('Formatter - Error Message Constraints', () => {
       expect(response.content[0].text).toBeTruthy()
     })
 
-    it('should always have structuredContent with success: false', () => {
+    it('should NOT include structuredContent to avoid output schema validation', () => {
+      // MCP SDK validates structuredContent against outputSchema if present,
+      // even when isError: true. We omit structuredContent to avoid this.
       const response = formatErrorResponse('Error message')
 
-      expect(response.structuredContent).toBeTruthy()
-      expect(response.structuredContent.success).toBe(false)
-      expect(response.structuredContent.error).toBeTruthy()
+      expect(response.structuredContent).toBeUndefined()
+      expect(response.isError).toBe(true)
     })
   })
 
@@ -122,7 +124,6 @@ describe('Formatter - Error Message Constraints', () => {
       const response = formatErrorResponse('')
 
       expect(response.content[0].text).toBe('')
-      expect(response.structuredContent.error).toBe('')
     })
 
     it('should handle error messages with only whitespace', () => {

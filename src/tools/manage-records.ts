@@ -50,12 +50,7 @@ import { GristTool } from './base/GristTool.js'
 // Record Operation Schemas - discriminated union on 'action' field
 // =============================================================================
 
-const RecordDataSchema = z.record(z.string(), CellValueSchema)
-// Register for named $ref in JSON Schema (replaces __schema0)
-RecordDataSchema.register(z.globalRegistry, {
-  id: 'recordData',
-  description: 'Column name to cell value mapping'
-})
+export const RecordDataSchema = z.record(z.string(), CellValueSchema)
 
 /**
  * Add operation: Insert new records

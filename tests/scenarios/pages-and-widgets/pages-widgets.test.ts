@@ -246,9 +246,9 @@ describe('Pages & Widgets - Integration Tests', () => {
         response_format: 'json'
       })
 
-      const data = result.structuredContent as Record<string, unknown>
-      expect(data.success).toBe(false)
-      expect(data).toHaveProperty('error')
+      // Error responses don't include structuredContent (MCP SDK validation fix)
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('NonExistentTable')
     })
 
     it('should provide actionable error for invalid column name', async () => {
@@ -270,9 +270,9 @@ describe('Pages & Widgets - Integration Tests', () => {
         response_format: 'json'
       })
 
-      const data = result.structuredContent as Record<string, unknown>
-      expect(data.success).toBe(false)
-      expect(data).toHaveProperty('error')
+      // Error responses don't include structuredContent (MCP SDK validation fix)
+      expect(result.isError).toBe(true)
+      expect(result.content[0].text).toContain('NonExistentColumn')
     })
   })
 

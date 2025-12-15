@@ -2,11 +2,15 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
-import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
-import { z } from 'zod'
 import packageJson from '../package.json' with { type: 'json' }
 import { DEFAULT_BASE_URL, STRICT_MODE } from './constants.js'
 import { ALL_TOOLS } from './registry/tool-definitions.js'
+import { registerSchemas } from './schemas/registry.js'
+import { setupToolsListHandler } from './schemas/schema-utils.js'
+
+// Register schemas with z.globalRegistry for named JSON Schema $refs
+// Must be called before any schema generation (tools/list)
+registerSchemas()
 import {
   consoleLoggingStrategy,
   getToolStatsByCategory,
@@ -97,47 +101,6 @@ function logStartupInfo(config: ServerConfig): void {
   console.error('')
 }
 
-/**
- * Clean and validate JSON Schema output for token optimization and consistency.
- * - Removes redundant id field in $defs (already the key name)
- * - Removes redundant type field when const is present (type is inferred)
- * - Removes redundant minLength/maxLength when pattern enforces length
- * - Removes redundant pattern when format: "uuid" is present (format is standard)
- * - Validates no unnamed schemas (__schema0, etc.) exist
- */
-function cleanAndValidateSchema(
-  schema: Record<string, unknown>,
-  context: string
-): Record<string, unknown> {
-  const defs = schema.$defs as Record<string, Record<string, unknown>> | undefined
-  if (defs) {
-    for (const [key, def] of Object.entries(defs)) {
-      // VALIDATE: No unnamed schemas - they should all be registered
-      if (key.startsWith('__schema')) {
-        throw new Error(`Unnamed schema "${key}" in ${context}. Register it with z.globalRegistry.`)
-      }
-      // Clean `id` field - AJV interprets it as JSON Schema $id keyword
-      // This breaks validation. The key itself serves as the identifier.
-      delete def.id
-      // Remove redundant type when const is present - type is inferred from const value
-      if (def.const !== undefined && def.type !== undefined) {
-        delete def.type
-      }
-      // Remove minLength/maxLength when pattern enforces exact length
-      if (def.pattern && def.minLength === def.maxLength && def.minLength !== undefined) {
-        delete def.minLength
-        delete def.maxLength
-      }
-      // Remove redundant pattern when format: "uuid" is present
-      // format: "uuid" is a JSON Schema standard - the regex pattern is redundant (~220 bytes saved)
-      if (def.format === 'uuid' && def.pattern) {
-        delete def.pattern
-      }
-    }
-  }
-  return schema
-}
-
 // Server instance for cleanup during shutdown
 let serverInstance: ServerInstance | null = null
 
@@ -154,27 +117,9 @@ async function main(): Promise<void> {
 
   await registerTools(serverInstance.server, serverInstance.context)
 
-  // Override tools/list handler for optimized JSON Schema with $defs
-  // This reduces schema size by ~72% via shared references
-  // MCP 2025-11-25: Added title and outputSchema fields
-  serverInstance.server.server.setRequestHandler(ListToolsRequestSchema, () => ({
-    tools: ALL_TOOLS.map((tool) => ({
-      name: tool.name,
-      title: tool.title,
-      description: tool.description,
-      inputSchema: cleanAndValidateSchema(
-        z.toJSONSchema(tool.inputSchema, { reused: 'ref', io: 'input' }),
-        `${tool.name} inputSchema`
-      ),
-      ...(tool.outputSchema && {
-        outputSchema: cleanAndValidateSchema(
-          z.toJSONSchema(tool.outputSchema, { reused: 'ref', io: 'output' }),
-          `${tool.name} outputSchema`
-        )
-      }),
-      annotations: tool.annotations
-    }))
-  }))
+  // Setup tools/list handler with optimized JSON Schema ($defs, validation)
+  // This is the single source of truth - same function used by tests
+  setupToolsListHandler(serverInstance.server, ALL_TOOLS)
 
   registerResources(serverInstance.server, serverInstance.context)
   await connectServer(serverInstance.server)

@@ -54,16 +54,16 @@ describe('Formatter Service', () => {
   })
 
   describe('formatErrorResponse', () => {
-    it('should format error with isError flag and structured content', () => {
+    it('should format error with isError flag but no structuredContent', () => {
+      // MCP SDK validates structuredContent against outputSchema if present,
+      // even when isError: true. We omit structuredContent to avoid this.
       const errorMessage = 'Document not found'
       const result = formatErrorResponse(errorMessage)
 
       expect(result).toHaveErrorResponse(/Document not found/)
       expect(result.content).toHaveLength(1)
-      expect(result.structuredContent).toEqual({
-        success: false,
-        error: errorMessage
-      })
+      expect(result.isError).toBe(true)
+      expect(result.structuredContent).toBeUndefined()
     })
 
     it('should handle multiline error messages', () => {

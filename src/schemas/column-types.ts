@@ -15,7 +15,7 @@
 
 import { z } from 'zod'
 import { getCurrencyCodeError, isValidCurrency } from '../constants/iso-4217-currencies.js'
-import { AlignmentSchema, ColIdSchema, HexColorOptionalSchema } from './common.js'
+import { AlignmentSchema, ColIdSchema, HexColorSchema } from './common.js'
 import { BaseConditionalRuleSchema } from './conditional-rules.js'
 
 // Re-export for consumers that expect these from column-types
@@ -27,7 +27,6 @@ export const CurrencyCodeInputSchema = z
   .string()
   .length(3)
   .describe('ISO 4217 currency code (e.g., "USD", "EUR")')
-CurrencyCodeInputSchema.register(z.globalRegistry, { id: 'currencyCode' })
 
 // Full validation with transform for runtime use
 export const CurrencyCodeSchema = CurrencyCodeInputSchema.transform((code) =>
@@ -40,48 +39,47 @@ export const CurrencyCodeSchema = CurrencyCodeInputSchema.transform((code) =>
 // Rule Style Schema (for conditional formatting)
 // =============================================================================
 
-export const RuleStyleSchema = z
-  .object({
-    textColor: HexColorOptionalSchema,
-    fillColor: HexColorOptionalSchema,
-    fontBold: z.boolean().optional(),
-    fontItalic: z.boolean().optional(),
-    fontUnderline: z.boolean().optional(),
-    fontStrikethrough: z.boolean().optional()
-  })
-  .describe('Conditional formatting style')
-RuleStyleSchema.register(z.globalRegistry, { id: 'RuleStyle' })
+// Base schema with required types - .partial() makes all properties optional
+const RuleStyleBaseSchema = z.object({
+  textColor: HexColorSchema,
+  fillColor: HexColorSchema,
+  fontBold: z.boolean(),
+  fontItalic: z.boolean(),
+  fontUnderline: z.boolean(),
+  fontStrikethrough: z.boolean()
+})
+
+export const RuleStyleSchema = RuleStyleBaseSchema.partial().describe('Conditional formatting style')
 
 // =============================================================================
 // Column Style Schema (universal styling, nested in `style` property)
 // =============================================================================
 
-export const ColumnStyleSchema = z
-  .object({
-    textColor: HexColorOptionalSchema,
-    fillColor: HexColorOptionalSchema,
-    fontBold: z.boolean().optional(),
-    fontItalic: z.boolean().optional(),
-    fontUnderline: z.boolean().optional(),
-    fontStrikethrough: z.boolean().optional(),
-    headerTextColor: HexColorOptionalSchema,
-    headerFillColor: HexColorOptionalSchema,
-    headerFontBold: z.boolean().optional(),
-    headerFontItalic: z.boolean().optional(),
-    headerFontUnderline: z.boolean().optional(),
-    headerFontStrikethrough: z.boolean().optional(),
-    alignment: AlignmentSchema.optional(),
-    rulesOptions: z
-      .array(BaseConditionalRuleSchema)
-      .optional()
-      .describe(
-        'Conditional formatting rules. Each rule requires {formula, style} where formula is a Python expression ' +
-          'returning boolean (e.g., "$Price > 1000", "$Status == \\"Active\\"") and style contains formatting ' +
-          '(fillColor, textColor, fontBold, etc.). Rules are evaluated in order; first matching rule wins.'
-      )
-  })
-  .describe('Visual styling options')
-ColumnStyleSchema.register(z.globalRegistry, { id: 'ColumnStyle' })
+// Base schema with required types - .partial() makes all properties optional
+const ColumnStyleBaseSchema = z.object({
+  textColor: HexColorSchema,
+  fillColor: HexColorSchema,
+  fontBold: z.boolean(),
+  fontItalic: z.boolean(),
+  fontUnderline: z.boolean(),
+  fontStrikethrough: z.boolean(),
+  headerTextColor: HexColorSchema,
+  headerFillColor: HexColorSchema,
+  headerFontBold: z.boolean(),
+  headerFontItalic: z.boolean(),
+  headerFontUnderline: z.boolean(),
+  headerFontStrikethrough: z.boolean(),
+  alignment: AlignmentSchema,
+  rulesOptions: z
+    .array(BaseConditionalRuleSchema)
+    .describe(
+      'Conditional formatting rules. Each rule requires {formula, style} where formula is a Python expression ' +
+        'returning boolean (e.g., "$Price > 1000", "$Status == \\"Active\\"") and style contains formatting ' +
+        '(fillColor, textColor, fontBold, etc.). Rules are evaluated in order; first matching rule wins.'
+    )
+})
+
+export const ColumnStyleSchema = ColumnStyleBaseSchema.partial().describe('Visual styling options')
 
 export type ColumnStyle = z.infer<typeof ColumnStyleSchema>
 
@@ -107,10 +105,6 @@ export const ColumnTypeLiteralSchema = z.enum([
   'Ref',
   'RefList'
 ])
-ColumnTypeLiteralSchema.register(z.globalRegistry, {
-  id: 'columnType',
-  description: 'Column type, e.g. Text, Numeric, Ref:Customers'
-})
 
 export type ColumnTypeLiteral = z.infer<typeof ColumnTypeLiteralSchema>
 
@@ -120,35 +114,33 @@ export const WidgetTypeSchema = z
   .describe(
     'Widget type. Text: TextBox/Markdown/HyperLink. Bool: CheckBox/Switch. Numeric/Int: Spinner'
   )
-WidgetTypeSchema.register(z.globalRegistry, { id: 'columnWidgetType' })
 
 // Numeric format mode enum
 export const NumModeSchema = z
   .enum(['currency', 'decimal', 'percent', 'scientific', 'text'])
   .nullable()
   .describe('Numeric/Int only: number format mode')
-NumModeSchema.register(z.globalRegistry, { id: 'numMode' })
 
 // =============================================================================
 // Choice Styling Schema
 // =============================================================================
 
-const ChoiceStyleSchema = z
-  .object({
-    textColor: HexColorOptionalSchema,
-    fillColor: HexColorOptionalSchema,
-    fontBold: z.boolean().optional(),
-    fontItalic: z.boolean().optional(),
-    fontUnderline: z.boolean().optional(),
-    fontStrikethrough: z.boolean().optional()
-  })
-  .describe('Per-choice styling')
+// Base schema with required types - .partial() makes all properties optional
+const ChoiceStyleBaseSchema = z.object({
+  textColor: HexColorSchema,
+  fillColor: HexColorSchema,
+  fontBold: z.boolean(),
+  fontItalic: z.boolean(),
+  fontUnderline: z.boolean(),
+  fontStrikethrough: z.boolean()
+})
+
+const ChoiceStyleSchema = ChoiceStyleBaseSchema.partial().describe('Per-choice styling')
 
 export const ChoiceOptionsSchema = z
   .record(z.string(), ChoiceStyleSchema)
   .optional()
   .describe('Choice/ChoiceList only: style per choice value')
-ChoiceOptionsSchema.register(z.globalRegistry, { id: 'choiceOptions' })
 
 // Table name schema for refTable field
 export const RefTableSchema = z
@@ -157,14 +149,9 @@ export const RefTableSchema = z
   .max(64)
   .regex(/^[A-Z_][A-Za-z0-9_]*$/)
   .describe('Ref/RefList only: target table name')
-RefTableSchema.register(z.globalRegistry, { id: 'refTable' })
 
 // visibleCol can be column name (string) or column ID (number)
 export const VisibleColSchema = z.union([z.string(), z.number()])
-VisibleColSchema.register(z.globalRegistry, {
-  id: 'visibleCol',
-  description: 'Display column: name (string) or ID (number)'
-})
 
 // =============================================================================
 // Column Definition Schema (shared by grist_create_table and grist_manage_columns)
@@ -264,8 +251,6 @@ export const ColumnDefinitionSchema = z.object({
   style: ColumnStyleSchema.optional()
 })
 
-// Register for $ref reuse across tools
-ColumnDefinitionSchema.register(z.globalRegistry, { id: 'ColumnDefinition' })
 
 export type ColumnDefinition = z.infer<typeof ColumnDefinitionSchema>
 

@@ -39,7 +39,6 @@ export const UserWidgetTypeSchema = z
   .describe(
     'Widget display type: grid (table), card (single record), card_list (multiple cards), chart, form, or custom'
   )
-UserWidgetTypeSchema.register(z.globalRegistry, { id: 'pageWidgetType' })
 
 export function toGristWidgetType(userType: UserWidgetType): GristWidgetType {
   const mapping: Record<UserWidgetType, GristWidgetType> = {

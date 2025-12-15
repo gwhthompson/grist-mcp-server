@@ -56,20 +56,21 @@ describe('MCP Protocol - Schema Generation', () => {
   })
 
   describe('$defs reference resolution', () => {
-    it('should have resolvable $refs in schemas with $defs', async () => {
+    it('should have inlined docId/tableId schemas (not $refs)', async () => {
       const result = await ctx.client.listTools()
 
-      // grist_manage_records uses $defs for docId, tableId, etc.
+      // grist_manage_records should have docId/tableId inlined (not in $defs)
+      // This avoids $ref indirection that causes model hallucination
       const manageRecordsTool = result.tools.find((t) => t.name === 'grist_manage_records')
       expect(manageRecordsTool).toBeDefined()
 
       const schema = manageRecordsTool?.inputSchema as Record<string, unknown>
-      const defs = schema.$defs as Record<string, unknown> | undefined
+      const props = schema.properties as Record<string, Record<string, unknown>>
 
-      if (defs) {
-        // Check that docId and tableId are defined
-        expect(defs.docId || defs.tableId).toBeDefined()
-      }
+      // docId should be inlined with type: "string" directly
+      expect(props.docId).toBeDefined()
+      expect(props.docId.type).toBe('string')
+      expect(props.docId.pattern).toBeDefined()
     })
 
     it('should have valid schema structure after $ref resolution', async () => {
@@ -91,6 +92,25 @@ describe('MCP Protocol - Schema Generation', () => {
           )) {
             expect(defSchema, `$defs.${defName} should be an object`).toBeDefined()
             expect(typeof defSchema).toBe('object')
+          }
+        }
+      }
+    })
+
+    it('should have no unnamed schemas in $defs', async () => {
+      // This regression test ensures all reused schemas are properly registered
+      // with z.globalRegistry. Unregistered schemas get auto-generated names
+      // like __schema0, __schema1 which are opaque and break documentation.
+      const result = await ctx.client.listTools()
+
+      for (const tool of result.tools) {
+        const schema = tool.inputSchema as Record<string, unknown>
+        if (schema.$defs) {
+          for (const key of Object.keys(schema.$defs as Record<string, unknown>)) {
+            expect(
+              key.startsWith('__schema'),
+              `Tool ${tool.name} has unnamed schema "${key}" - register it with z.globalRegistry`
+            ).toBe(false)
           }
         }
       }
@@ -173,9 +193,9 @@ describe('MCP Protocol - Schema Generation', () => {
       const schema = getWorkspacesTool?.inputSchema as Record<string, unknown>
       const properties = schema.properties as Record<string, Record<string, unknown>>
 
-      // response_format should default to 'markdown'
+      // response_format should default to 'json'
       const responseFormat = properties.response_format
-      expect(responseFormat?.default).toBe('markdown')
+      expect(responseFormat?.default).toBe('json')
 
       // limit should have a default
       const limit = properties.limit

@@ -58,15 +58,11 @@ import { validateRetValues } from '../validators/apply-response.js'
 import { GristTool } from './base/GristTool.js'
 
 // =============================================================================
-// Shared Schemas (registered for named $refs)
+// Shared Schemas
 // =============================================================================
 
 // JsonObjectSchema for arbitrary JSON data in responses
 const JsonObjectSchema = z.record(z.string(), z.unknown())
-JsonObjectSchema.register(z.globalRegistry, {
-  id: 'jsonObject',
-  description: 'Arbitrary JSON object'
-})
 
 // =============================================================================
 // Table Operation Schemas

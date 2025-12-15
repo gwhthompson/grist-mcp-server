@@ -1,10 +1,5 @@
 import { CHARACTER_LIMIT, MAX_ERROR_LENGTH } from '../constants.js'
-import type {
-  MCPToolResponse,
-  ResponseFormat,
-  StandardErrorResponse,
-  TruncationInfo
-} from '../types.js'
+import type { MCPToolResponse, ResponseFormat, TruncationInfo } from '../types.js'
 
 function normalizeForSerialization(value: unknown): unknown {
   if (value === null || value === undefined) {
@@ -72,16 +67,9 @@ export function formatErrorResponse(
     displayMessage += `\n\n**Suggestions:**\n${options.suggestions.map((s) => `- ${s}`).join('\n')}`
   }
 
-  const errorResponse: StandardErrorResponse = {
-    success: false,
-    error: truncatedMessage,
-    ...(options?.errorCode && { errorCode: options.errorCode }),
-    ...(options?.context && { context: options.context }),
-    ...(options?.retryable !== undefined && { retryable: options.retryable }),
-    ...(options?.suggestions &&
-      options.suggestions.length > 0 && { suggestions: options.suggestions })
-  }
-
+  // NOTE: Do NOT include structuredContent in error responses.
+  // MCP SDK validates structuredContent against outputSchema if present,
+  // even when isError: true. Omitting it avoids schema validation failures.
   return {
     content: [
       {
@@ -89,7 +77,6 @@ export function formatErrorResponse(
         text: displayMessage
       }
     ],
-    structuredContent: errorResponse,
     isError: true
   }
 }

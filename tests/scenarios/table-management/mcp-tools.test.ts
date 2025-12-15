@@ -112,7 +112,7 @@ describe('MCP Tools - All 15 Tools Against Live Grist', () => {
       // Optional: Verify our test document exists if it was created
       if (context.docId) {
         const testDoc = result.structuredContent.items.find(
-          (d: { id: string; name?: string }) => d.id === context.docId
+          (d: { docId: string; name?: string }) => d.docId === context.docId
         )
         if (testDoc) {
           expect(testDoc.name).toContain('MCP Tools Test')

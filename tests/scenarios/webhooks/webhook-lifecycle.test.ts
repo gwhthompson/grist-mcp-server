@@ -177,7 +177,9 @@ describe('Webhook Management - Integration Tests', () => {
 
       // This might succeed in creation but fail on delivery
       // or it might error immediately depending on Grist version
-      expect(result.structuredContent).toBeDefined()
+      // Error responses don't include structuredContent (MCP SDK validation fix)
+      expect(result.content).toBeDefined()
+      expect(result.content[0].text).toBeDefined()
     })
   })
 

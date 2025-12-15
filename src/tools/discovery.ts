@@ -347,7 +347,7 @@ export const GetDocumentsSchema = z.strictObject({
 export type GetDocumentsInput = z.infer<typeof GetDocumentsSchema>
 
 interface FormattedDocument {
-  id: string
+  docId: string
   name: string
   workspace?: string | { id: number; name: string }
   workspaceId?: number | string
@@ -439,7 +439,7 @@ export class GetDocumentsTool extends PaginatedGristTool<
   ): FormattedDocument {
     if (detailLevel === 'summary') {
       return {
-        id: doc.id,
+        docId: doc.id,
         name: doc.name,
         workspace: doc.workspace?.name,
         workspaceId: doc.workspace?.id,
@@ -448,7 +448,7 @@ export class GetDocumentsTool extends PaginatedGristTool<
     }
 
     return {
-      id: doc.id,
+      docId: doc.id,
       name: doc.name,
       workspace: doc.workspace,
       access: doc.access,

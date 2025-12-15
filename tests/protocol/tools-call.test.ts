@@ -126,7 +126,7 @@ describe('MCP Protocol - tools/call', () => {
   })
 
   describe('response format', () => {
-    it('should return markdown format by default', async () => {
+    it('should return JSON format by default', async () => {
       const result = await ctx.client.callTool({
         name: 'grist_get_workspaces',
         arguments: {}
@@ -135,21 +135,21 @@ describe('MCP Protocol - tools/call', () => {
       expect(result.isError).toBeFalsy()
 
       const text = (result.content[0] as { text: string }).text
-      // Markdown format typically contains headers or formatting
-      expect(text).toMatch(/[#*-]/)
+      // Should be valid JSON (default format)
+      expect(() => JSON.parse(text)).not.toThrow()
     })
 
-    it('should return JSON format when requested', async () => {
+    it('should return markdown format when requested', async () => {
       const result = await ctx.client.callTool({
         name: 'grist_get_workspaces',
-        arguments: { response_format: 'json' }
+        arguments: { response_format: 'markdown' }
       })
 
       expect(result.isError).toBeFalsy()
 
       const text = (result.content[0] as { text: string }).text
-      // Should be valid JSON
-      expect(() => JSON.parse(text)).not.toThrow()
+      // Markdown format typically contains headers or formatting
+      expect(text).toMatch(/[#*-]/)
     })
 
     it('should include structuredContent in response', async () => {

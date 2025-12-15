@@ -3,7 +3,7 @@ import { z } from 'zod'
 // Register shared schemas with meaningful IDs for JSON Schema refs
 // This replaces opaque names like __schema0 with docId, tableId, etc.
 
-export const ResponseFormatSchema = z.enum(['json', 'markdown']).default('markdown')
+export const ResponseFormatSchema = z.enum(['json', 'markdown']).default('json')
 
 export const DetailLevelWorkspaceSchema = z
   .enum(['summary', 'detailed'])
@@ -25,14 +25,8 @@ export const HexColorSchema = z
   .string()
   .regex(/^#[0-9A-Fa-f]{6}$/)
   .describe('Hex color (#RRGGBB)')
-HexColorSchema.register(z.globalRegistry, { id: 'hexColor' })
-
-// Optional variant for fields like textColor, fillColor
-export const HexColorOptionalSchema = HexColorSchema.optional()
-HexColorOptionalSchema.register(z.globalRegistry, { id: 'hexColorOptional' })
 
 export const AlignmentSchema = z.enum(['left', 'center', 'right']).describe('Text alignment')
-AlignmentSchema.register(z.globalRegistry, { id: 'alignment' })
 
 export const PaginationSchema = z.strictObject({
   offset: z.number().int().min(0).default(0).describe('Start position'),
@@ -293,31 +287,3 @@ export function parseJsonString(val: unknown): unknown {
   return val
 }
 
-// Register schemas with z.globalRegistry for named JSON Schema refs
-// Converts opaque refs like "$ref: #/$defs/__schema0" to "$ref: #/$defs/docId"
-// Note: columnType registration is in column-types.ts (ColumnTypeLiteralSchema)
-// Note: $defs are per-tool (duplicated ~12x), keep descriptions concise
-z.globalRegistry.add(DocIdSchema, {
-  id: 'docId',
-  description: 'Base58 doc ID, e.g. nTnRG1mdpg6BsFJnyMU69U'
-})
-z.globalRegistry.add(TableIdSchema, {
-  id: 'tableId',
-  description: 'Table name, e.g. Contacts'
-})
-z.globalRegistry.add(WorkspaceIdSchema, {
-  id: 'workspaceId',
-  description: 'Workspace ID (integer), e.g. 3'
-})
-z.globalRegistry.add(ColIdSchema, {
-  id: 'colId',
-  description: 'Column ID, e.g. Email'
-})
-z.globalRegistry.add(RowIdsSchema, {
-  id: 'rowIds',
-  description: 'Row ID array, e.g. [1, 2, 3]'
-})
-z.globalRegistry.add(FilterSchema, {
-  id: 'columnFilters',
-  description: 'Filters, e.g. {"Status": "Active"}'
-})

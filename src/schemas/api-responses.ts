@@ -188,11 +188,6 @@ export const CellValueInputSchema = z.union([
     .array(z.union([z.string(), z.number(), z.boolean()]))
     .describe('List of values for ChoiceList or RefList columns')
 ])
-// Register for named $ref in JSON Schema (replaces __schema0)
-CellValueInputSchema.register(z.globalRegistry, {
-  id: 'cellValue',
-  description: 'Cell value: null, string, number, boolean, or array'
-})
 
 /**
  * Internal schema validating Grist-encoded formats (after preprocessing).

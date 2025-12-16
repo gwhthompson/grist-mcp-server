@@ -100,8 +100,10 @@ const DeleteRecordOperationSchema = z
       .min(1)
       .max(MAX_RECORDS_PER_BATCH)
       .optional()
-      .describe('Row IDs to delete'),
-    filters: FilterSchema.describe('Delete matching records (alternative to rowIds)')
+      .describe('Row IDs to delete (use this OR filters, not both)'),
+    filters: FilterSchema.describe(
+      'Delete records matching criteria (use this OR rowIds, not both). Example: {Status: "Cancelled"}'
+    )
   })
   .refine((data) => data.rowIds || data.filters, {
     message: 'Either rowIds or filters must be provided for delete'
@@ -121,23 +123,27 @@ const UpsertRecordOperationSchema = z
     records: z
       .array(
         z.object({
-          require: RecordDataSchema.describe('Lookup criteria (required)'),
-          fields: RecordDataSchema.optional().describe('Values to set/update')
+          require: RecordDataSchema.describe(
+            'Match criteria to find existing records. Example: {Email: "x@y.com"}'
+          ),
+          fields: RecordDataSchema.optional().describe(
+            'Values to set on matched/new records. Example: {Name: "Updated", Status: "Active"}'
+          )
         })
       )
       .min(1)
       .max(MAX_RECORDS_PER_BATCH)
-      .describe('Records with {require: match, fields: update}'),
+      .describe('Records with {require: match criteria, fields: values to set}'),
     onMany: z
       .enum(['first', 'none', 'all'])
       .default('first')
-      .describe('first: update first match, none: error if multiple, all: update all matches'),
+      .describe('If multiple records match: "first"=update first, "none"=error, "all"=update all'),
     allowEmptyRequire: z
       .boolean()
       .default(false)
-      .describe('Allow empty require (updates all rows)'),
-    add: z.boolean().default(true).describe('Allow adding if no match'),
-    update: z.boolean().default(true).describe('Allow updating matches')
+      .describe('Allow empty require (DANGER: updates all rows if true)'),
+    add: z.boolean().default(true).describe('Insert new record if no match found'),
+    update: z.boolean().default(true).describe('Update existing record if match found')
   })
   .describe('Add or update records by unique key (idempotent sync)')
 
@@ -592,31 +598,37 @@ export async function manageRecords(context: ToolContext, params: ManageRecordsI
 // =============================================================================
 
 export const ManageRecordsOutputSchema = z.object({
-  success: z.boolean(),
-  docId: z.string(),
-  tablesAffected: z.array(z.string()),
-  operationsCompleted: z.number(),
-  totalRecordsAffected: z.number(),
-  results: z.array(
-    z.object({
-      action: z.string(),
-      tableId: z.string(),
-      success: z.boolean(),
-      recordsAffected: z.number(),
-      recordIds: z.array(z.number()).optional(),
-      error: z.string().optional(),
-      filtersUsed: z.record(z.string(), z.unknown()).optional()
-    })
-  ),
-  message: z.string(),
+  success: z.boolean().describe('true if all operations completed without errors'),
+  docId: z.string().describe('Document that was modified'),
+  tablesAffected: z.array(z.string()).describe('Tables modified (for cache invalidation)'),
+  operationsCompleted: z.number().describe('Count of successful operations'),
+  totalRecordsAffected: z.number().describe('Total records added/updated/deleted'),
+  results: z
+    .array(
+      z.object({
+        action: z.string().describe('Operation type: add/update/delete/upsert'),
+        tableId: z.string().describe('Table this operation modified'),
+        success: z.boolean().describe('true if this operation succeeded'),
+        recordsAffected: z.number().describe('Records affected by this operation'),
+        recordIds: z.array(z.number()).optional().describe('Row IDs of affected records'),
+        error: z.string().optional().describe('Error message if operation failed'),
+        filtersUsed: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe('Filters used for delete')
+      })
+    )
+    .describe('Per-operation results with recordIds for follow-up queries'),
+  message: z.string().describe('Human-readable summary'),
   partialFailure: z
     .object({
-      operationIndex: z.number(),
-      tableId: z.string(),
-      error: z.string(),
-      completedOperations: z.number()
+      operationIndex: z.number().describe('Index of failed operation (0-based)'),
+      tableId: z.string().describe('Table where failure occurred'),
+      error: z.string().describe('What went wrong'),
+      completedOperations: z.number().describe('Operations that succeeded before failure')
     })
     .optional()
+    .describe('Present if operations stopped mid-batch')
 })
 
 // =============================================================================
@@ -626,8 +638,10 @@ export const ManageRecordsOutputSchema = z.object({
 export const MANAGE_RECORDS_TOOL: ToolDefinition = {
   name: 'grist_manage_records',
   title: 'Manage Records',
-  description: 'Add, update, delete, or upsert records across one or more tables in batch',
-  purpose: 'CRUD operations on table records',
+  description:
+    'Record CRUD: add, update, delete, or upsert. Single or batch operations. ' +
+    'Supports cross-table dependencies (add Company, then Contact referencing it).',
+  purpose: 'All record CRUD operations (add/update/delete/upsert)',
   category: 'records',
   inputSchema: ManageRecordsSchema,
   outputSchema: ManageRecordsOutputSchema,
@@ -635,10 +649,22 @@ export const MANAGE_RECORDS_TOOL: ToolDefinition = {
   handler: manageRecords,
   docs: {
     overview:
-      'Batch record operations: add, update, delete, upsert. Each operation specifies its target table. ' +
-      'Operations execute sequentially, enabling cross-table dependencies (e.g., add Company first, ' +
-      'then add Contact referencing it).',
+      'Record operations: add, update, delete, upsert. Single records or batches. ' +
+      'Operations execute sequentially, enabling cross-table dependencies.',
     examples: [
+      {
+        desc: 'Add a single record',
+        input: {
+          docId: 'abc123',
+          operations: [
+            {
+              action: 'add',
+              tableId: 'Contacts',
+              records: [{ Name: 'Alice', Email: 'alice@example.com' }]
+            }
+          ]
+        }
+      },
       {
         desc: 'Add records to multiple tables',
         input: {

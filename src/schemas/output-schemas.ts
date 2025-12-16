@@ -178,10 +178,11 @@ export const QuerySqlOutputSchema = z.object({
 })
 
 // ============================================================================
-// Record Operation Outputs
+// Record Operation Outputs (used internally and by tests)
+// The MCP interface uses grist_manage_records for all record operations.
 // ============================================================================
 
-/** grist_add_records output */
+/** Add records operation output */
 export const AddRecordsOutputSchema = z.object({
   success: z.literal(true),
   docId: z.string().describe('Document ID'),
@@ -191,7 +192,7 @@ export const AddRecordsOutputSchema = z.object({
   message: z.string().optional().describe('Success message')
 })
 
-/** grist_update_records output */
+/** Update records operation output */
 export const UpdateRecordsOutputSchema = z.object({
   success: z.literal(true),
   docId: z.string().describe('Document ID'),
@@ -200,7 +201,7 @@ export const UpdateRecordsOutputSchema = z.object({
   message: z.string().optional().describe('Success message')
 })
 
-/** grist_upsert_records output */
+/** Upsert records operation output */
 export const UpsertRecordsOutputSchema = z.object({
   success: z.literal(true),
   docId: z.string().describe('Document ID'),
@@ -211,7 +212,7 @@ export const UpsertRecordsOutputSchema = z.object({
   note: z.string().optional().describe('Additional notes')
 })
 
-/** grist_delete_records output */
+/** Delete records operation output */
 export const DeleteRecordsOutputSchema = z.object({
   success: z.literal(true),
   docId: z.string().describe('Document ID'),

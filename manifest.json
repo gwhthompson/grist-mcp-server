@@ -111,7 +111,7 @@
     },
     {
       "name": "grist_manage_records",
-      "description": "CRUD operations on table records"
+      "description": "All record CRUD operations (add/update/delete/upsert)"
     },
     {
       "name": "grist_manage_schema",

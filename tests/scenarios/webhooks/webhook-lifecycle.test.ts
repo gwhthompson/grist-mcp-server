@@ -43,10 +43,12 @@ describe('Webhook Management - Integration Tests', () => {
       try {
         await webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'delete',
-            webhookId
-          },
+          operations: [
+            {
+              action: 'delete',
+              webhookId
+            }
+          ],
           response_format: 'json'
         })
       } catch {
@@ -63,24 +65,31 @@ describe('Webhook Management - Integration Tests', () => {
     it('should list all webhooks for a document (initially empty)', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'list'
-        },
+        operations: [
+          {
+            action: 'list'
+          }
+        ],
         response_format: 'json'
       })
 
       expect(result.structuredContent).toBeDefined()
       expect(result.structuredContent.docId).toBe(context.docId)
-      expect(result.structuredContent.webhookCount).toBeGreaterThanOrEqual(0)
-      expect(result.structuredContent.webhooks).toBeInstanceOf(Array)
+      expect(result.structuredContent.operationsCompleted).toBe(1)
+      expect(result.structuredContent.results).toBeInstanceOf(Array)
+      expect(result.structuredContent.results[0].operation).toBe('list')
+      expect(result.structuredContent.results[0].webhookCount).toBeGreaterThanOrEqual(0)
+      expect(result.structuredContent.results[0].webhooks).toBeInstanceOf(Array)
     })
 
     it('should return markdown format when requested', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'list'
-        },
+        operations: [
+          {
+            action: 'list'
+          }
+        ],
         response_format: 'markdown'
       })
 
@@ -94,84 +103,94 @@ describe('Webhook Management - Integration Tests', () => {
     it('should create a new webhook with all fields', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'create',
-          fields: {
-            name: 'Test Webhook',
-            memo: 'Integration test webhook',
-            url: 'https://webhook.site/test-webhook',
-            tableId: context.tableId,
-            eventTypes: ['add', 'update'],
-            enabled: true,
-            isReadyColumn: null
+        operations: [
+          {
+            action: 'create',
+            fields: {
+              name: 'Test Webhook',
+              memo: 'Integration test webhook',
+              url: 'https://webhook.site/test-webhook',
+              tableId: context.tableId,
+              eventTypes: ['add', 'update'],
+              enabled: true,
+              isReadyColumn: null
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
       expect(result.structuredContent).toBeDefined()
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.webhookId).toBeDefined()
-      expect(typeof result.structuredContent.webhookId).toBe('string')
-      expect(result.structuredContent.webhookUrl).toBe('https://webhook.site/test-webhook')
-      expect(result.structuredContent.tableId).toBe(context.tableId)
+      const createResult = result.structuredContent.results[0]
+      expect(createResult.operation).toBe('create')
+      expect(createResult.webhookId).toBeDefined()
+      expect(typeof createResult.webhookId).toBe('string')
+      expect(createResult.webhookUrl).toBe('https://webhook.site/test-webhook')
+      expect(createResult.tableId).toBe(context.tableId)
 
       // Store for cleanup
-      createdWebhookIds.push(result.structuredContent.webhookId as string)
+      createdWebhookIds.push(createResult.webhookId as string)
     })
 
     it('should create a webhook with minimal fields', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'create',
-          fields: {
-            url: 'https://example.com/minimal-webhook',
-            tableId: context.tableId,
-            eventTypes: ['add']
+        operations: [
+          {
+            action: 'create',
+            fields: {
+              url: 'https://example.com/minimal-webhook',
+              tableId: context.tableId,
+              eventTypes: ['add']
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.webhookId).toBeDefined()
+      expect(result.structuredContent.results[0].webhookId).toBeDefined()
 
-      createdWebhookIds.push(result.structuredContent.webhookId as string)
+      createdWebhookIds.push(result.structuredContent.results[0].webhookId as string)
     })
 
     it('should create a webhook for only update events', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'create',
-          fields: {
-            url: 'https://example.com/update-only',
-            tableId: context.tableId,
-            eventTypes: ['update'],
-            enabled: true
+        operations: [
+          {
+            action: 'create',
+            fields: {
+              url: 'https://example.com/update-only',
+              tableId: context.tableId,
+              eventTypes: ['update'],
+              enabled: true
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.eventTypes).toEqual(['update'])
+      expect(result.structuredContent.results[0].eventTypes).toEqual(['update'])
 
-      createdWebhookIds.push(result.structuredContent.webhookId as string)
+      createdWebhookIds.push(result.structuredContent.results[0].webhookId as string)
     })
 
     it('should handle non-existent table', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'create',
-          fields: {
-            url: 'https://webhook.site/test',
-            tableId: 'NonExistentTable',
-            eventTypes: ['add']
+        operations: [
+          {
+            action: 'create',
+            fields: {
+              url: 'https://webhook.site/test',
+              tableId: 'NonExistentTable',
+              eventTypes: ['add']
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
@@ -190,75 +209,83 @@ describe('Webhook Management - Integration Tests', () => {
       // Create a webhook to update
       const createResult = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'create',
-          fields: {
-            name: 'Webhook to Update',
-            url: 'https://example.com/original',
-            tableId: context.tableId,
-            eventTypes: ['add'],
-            enabled: true
+        operations: [
+          {
+            action: 'create',
+            fields: {
+              name: 'Webhook to Update',
+              url: 'https://example.com/original',
+              tableId: context.tableId,
+              eventTypes: ['add'],
+              enabled: true
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
-      webhookId = createResult.structuredContent.webhookId as string
+      webhookId = createResult.structuredContent.results[0].webhookId as string
       createdWebhookIds.push(webhookId)
     })
 
     it('should update webhook URL', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'update',
-          webhookId,
-          fields: {
-            url: 'https://example.com/updated'
+        operations: [
+          {
+            action: 'update',
+            webhookId,
+            fields: {
+              url: 'https://example.com/updated'
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.webhookId).toBe(webhookId)
-      expect(result.structuredContent.fieldsUpdated).toContain('url')
+      expect(result.structuredContent.results[0].webhookId).toBe(webhookId)
+      expect(result.structuredContent.results[0].fieldsUpdated).toContain('url')
     })
 
     it('should disable a webhook', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'update',
-          webhookId,
-          fields: {
-            enabled: false
+        operations: [
+          {
+            action: 'update',
+            webhookId,
+            fields: {
+              enabled: false
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.fieldsUpdated).toContain('enabled')
+      expect(result.structuredContent.results[0].fieldsUpdated).toContain('enabled')
     })
 
     it('should update multiple fields at once', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'update',
-          webhookId,
-          fields: {
-            name: 'Updated Webhook Name',
-            memo: 'Updated memo',
-            enabled: true
+        operations: [
+          {
+            action: 'update',
+            webhookId,
+            fields: {
+              name: 'Updated Webhook Name',
+              memo: 'Updated memo',
+              enabled: true
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.fieldsUpdated).toEqual(
+      expect(result.structuredContent.results[0].fieldsUpdated).toEqual(
         expect.arrayContaining(['name', 'memo', 'enabled'])
       )
     })
@@ -267,13 +294,15 @@ describe('Webhook Management - Integration Tests', () => {
       // Use a valid UUID format that doesn't exist
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'update',
-          webhookId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-          fields: {
-            enabled: false
+        operations: [
+          {
+            action: 'update',
+            webhookId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+            fields: {
+              enabled: false
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
@@ -286,45 +315,51 @@ describe('Webhook Management - Integration Tests', () => {
       // Create a webhook to delete
       const createResult = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'create',
-          fields: {
-            name: 'Webhook to Delete',
-            url: 'https://example.com/to-delete',
-            tableId: context.tableId,
-            eventTypes: ['add']
+        operations: [
+          {
+            action: 'create',
+            fields: {
+              name: 'Webhook to Delete',
+              url: 'https://example.com/to-delete',
+              tableId: context.tableId,
+              eventTypes: ['add']
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
-      const webhookId = createResult.structuredContent.webhookId as string
+      const webhookId = createResult.structuredContent.results[0].webhookId as string
 
       // Delete the webhook
       const deleteResult = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'delete',
-          webhookId
-        },
+        operations: [
+          {
+            action: 'delete',
+            webhookId
+          }
+        ],
         response_format: 'json'
       })
 
       expect(deleteResult.structuredContent.success).toBe(true)
-      expect(deleteResult.structuredContent.webhookId).toBe(webhookId)
+      expect(deleteResult.structuredContent.results[0].webhookId).toBe(webhookId)
 
       // Verify it's deleted by listing webhooks
       const listResult = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'list'
-        },
+        operations: [
+          {
+            action: 'list'
+          }
+        ],
         response_format: 'json'
       })
 
-      const webhookIds = (listResult.structuredContent.webhooks as Array<{ id: string }>).map(
-        (w) => w.id
-      )
+      const webhookIds = (
+        listResult.structuredContent.results[0].webhooks as Array<{ id: string }>
+      ).map((w) => w.id)
       expect(webhookIds).not.toContain(webhookId)
     })
 
@@ -332,10 +367,12 @@ describe('Webhook Management - Integration Tests', () => {
       // Use a valid UUID format that doesn't exist
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'delete',
-          webhookId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
-        },
+        operations: [
+          {
+            action: 'delete',
+            webhookId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890'
+          }
+        ],
         response_format: 'json'
       })
 
@@ -347,23 +384,27 @@ describe('Webhook Management - Integration Tests', () => {
     it('should clear webhook queue successfully', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'clear_queue'
-        },
+        operations: [
+          {
+            action: 'clear_queue'
+          }
+        ],
         response_format: 'json'
       })
 
       expect(result.structuredContent.success).toBe(true)
       expect(result.structuredContent.docId).toBe(context.docId)
-      expect(result.structuredContent.action).toBe('cleared_webhook_queue')
+      expect(result.structuredContent.results[0].action).toBe('cleared_webhook_queue')
     })
 
     it('should return markdown format for clear queue', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'clear_queue'
-        },
+        operations: [
+          {
+            action: 'clear_queue'
+          }
+        ],
         response_format: 'markdown'
       })
 
@@ -376,47 +417,53 @@ describe('Webhook Management - Integration Tests', () => {
       // 1. Create webhook
       const createResult = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'create',
-          fields: {
-            name: 'Lifecycle Test Webhook',
-            url: 'https://example.com/lifecycle',
-            tableId: context.tableId,
-            eventTypes: ['add', 'update'],
-            enabled: true
+        operations: [
+          {
+            action: 'create',
+            fields: {
+              name: 'Lifecycle Test Webhook',
+              url: 'https://example.com/lifecycle',
+              tableId: context.tableId,
+              eventTypes: ['add', 'update'],
+              enabled: true
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
       expect(createResult.structuredContent.success).toBe(true)
-      const webhookId = createResult.structuredContent.webhookId as string
+      const webhookId = createResult.structuredContent.results[0].webhookId as string
 
       // 2. List and verify webhook exists
       const listResult1 = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'list'
-        },
+        operations: [
+          {
+            action: 'list'
+          }
+        ],
         response_format: 'json'
       })
 
-      const webhook = (listResult1.structuredContent.webhooks as Array<{ id: string }>).find(
-        (w) => w.id === webhookId
-      )
+      const webhook = (
+        listResult1.structuredContent.results[0].webhooks as Array<{ id: string }>
+      ).find((w) => w.id === webhookId)
       expect(webhook).toBeDefined()
 
       // 3. Update webhook
       const updateResult = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'update',
-          webhookId,
-          fields: {
-            name: 'Updated Lifecycle Webhook',
-            enabled: false
+        operations: [
+          {
+            action: 'update',
+            webhookId,
+            fields: {
+              name: 'Updated Lifecycle Webhook',
+              enabled: false
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
@@ -425,10 +472,12 @@ describe('Webhook Management - Integration Tests', () => {
       // 4. Delete webhook
       const deleteResult = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'delete',
-          webhookId
-        },
+        operations: [
+          {
+            action: 'delete',
+            webhookId
+          }
+        ],
         response_format: 'json'
       })
 
@@ -437,15 +486,17 @@ describe('Webhook Management - Integration Tests', () => {
       // 5. Verify webhook is gone
       const listResult2 = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'list'
-        },
+        operations: [
+          {
+            action: 'list'
+          }
+        ],
         response_format: 'json'
       })
 
-      const deletedWebhook = (listResult2.structuredContent.webhooks as Array<{ id: string }>).find(
-        (w) => w.id === webhookId
-      )
+      const deletedWebhook = (
+        listResult2.structuredContent.results[0].webhooks as Array<{ id: string }>
+      ).find((w) => w.id === webhookId)
       expect(deletedWebhook).toBeUndefined()
     })
   })
@@ -454,9 +505,11 @@ describe('Webhook Management - Integration Tests', () => {
     it('should handle invalid document ID', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: 'NonExistentDoc123456AB', // Valid Base58 format (22 chars) but doesn't exist
-        operation: {
-          action: 'list'
-        },
+        operations: [
+          {
+            action: 'list'
+          }
+        ],
         response_format: 'json'
       })
 
@@ -467,15 +520,17 @@ describe('Webhook Management - Integration Tests', () => {
       await expect(
         webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'create',
-            fields: {
-              url: 'https://example.com/invalid',
-              tableId: context.tableId,
-              // @ts-expect-error Testing invalid event type
-              eventTypes: ['invalid-event']
+          operations: [
+            {
+              action: 'create',
+              fields: {
+                url: 'https://example.com/invalid',
+                tableId: context.tableId,
+                // @ts-expect-error Testing invalid event type
+                eventTypes: ['invalid-event']
+              }
             }
-          },
+          ],
           response_format: 'json'
         })
       ).rejects.toThrow(/add|update|event type/i)
@@ -487,11 +542,13 @@ describe('Webhook Management - Integration Tests', () => {
       await expect(
         webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'delete',
-            // @ts-expect-error Testing invalid UUID
-            webhookId: 'not-a-valid-uuid'
-          },
+          operations: [
+            {
+              action: 'delete',
+              // @ts-expect-error Testing invalid UUID
+              webhookId: 'not-a-valid-uuid'
+            }
+          ],
           response_format: 'json'
         })
       ).rejects.toThrow(/UUID|webhook.*ID/i)
@@ -501,14 +558,16 @@ describe('Webhook Management - Integration Tests', () => {
       await expect(
         webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'create',
-            fields: {
-              url: 'http://localhost:3000/webhook',
-              tableId: context.tableId,
-              eventTypes: ['add']
+          operations: [
+            {
+              action: 'create',
+              fields: {
+                url: 'http://localhost:3000/webhook',
+                tableId: context.tableId,
+                eventTypes: ['add']
+              }
             }
-          },
+          ],
           response_format: 'json'
         })
       ).rejects.toThrow(/valid.*URL|Invalid hostname/i)
@@ -518,14 +577,16 @@ describe('Webhook Management - Integration Tests', () => {
       await expect(
         webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'create',
-            fields: {
-              url: 'http://192.168.1.1/webhook',
-              tableId: context.tableId,
-              eventTypes: ['add']
+          operations: [
+            {
+              action: 'create',
+              fields: {
+                url: 'http://192.168.1.1/webhook',
+                tableId: context.tableId,
+                eventTypes: ['add']
+              }
             }
-          },
+          ],
           response_format: 'json'
         })
       ).rejects.toThrow(/valid.*URL|Invalid hostname/i)
@@ -534,24 +595,26 @@ describe('Webhook Management - Integration Tests', () => {
     it('should trim whitespace from URLs', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'create',
-          fields: {
-            url: '  https://webhook.site/test  ',
-            tableId: context.tableId,
-            eventTypes: ['add'],
-            name: 'Trimmed URL Test'
+        operations: [
+          {
+            action: 'create',
+            fields: {
+              url: '  https://webhook.site/test  ',
+              tableId: context.tableId,
+              eventTypes: ['add'],
+              name: 'Trimmed URL Test'
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.webhookUrl).toBe('https://webhook.site/test')
+      expect(result.structuredContent.results[0].webhookUrl).toBe('https://webhook.site/test')
 
       // Clean up
-      if (result.structuredContent.webhookId) {
-        createdWebhookIds.push(result.structuredContent.webhookId as string)
+      if (result.structuredContent.results[0].webhookId) {
+        createdWebhookIds.push(result.structuredContent.results[0].webhookId as string)
       }
     })
 
@@ -559,15 +622,17 @@ describe('Webhook Management - Integration Tests', () => {
       await expect(
         webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'create',
-            fields: {
-              url: 'https://webhook.site/test',
-              tableId: context.tableId,
-              // @ts-expect-error Testing duplicate event types
-              eventTypes: ['add', 'add', 'update']
+          operations: [
+            {
+              action: 'create',
+              fields: {
+                url: 'https://webhook.site/test',
+                tableId: context.tableId,
+                // @ts-expect-error Testing duplicate event types
+                eventTypes: ['add', 'add', 'update']
+              }
             }
-          },
+          ],
           response_format: 'json'
         })
       ).rejects.toThrow(/unique|duplicate/i)
@@ -577,15 +642,17 @@ describe('Webhook Management - Integration Tests', () => {
       await expect(
         webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'create',
-            fields: {
-              url: 'https://webhook.site/test',
-              tableId: context.tableId,
-              // @ts-expect-error Testing empty event types
-              eventTypes: []
+          operations: [
+            {
+              action: 'create',
+              fields: {
+                url: 'https://webhook.site/test',
+                tableId: context.tableId,
+                // @ts-expect-error Testing empty event types
+                eventTypes: []
+              }
             }
-          },
+          ],
           response_format: 'json'
         })
       ).rejects.toThrow(/at least one|event type/i)
@@ -595,15 +662,17 @@ describe('Webhook Management - Integration Tests', () => {
       await expect(
         webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'create',
-            fields: {
-              url: 'https://webhook.site/test',
-              tableId: context.tableId,
-              eventTypes: ['add'],
-              isReadyColumn: '123InvalidStart' // Must start with letter or underscore
+          operations: [
+            {
+              action: 'create',
+              fields: {
+                url: 'https://webhook.site/test',
+                tableId: context.tableId,
+                eventTypes: ['add'],
+                isReadyColumn: '123InvalidStart' // Must start with letter or underscore
+              }
             }
-          },
+          ],
           response_format: 'json'
         })
       ).rejects.toThrow(/Python identifier|column/i)
@@ -613,15 +682,17 @@ describe('Webhook Management - Integration Tests', () => {
       await expect(
         webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'create',
-            fields: {
-              url: 'https://webhook.site/test',
-              tableId: context.tableId,
-              eventTypes: ['add'],
-              name: 'x'.repeat(256) // Max is 255
+          operations: [
+            {
+              action: 'create',
+              fields: {
+                url: 'https://webhook.site/test',
+                tableId: context.tableId,
+                eventTypes: ['add'],
+                name: 'x'.repeat(256) // Max is 255
+              }
             }
-          },
+          ],
           response_format: 'json'
         })
       ).rejects.toThrow(/255 characters/i)
@@ -631,12 +702,14 @@ describe('Webhook Management - Integration Tests', () => {
       await expect(
         webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'update',
-            webhookId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-            // @ts-expect-error Testing empty fields
-            fields: {}
-          },
+          operations: [
+            {
+              action: 'update',
+              webhookId: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
+              // @ts-expect-error Testing empty fields
+              fields: {}
+            }
+          ],
           response_format: 'json'
         })
       ).rejects.toThrow(/at least one field/i)
@@ -646,14 +719,16 @@ describe('Webhook Management - Integration Tests', () => {
       await expect(
         webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'create',
-            fields: {
-              url: 'not-a-valid-url',
-              tableId: context.tableId,
-              eventTypes: ['add']
+          operations: [
+            {
+              action: 'create',
+              fields: {
+                url: 'not-a-valid-url',
+                tableId: context.tableId,
+                eventTypes: ['add']
+              }
             }
-          },
+          ],
           response_format: 'json'
         })
       ).rejects.toThrow(/valid.*URL|HTTP.*URL/i)
@@ -664,14 +739,16 @@ describe('Webhook Management - Integration Tests', () => {
       await expect(
         webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'create',
-            fields: {
-              url: longUrl,
-              tableId: context.tableId,
-              eventTypes: ['add']
+          operations: [
+            {
+              action: 'create',
+              fields: {
+                url: longUrl,
+                tableId: context.tableId,
+                eventTypes: ['add']
+              }
             }
-          },
+          ],
           response_format: 'json'
         })
       ).rejects.toThrow(/2000 characters/i)
@@ -680,23 +757,25 @@ describe('Webhook Management - Integration Tests', () => {
     it('should handle webhook names with Unicode characters', async () => {
       const result = await webhooks.manageWebhooks(context.toolContext, {
         docId: context.docId,
-        operation: {
-          action: 'create',
-          fields: {
-            name: '🎉 Sales Alert 中文 مرحبا',
-            url: 'https://webhook.site/unicode-test',
-            tableId: context.tableId,
-            eventTypes: ['add']
+        operations: [
+          {
+            action: 'create',
+            fields: {
+              name: '🎉 Sales Alert 中文 مرحبا',
+              url: 'https://webhook.site/unicode-test',
+              tableId: context.tableId,
+              eventTypes: ['add']
+            }
           }
-        },
+        ],
         response_format: 'json'
       })
 
-      const webhookId = result.structuredContent.webhookId as string
+      const webhookId = result.structuredContent.results[0].webhookId as string
       createdWebhookIds.push(webhookId)
 
       expect(result.structuredContent.success).toBe(true)
-      expect(result.structuredContent.webhookId).toMatch(
+      expect(result.structuredContent.results[0].webhookId).toMatch(
         /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
       )
     })
@@ -708,15 +787,17 @@ describe('Webhook Management - Integration Tests', () => {
         await expect(
           webhooks.manageWebhooks(context.toolContext, {
             docId: context.docId,
-            operation: {
-              action: 'create',
-              fields: {
-                url: 'https://webhook.site/sql-test',
-                tableId: context.tableId,
-                eventTypes: ['add'],
-                isReadyColumn: keyword
+            operations: [
+              {
+                action: 'create',
+                fields: {
+                  url: 'https://webhook.site/sql-test',
+                  tableId: context.tableId,
+                  eventTypes: ['add'],
+                  isReadyColumn: keyword
+                }
               }
-            },
+            ],
             response_format: 'json'
           })
         ).rejects.toThrow(/SQL reserved keyword/i)
@@ -729,18 +810,158 @@ describe('Webhook Management - Integration Tests', () => {
       await expect(
         webhooks.manageWebhooks(context.toolContext, {
           docId: context.docId,
-          operation: {
-            action: 'create',
-            fields: {
-              url: 'https://webhook.site/long-column',
-              tableId: context.tableId,
-              eventTypes: ['add'],
-              isReadyColumn: longColumnId
+          operations: [
+            {
+              action: 'create',
+              fields: {
+                url: 'https://webhook.site/long-column',
+                tableId: context.tableId,
+                eventTypes: ['add'],
+                isReadyColumn: longColumnId
+              }
             }
-          },
+          ],
           response_format: 'json'
         })
       ).rejects.toThrow(/64 characters or less/i)
+    })
+  })
+
+  describe('Batch Operations', () => {
+    it('should create multiple webhooks in one call', async () => {
+      const result = await webhooks.manageWebhooks(context.toolContext, {
+        docId: context.docId,
+        operations: [
+          {
+            action: 'create',
+            fields: {
+              name: 'Batch Webhook 1',
+              url: 'https://example.com/batch1',
+              tableId: context.tableId,
+              eventTypes: ['add']
+            }
+          },
+          {
+            action: 'create',
+            fields: {
+              name: 'Batch Webhook 2',
+              url: 'https://example.com/batch2',
+              tableId: context.tableId,
+              eventTypes: ['update']
+            }
+          }
+        ],
+        response_format: 'json'
+      })
+
+      expect(result.structuredContent.success).toBe(true)
+      expect(result.structuredContent.operationsCompleted).toBe(2)
+      expect(result.structuredContent.results).toHaveLength(2)
+      expect(result.structuredContent.results[0].operation).toBe('create')
+      expect(result.structuredContent.results[1].operation).toBe('create')
+
+      // Clean up
+      for (const r of result.structuredContent.results) {
+        if (r.webhookId) {
+          createdWebhookIds.push(r.webhookId as string)
+        }
+      }
+    })
+
+    it('should reject list operation when batched with other operations', async () => {
+      await expect(
+        webhooks.manageWebhooks(context.toolContext, {
+          docId: context.docId,
+          operations: [
+            {
+              action: 'list'
+            },
+            {
+              action: 'create',
+              fields: {
+                url: 'https://example.com/test',
+                tableId: context.tableId,
+                eventTypes: ['add']
+              }
+            }
+          ],
+          response_format: 'json'
+        })
+      ).rejects.toThrow(/list.*must be the only operation|cannot be batched/i)
+    })
+
+    it('should reject clear_queue operation when batched with other operations', async () => {
+      await expect(
+        webhooks.manageWebhooks(context.toolContext, {
+          docId: context.docId,
+          operations: [
+            {
+              action: 'clear_queue'
+            },
+            {
+              action: 'create',
+              fields: {
+                url: 'https://example.com/test',
+                tableId: context.tableId,
+                eventTypes: ['add']
+              }
+            }
+          ],
+          response_format: 'json'
+        })
+      ).rejects.toThrow(/clear_queue.*must be the only operation|cannot be batched/i)
+    })
+
+    it('should create and then update in the same batch', async () => {
+      // First create a webhook to get an ID
+      const createResult = await webhooks.manageWebhooks(context.toolContext, {
+        docId: context.docId,
+        operations: [
+          {
+            action: 'create',
+            fields: {
+              name: 'Create Then Update',
+              url: 'https://example.com/create-update',
+              tableId: context.tableId,
+              eventTypes: ['add']
+            }
+          }
+        ],
+        response_format: 'json'
+      })
+
+      const webhookId = createResult.structuredContent.results[0].webhookId as string
+      createdWebhookIds.push(webhookId)
+
+      // Now batch update and delete (update first, then delete)
+      const batchResult = await webhooks.manageWebhooks(context.toolContext, {
+        docId: context.docId,
+        operations: [
+          {
+            action: 'update',
+            webhookId,
+            fields: {
+              name: 'Updated Before Delete'
+            }
+          },
+          {
+            action: 'delete',
+            webhookId
+          }
+        ],
+        response_format: 'json'
+      })
+
+      expect(batchResult.structuredContent.success).toBe(true)
+      expect(batchResult.structuredContent.operationsCompleted).toBe(2)
+      expect(batchResult.structuredContent.results[0].operation).toBe('update')
+      expect(batchResult.structuredContent.results[1].operation).toBe('delete')
+
+      // Remove from cleanup list since it's already deleted
+      const idx = createdWebhookIds.indexOf(webhookId)
+      if (idx > -1) {
+        createdWebhookIds.splice(idx, 1)
+      }
     })
   })
 })

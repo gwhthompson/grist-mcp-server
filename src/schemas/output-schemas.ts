@@ -506,8 +506,22 @@ export const WebhookClearQueueOutputSchema = z.object({
  * z.looseObject() is the Zod v4 replacement for deprecated .passthrough().
  */
 export const ManageWebhooksOutputSchema = z.looseObject({
-  operation: z.enum(['list', 'create', 'update', 'delete', 'clear_queue']),
-  docId: z.string().describe('Document ID')
+  success: z.boolean(),
+  docId: z.string().describe('Document ID'),
+  operationsCompleted: z.number(),
+  results: z.array(
+    z.looseObject({
+      operation: z.enum(['list', 'create', 'update', 'delete', 'clear_queue'])
+    })
+  ),
+  message: z.string(),
+  partialFailure: z
+    .object({
+      operationIndex: z.number(),
+      error: z.string(),
+      completedOperations: z.number()
+    })
+    .optional()
 })
 
 // ============================================================================

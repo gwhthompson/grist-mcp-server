@@ -56,16 +56,9 @@ interface DeleteWebhookResponse {
   success: boolean
 }
 
-type OperationResult =
-  | ListWebhooksResult
-  | CreateWebhookResult
-  | UpdateWebhookResult
-  | DeleteWebhookResult
-  | ClearQueueResult
-
+// Individual operation result types
 interface ListWebhooksResult {
   operation: 'list'
-  docId: string
   webhookCount: number
   total: number
   offset: number
@@ -91,7 +84,6 @@ interface ListWebhooksResult {
 interface CreateWebhookResult {
   operation: 'create'
   success: true
-  docId: string
   webhookId: string
   webhookUrl: string
   tableId: string
@@ -101,7 +93,6 @@ interface CreateWebhookResult {
 interface UpdateWebhookResult {
   operation: 'update'
   success: true
-  docId: string
   webhookId: string
   fieldsUpdated: string[]
 }
@@ -109,14 +100,12 @@ interface UpdateWebhookResult {
 interface DeleteWebhookResult {
   operation: 'delete'
   success: true
-  docId: string
   webhookId: string
 }
 
 interface ClearQueueResult {
   operation: 'clear_queue'
   success: true
-  docId: string
   action: 'cleared_webhook_queue'
 }
 
@@ -130,18 +119,88 @@ interface WebhookUsageOutput {
   lastHttpStatus?: number | null
 }
 
+// Single operation result (without docId - added at batch level)
+type SingleOperationResult =
+  | ListWebhooksResult
+  | CreateWebhookResult
+  | UpdateWebhookResult
+  | DeleteWebhookResult
+  | ClearQueueResult
+
+// Batch response structure
+interface ManageWebhooksResponse {
+  success: boolean
+  docId: string
+  operationsCompleted: number
+  results: SingleOperationResult[]
+  message: string
+  partialFailure?: {
+    operationIndex: number
+    error: string
+    completedOperations: number
+  }
+}
+
 /**
  * Class-based implementation of webhook management tool.
  * Standardizes webhook operations while maintaining custom formatting.
  */
-export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, OperationResult> {
+export class ManageWebhooksTool extends GristTool<
+  typeof ManageWebhooksSchema,
+  ManageWebhooksResponse
+> {
   constructor(context: ToolContext) {
     super(context, ManageWebhooksSchema)
   }
 
-  protected async executeInternal(params: ManageWebhooksInput): Promise<OperationResult> {
-    const { docId, operation } = params
+  protected async executeInternal(params: ManageWebhooksInput): Promise<ManageWebhooksResponse> {
+    const { docId, operations } = params
+    const results: SingleOperationResult[] = []
 
+    // Execute operations sequentially
+    for (let i = 0; i < operations.length; i++) {
+      const operation = operations[i]
+      if (!operation) continue
+
+      try {
+        const result = await this.executeOperation(docId, operation)
+        results.push(result)
+      } catch (error) {
+        // For single-operation batches, throw the error for proper MCP error response
+        // For multi-operation batches, return partial failure info
+        if (operations.length === 1) {
+          throw error
+        }
+
+        const errorMessage = error instanceof Error ? error.message : String(error)
+        return {
+          success: false,
+          docId,
+          operationsCompleted: i,
+          results,
+          message: `Operation ${i + 1} (${operation.action}) failed: ${errorMessage}`,
+          partialFailure: {
+            operationIndex: i,
+            error: errorMessage,
+            completedOperations: i
+          }
+        }
+      }
+    }
+
+    return {
+      success: true,
+      docId,
+      operationsCompleted: operations.length,
+      results,
+      message: `Successfully completed ${operations.length} webhook operation(s)`
+    }
+  }
+
+  private async executeOperation(
+    docId: string,
+    operation: WebhookOperation
+  ): Promise<SingleOperationResult> {
     switch (operation.action) {
       case 'list':
         return this.handleList(docId, operation)
@@ -177,7 +236,6 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
 
     return {
       operation: 'list',
-      docId: docId,
       webhookCount: itemsInPage,
       total,
       offset,
@@ -226,7 +284,6 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
     return {
       operation: 'create',
       success: true,
-      docId: docId,
       webhookId: createdWebhook.id,
       webhookUrl: operation.fields.url,
       tableId: operation.fields.tableId,
@@ -243,7 +300,6 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
     return {
       operation: 'update',
       success: true,
-      docId: docId,
       webhookId: operation.webhookId,
       fieldsUpdated: Object.keys(operation.fields)
     }
@@ -260,7 +316,6 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
     return {
       operation: 'delete',
       success: true,
-      docId: docId,
       webhookId: operation.webhookId
     }
   }
@@ -271,7 +326,6 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
     return {
       operation: 'clear_queue',
       success: true,
-      docId: docId,
       action: 'cleared_webhook_queue'
     }
   }
@@ -279,7 +333,10 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
   /**
    * Custom response formatting for webhooks to include rich markdown summaries.
    */
-  protected formatResponse(data: OperationResult, format: 'json' | 'markdown'): MCPToolResponse {
+  protected formatResponse(
+    data: ManageWebhooksResponse,
+    format: 'json' | 'markdown'
+  ): MCPToolResponse {
     if (format === 'json') {
       return {
         content: [{ type: 'text', text: JSON.stringify(data, null, 2) }],
@@ -287,8 +344,8 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
       }
     }
 
-    // Custom markdown formatting for each operation type
-    const summary = this.generateMarkdownSummary(data)
+    // Custom markdown formatting for batch results
+    const summary = this.generateBatchMarkdownSummary(data)
 
     return {
       content: [{ type: 'text', text: summary }],
@@ -296,10 +353,52 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
     }
   }
 
-  private generateMarkdownSummary(result: OperationResult): string {
+  private generateBatchMarkdownSummary(response: ManageWebhooksResponse): string {
+    if (!response.success && response.partialFailure) {
+      let summary = `**Partial Failure** - ${response.operationsCompleted}/${response.results.length + 1} operations completed\n\n`
+      summary += `**Error at operation ${response.partialFailure.operationIndex + 1}:** ${response.partialFailure.error}\n\n`
+
+      if (response.results.length > 0) {
+        summary += `**Completed operations:**\n`
+        summary += response.results
+          .map((r, i) => `${i + 1}. ${this.formatSingleResult(r)}`)
+          .join('\n')
+      }
+      return summary
+    }
+
+    // All operations succeeded
+    const firstResult = response.results[0]
+    if (response.results.length === 1 && firstResult) {
+      // Single operation - format directly
+      return this.formatSingleResultDetailed(firstResult, response.docId)
+    }
+
+    // Multiple operations
+    let summary = `**Successfully completed ${response.operationsCompleted} operation(s)**\n\n`
+    summary += response.results.map((r, i) => `${i + 1}. ${this.formatSingleResult(r)}`).join('\n')
+    return summary
+  }
+
+  private formatSingleResult(result: SingleOperationResult): string {
     switch (result.operation) {
       case 'list':
-        return this.formatListSummary(result)
+        return `Listed ${result.total} webhooks (showing ${result.webhookCount})`
+      case 'create':
+        return `Created webhook ${result.webhookId} for table ${result.tableId}`
+      case 'update':
+        return `Updated webhook ${result.webhookId} (fields: ${result.fieldsUpdated.join(', ')})`
+      case 'delete':
+        return `Deleted webhook ${result.webhookId}`
+      case 'clear_queue':
+        return `Cleared webhook queue`
+    }
+  }
+
+  private formatSingleResultDetailed(result: SingleOperationResult, docId: string): string {
+    switch (result.operation) {
+      case 'list':
+        return this.formatListSummary(result, docId)
       case 'create':
         return this.formatCreateSummary(result)
       case 'update':
@@ -307,17 +406,17 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
       case 'delete':
         return this.formatDeleteSummary(result)
       case 'clear_queue':
-        return this.formatClearQueueSummary(result)
+        return this.formatClearQueueSummary(docId)
     }
   }
 
-  private formatListSummary(result: ListWebhooksResult): string {
+  private formatListSummary(result: ListWebhooksResult, docId: string): string {
     if (result.webhooks.length === 0) {
-      return `No webhooks found for document ${result.docId}`
+      return `No webhooks found for document ${docId}`
     }
 
     const enabledCount = result.webhooks.filter((w) => w.enabled).length
-    let summary = `Found ${result.total} webhook(s) in document ${result.docId} (showing ${result.webhooks.length})\n\n`
+    let summary = `Found ${result.total} webhook(s) in document ${docId} (showing ${result.webhooks.length})\n\n`
 
     summary += result.webhooks
       .map((w, i) => {
@@ -361,8 +460,8 @@ export class ManageWebhooksTool extends GristTool<typeof ManageWebhooksSchema, O
     return `Successfully deleted webhook ${result.webhookId}`
   }
 
-  private formatClearQueueSummary(result: ClearQueueResult): string {
-    return `Successfully cleared webhook queue for document ${result.docId}`
+  private formatClearQueueSummary(docId: string): string {
+    return `Successfully cleared webhook queue for document ${docId}`
   }
 
   /**
@@ -508,7 +607,7 @@ export const WEBHOOK_TOOLS: ReadonlyArray<ToolDefinition> = [
   {
     name: 'grist_manage_webhooks',
     title: 'Manage Webhooks',
-    description: 'Create, update, delete, or list webhooks for real-time notifications',
+    description: 'Create, update, delete, or list webhooks in batch for real-time notifications',
     purpose: 'Create and manage webhooks for real-time event notifications',
     category: 'webhooks',
     inputSchema: ManageWebhooksSchema,
@@ -518,54 +617,68 @@ export const WEBHOOK_TOOLS: ReadonlyArray<ToolDefinition> = [
     docs: {
       overview:
         'Manages webhooks for real-time notifications when table data changes. ' +
-        'Webhooks POST to your URL when records are added or updated. ' +
-        'Use isReadyColumn to fire only when a condition is met.',
+        'Batch multiple create/update/delete operations in a single call. ' +
+        'Note: list and clear_queue must be the only operation if used.',
       examples: [
         {
-          desc: 'Create webhook',
+          desc: 'Create multiple webhooks',
           input: {
             docId: 'abc123',
-            operation: {
-              action: 'create',
-              fields: {
-                url: 'https://api.example.com/webhook',
-                tableId: 'Customers',
-                eventTypes: ['add', 'update'],
-                name: 'Customer Sync'
+            operations: [
+              {
+                action: 'create',
+                fields: {
+                  url: 'https://api.example.com/customers',
+                  tableId: 'Customers',
+                  eventTypes: ['add', 'update'],
+                  name: 'Customer Sync'
+                }
+              },
+              {
+                action: 'create',
+                fields: {
+                  url: 'https://api.example.com/orders',
+                  tableId: 'Orders',
+                  eventTypes: ['add'],
+                  name: 'Order Notifications'
+                }
               }
-            }
+            ]
           }
         },
         {
           desc: 'List webhooks',
           input: {
             docId: 'abc123',
-            operation: { action: 'list' }
+            operations: [{ action: 'list' }]
           }
         },
         {
-          desc: 'Disable webhook',
+          desc: 'Update and delete webhooks',
           input: {
             docId: 'abc123',
-            operation: {
-              action: 'update',
-              webhookId: 'abc-123-def',
-              fields: { enabled: false }
-            }
+            operations: [
+              { action: 'update', webhookId: 'uuid-1', fields: { enabled: false } },
+              { action: 'delete', webhookId: 'uuid-2' }
+            ]
           }
         },
         {
           desc: 'Clear backed-up queue',
           input: {
             docId: 'abc123',
-            operation: { action: 'clear_queue' }
+            operations: [{ action: 'clear_queue' }]
           }
         }
       ],
       errors: [
         { error: 'Webhook not found', solution: 'Use action="list" to see webhook IDs' },
         { error: 'Domain not allowed', solution: 'Contact admin to allowlist webhook domain' },
-        { error: 'Permission denied', solution: 'Webhook operations require OWNER access' }
+        { error: 'Permission denied', solution: 'Webhook operations require OWNER access' },
+        {
+          error: 'list/clear_queue with other operations',
+          solution: 'list and clear_queue must be the only operation in the array'
+        }
       ],
       parameters:
         '**Create fields:** url (required), tableId (required), eventTypes (required: ["add", "update"]), name, memo, enabled, isReadyColumn\n' +

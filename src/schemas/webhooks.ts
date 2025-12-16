@@ -231,6 +231,9 @@ export const ClearQueueOperationSchema = z
       'Use when webhook queue has backed up due to endpoint failures.'
   )
 
+/**
+ * Discriminated union of all webhook operations
+ */
 const RawWebhookOperationSchema = z.discriminatedUnion('action', [
   ListWebhooksOperationSchema,
   CreateWebhookOperationSchema,
@@ -241,11 +244,32 @@ const RawWebhookOperationSchema = z.discriminatedUnion('action', [
 
 export const WebhookOperationSchema = z.preprocess(parseJsonString, RawWebhookOperationSchema)
 
+/**
+ * Operations array with constraint: list and clear_queue must be alone
+ */
+const WebhookOperationsArraySchema = z
+  .array(WebhookOperationSchema)
+  .min(1)
+  .max(10)
+  .refine(
+    (ops) => {
+      const hasSingleOnly = ops.some((op) => op.action === 'list' || op.action === 'clear_queue')
+      if (hasSingleOnly && ops.length > 1) {
+        return false
+      }
+      return true
+    },
+    {
+      message:
+        'list and clear_queue operations must be the only operation if present. ' +
+        'These cannot be batched with other operations.'
+    }
+  )
+  .describe('Array of webhook operations to perform in sequence')
+
 export const ManageWebhooksSchema = z.strictObject({
   docId: DocIdSchema,
-  operation: WebhookOperationSchema.describe(
-    'Webhook operation to perform: list, create, update, delete, or clear_queue'
-  ),
+  operations: WebhookOperationsArraySchema,
   response_format: ResponseFormatSchema
 })
 

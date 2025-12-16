@@ -655,93 +655,131 @@ export const UpdatePageFixtures = {
 
 export const WebhookListFixtures = {
   empty: {
-    operation: 'list' as const,
+    success: true as const,
     docId: 'fdCVLvgAPAD1HXhQcGHCyz',
-    webhookCount: 0,
-    total: 0,
-    offset: 0,
-    limit: 100,
-    hasMore: false,
-    nextOffset: null,
-    pageNumber: 1,
-    totalPages: 0,
-    itemsInPage: 0,
-    webhooks: []
+    operationsCompleted: 1,
+    results: [
+      {
+        operation: 'list' as const,
+        webhookCount: 0,
+        total: 0,
+        offset: 0,
+        limit: 100,
+        hasMore: false,
+        nextOffset: null,
+        pageNumber: 1,
+        totalPages: 0,
+        itemsInPage: 0,
+        webhooks: []
+      }
+    ],
+    message: 'Found 0 webhooks'
   },
   withWebhooks: {
-    operation: 'list' as const,
+    success: true as const,
     docId: 'fdCVLvgAPAD1HXhQcGHCyz',
-    webhookCount: 2,
-    total: 2,
-    offset: 0,
-    limit: 100,
-    hasMore: false,
-    nextOffset: null,
-    pageNumber: 1,
-    totalPages: 1,
-    itemsInPage: 2,
-    webhooks: [
+    operationsCompleted: 1,
+    results: [
       {
-        id: 'webhook-uuid-1234',
-        name: 'New Customer Alert',
-        url: 'https://hooks.example.com/customers',
-        tableId: 'Customers',
-        eventTypes: ['add'],
-        enabled: true,
-        isReadyColumn: null,
-        memo: 'Sends notification when new customer added'
-      },
-      {
-        id: 'webhook-uuid-5678',
-        name: 'Order Update',
-        url: 'https://hooks.example.com/orders',
-        tableId: 'Orders',
-        eventTypes: ['add', 'update'],
-        enabled: true,
-        isReadyColumn: 'IsReady',
-        memo: null
+        operation: 'list' as const,
+        webhookCount: 2,
+        total: 2,
+        offset: 0,
+        limit: 100,
+        hasMore: false,
+        nextOffset: null,
+        pageNumber: 1,
+        totalPages: 1,
+        itemsInPage: 2,
+        webhooks: [
+          {
+            id: 'webhook-uuid-1234',
+            name: 'New Customer Alert',
+            url: 'https://hooks.example.com/customers',
+            tableId: 'Customers',
+            eventTypes: ['add'],
+            enabled: true,
+            isReadyColumn: null,
+            memo: 'Sends notification when new customer added'
+          },
+          {
+            id: 'webhook-uuid-5678',
+            name: 'Order Update',
+            url: 'https://hooks.example.com/orders',
+            tableId: 'Orders',
+            eventTypes: ['add', 'update'],
+            enabled: true,
+            isReadyColumn: 'IsReady',
+            memo: null
+          }
+        ]
       }
-    ]
+    ],
+    message: 'Found 2 webhooks'
   }
 }
 
 export const WebhookCreateFixtures = {
   basic: {
-    operation: 'create' as const,
     success: true as const,
     docId: 'fdCVLvgAPAD1HXhQcGHCyz',
-    webhookId: 'new-webhook-uuid',
-    webhookUrl: 'https://hooks.example.com/new',
-    tableId: 'Customers',
-    eventTypes: ['add', 'update']
+    operationsCompleted: 1,
+    results: [
+      {
+        operation: 'create' as const,
+        webhookId: 'new-webhook-uuid',
+        webhookUrl: 'https://hooks.example.com/new',
+        tableId: 'Customers',
+        eventTypes: ['add', 'update']
+      }
+    ],
+    message: 'Successfully completed 1 operation(s)'
   }
 }
 
 export const WebhookUpdateFixtures = {
   basic: {
-    operation: 'update' as const,
     success: true as const,
     docId: 'fdCVLvgAPAD1HXhQcGHCyz',
-    webhookId: 'webhook-uuid-1234',
-    fieldsUpdated: ['url', 'enabled']
+    operationsCompleted: 1,
+    results: [
+      {
+        operation: 'update' as const,
+        webhookId: 'webhook-uuid-1234',
+        fieldsUpdated: ['url', 'enabled']
+      }
+    ],
+    message: 'Successfully completed 1 operation(s)'
   }
 }
 
 export const WebhookDeleteFixtures = {
   basic: {
-    operation: 'delete' as const,
     success: true as const,
     docId: 'fdCVLvgAPAD1HXhQcGHCyz',
-    webhookId: 'webhook-uuid-1234'
+    operationsCompleted: 1,
+    results: [
+      {
+        operation: 'delete' as const,
+        webhookId: 'webhook-uuid-1234'
+      }
+    ],
+    message: 'Successfully completed 1 operation(s)'
   }
 }
 
 export const WebhookClearQueueFixtures = {
   basic: {
-    operation: 'clear_queue' as const,
     success: true as const,
     docId: 'fdCVLvgAPAD1HXhQcGHCyz',
-    action: 'cleared_webhook_queue' as const
+    operationsCompleted: 1,
+    results: [
+      {
+        operation: 'clear_queue' as const,
+        action: 'cleared_webhook_queue' as const
+      }
+    ],
+    message: 'Successfully cleared webhook queue'
   }
 }
 

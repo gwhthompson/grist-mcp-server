@@ -59,6 +59,7 @@ export const RecordDataSchema = z.record(z.string(), CellValueSchema)
 const AddRecordOperationSchema = z
   .object({
     action: z.literal('add'),
+    tableId: TableIdSchema,
     records: z
       .array(RecordDataSchema)
       .min(1)
@@ -73,6 +74,7 @@ const AddRecordOperationSchema = z
 const UpdateRecordOperationSchema = z
   .object({
     action: z.literal('update'),
+    tableId: TableIdSchema,
     records: z
       .array(
         z.object({
@@ -92,6 +94,7 @@ const UpdateRecordOperationSchema = z
 const DeleteRecordOperationSchema = z
   .object({
     action: z.literal('delete'),
+    tableId: TableIdSchema,
     rowIds: z
       .array(z.number().int().positive())
       .min(1)
@@ -114,6 +117,7 @@ const DeleteRecordOperationSchema = z
 const UpsertRecordOperationSchema = z
   .object({
     action: z.literal('upsert'),
+    tableId: TableIdSchema,
     records: z
       .array(
         z.object({
@@ -152,7 +156,6 @@ const RecordOperationSchema = z.discriminatedUnion('action', [
  */
 export const ManageRecordsSchema = z.strictObject({
   docId: DocIdSchema,
-  tableId: TableIdSchema,
   operations: z
     .array(RecordOperationSchema)
     .min(1)
@@ -170,6 +173,7 @@ export type RecordOperation = z.infer<typeof RecordOperationSchema>
 
 interface OperationResult {
   action: string
+  tableId: string
   success: boolean
   recordsAffected: number
   recordIds?: number[]
@@ -180,13 +184,14 @@ interface OperationResult {
 interface ManageRecordsResponse {
   success: boolean
   docId: string
-  tableId: string
+  tablesAffected: string[]
   operationsCompleted: number
   totalRecordsAffected: number
   results: OperationResult[]
   message: string
   partialFailure?: {
     operationIndex: number
+    tableId: string
     error: string
     completedOperations: number
   }
@@ -210,35 +215,43 @@ export class ManageRecordsTool extends GristTool<
 
   protected async executeInternal(params: ManageRecordsInput): Promise<ManageRecordsResponse> {
     const { schemaCache } = this
-    const docId = toDocId(params.docId)
-    const tableId = toTableId(params.tableId)
+    const docIdBranded = toDocId(params.docId)
     const results: OperationResult[] = []
+    const affectedTables = new Set<string>()
     let totalAffected = 0
 
     // Execute operations sequentially (later operations may depend on earlier ones)
     for (let i = 0; i < params.operations.length; i++) {
       const op = params.operations[i]
       if (!op) continue
+
+      const tableIdBranded = toTableId(op.tableId)
+
       try {
-        const result = await this.executeOperation(params.docId, params.tableId, op)
-        results.push(result)
+        const result = await this.executeOperation(params.docId, op.tableId, op)
+        results.push({
+          ...result,
+          tableId: op.tableId
+        })
         totalAffected += result.recordsAffected
+        affectedTables.add(op.tableId)
 
         // Invalidate cache after any modification
-        schemaCache.invalidateCache(docId, tableId)
+        schemaCache.invalidateCache(docIdBranded, tableIdBranded)
       } catch (error) {
         // Return partial failure info
         const errorMessage = error instanceof Error ? error.message : String(error)
         return {
           success: false,
           docId: params.docId,
-          tableId: params.tableId,
+          tablesAffected: Array.from(affectedTables),
           operationsCompleted: i,
           totalRecordsAffected: totalAffected,
           results,
-          message: `Operation ${i + 1} (${op.action}) failed: ${errorMessage}`,
+          message: `Operation ${i + 1} (${op.action} on ${op.tableId}) failed: ${errorMessage}`,
           partialFailure: {
             operationIndex: i,
+            tableId: op.tableId,
             error: errorMessage,
             completedOperations: i
           }
@@ -246,14 +259,17 @@ export class ManageRecordsTool extends GristTool<
       }
     }
 
+    const tableCount = affectedTables.size
+    const tableText = tableCount === 1 ? 'table' : 'tables'
+
     return {
       success: true,
       docId: params.docId,
-      tableId: params.tableId,
+      tablesAffected: Array.from(affectedTables),
       operationsCompleted: params.operations.length,
       totalRecordsAffected: totalAffected,
       results,
-      message: `Successfully completed ${params.operations.length} operation(s) affecting ${totalAffected} record(s)`
+      message: `Successfully completed ${params.operations.length} operation(s) affecting ${totalAffected} record(s) across ${tableCount} ${tableText}`
     }
   }
 
@@ -261,7 +277,7 @@ export class ManageRecordsTool extends GristTool<
     docId: string,
     tableId: string,
     op: RecordOperation
-  ): Promise<OperationResult> {
+  ): Promise<Omit<OperationResult, 'tableId'>> {
     switch (op.action) {
       case 'add':
         return this.executeAdd(docId, tableId, op)
@@ -278,7 +294,7 @@ export class ManageRecordsTool extends GristTool<
     docId: string,
     tableId: string,
     op: Extract<RecordOperation, { action: 'add' }>
-  ): Promise<OperationResult> {
+  ): Promise<Omit<OperationResult, 'tableId'>> {
     const { schemaCache } = this
     const docIdBranded = toDocId(docId)
     const tableIdBranded = toTableId(tableId)
@@ -335,7 +351,7 @@ export class ManageRecordsTool extends GristTool<
     docId: string,
     tableId: string,
     op: Extract<RecordOperation, { action: 'update' }>
-  ): Promise<OperationResult> {
+  ): Promise<Omit<OperationResult, 'tableId'>> {
     const { schemaCache } = this
     const docIdBranded = toDocId(docId)
     const tableIdBranded = toTableId(tableId)
@@ -395,7 +411,7 @@ export class ManageRecordsTool extends GristTool<
     docId: string,
     tableId: string,
     op: Extract<RecordOperation, { action: 'delete' }>
-  ): Promise<OperationResult> {
+  ): Promise<Omit<OperationResult, 'tableId'>> {
     const { schemaCache } = this
     const docIdBranded = toDocId(docId)
     const tableIdBranded = toTableId(tableId)
@@ -443,7 +459,7 @@ export class ManageRecordsTool extends GristTool<
     docId: string,
     tableId: string,
     op: Extract<RecordOperation, { action: 'upsert' }>
-  ): Promise<OperationResult> {
+  ): Promise<Omit<OperationResult, 'tableId'>> {
     const { schemaCache } = this
     const docIdBranded = toDocId(docId)
     const tableIdBranded = toTableId(tableId)
@@ -578,12 +594,13 @@ export async function manageRecords(context: ToolContext, params: ManageRecordsI
 export const ManageRecordsOutputSchema = z.object({
   success: z.boolean(),
   docId: z.string(),
-  tableId: z.string(),
+  tablesAffected: z.array(z.string()),
   operationsCompleted: z.number(),
   totalRecordsAffected: z.number(),
   results: z.array(
     z.object({
       action: z.string(),
+      tableId: z.string(),
       success: z.boolean(),
       recordsAffected: z.number(),
       recordIds: z.array(z.number()).optional(),
@@ -595,6 +612,7 @@ export const ManageRecordsOutputSchema = z.object({
   partialFailure: z
     .object({
       operationIndex: z.number(),
+      tableId: z.string(),
       error: z.string(),
       completedOperations: z.number()
     })
@@ -608,7 +626,7 @@ export const ManageRecordsOutputSchema = z.object({
 export const MANAGE_RECORDS_TOOL: ToolDefinition = {
   name: 'grist_manage_records',
   title: 'Manage Records',
-  description: 'Add, update, delete, or upsert records in batch',
+  description: 'Add, update, delete, or upsert records across one or more tables in batch',
   purpose: 'CRUD operations on table records',
   category: 'records',
   inputSchema: ManageRecordsSchema,
@@ -617,40 +635,42 @@ export const MANAGE_RECORDS_TOOL: ToolDefinition = {
   handler: manageRecords,
   docs: {
     overview:
-      'Batch record operations: add, update, delete, upsert. Operations execute sequentially. ' +
-      'Use add for inserts, update for modifications by row ID, delete for removal, ' +
-      'upsert for idempotent sync by unique key.',
+      'Batch record operations: add, update, delete, upsert. Each operation specifies its target table. ' +
+      'Operations execute sequentially, enabling cross-table dependencies (e.g., add Company first, ' +
+      'then add Contact referencing it).',
     examples: [
       {
-        desc: 'Add records',
+        desc: 'Add records to multiple tables',
         input: {
           docId: 'abc123',
-          tableId: 'Contacts',
           operations: [
             {
               action: 'add',
-              records: [
-                { Name: 'John', Email: 'john@example.com' },
-                { Name: 'Jane', Email: 'jane@example.com' }
-              ]
+              tableId: 'Companies',
+              records: [{ Name: 'Acme Corp' }]
+            },
+            {
+              action: 'add',
+              tableId: 'Contacts',
+              records: [{ Name: 'John', Company: 1 }]
             }
           ]
         }
       },
       {
-        desc: 'Update and delete in batch',
+        desc: 'Update and delete in same table',
         input: {
           docId: 'abc123',
-          tableId: 'Tasks',
           operations: [
             {
               action: 'update',
+              tableId: 'Tasks',
               records: [
                 { id: 1, fields: { Status: 'Complete' } },
                 { id: 2, fields: { Status: 'Complete' } }
               ]
             },
-            { action: 'delete', rowIds: [3, 4] }
+            { action: 'delete', tableId: 'Tasks', rowIds: [3, 4] }
           ]
         }
       },
@@ -658,10 +678,10 @@ export const MANAGE_RECORDS_TOOL: ToolDefinition = {
         desc: 'Upsert by email',
         input: {
           docId: 'abc123',
-          tableId: 'Users',
           operations: [
             {
               action: 'upsert',
+              tableId: 'Users',
               records: [
                 { require: { Email: 'alice@example.com' }, fields: { Name: 'Alice', Active: true } }
               ]
@@ -673,8 +693,7 @@ export const MANAGE_RECORDS_TOOL: ToolDefinition = {
         desc: 'Delete by filter',
         input: {
           docId: 'abc123',
-          tableId: 'Logs',
-          operations: [{ action: 'delete', filters: { Status: 'Archived' } }]
+          operations: [{ action: 'delete', tableId: 'Logs', filters: { Status: 'Archived' } }]
         }
       }
     ],
@@ -683,9 +702,13 @@ export const MANAGE_RECORDS_TOOL: ToolDefinition = {
       { error: 'Row ID not found', solution: 'Use grist_get_records to find valid row IDs' },
       {
         error: 'Partial failure',
-        solution: 'Check partial_failure.operation_index to see which operation failed'
+        solution:
+          'Check partialFailure.tableId and operationIndex to identify which table/operation failed'
       },
-      { error: 'Invalid reference', solution: 'Row ID must exist in referenced table' },
+      {
+        error: 'Cross-table reference invalid',
+        solution: 'Order operations so creates happen before references'
+      },
       { error: 'Invalid choice', solution: 'Use grist_get_tables with detail_level="full_schema"' }
     ]
   }

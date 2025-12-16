@@ -76,7 +76,7 @@ Add to your MCP config:
 | `grist_get_tables` | Get table structure and schema |
 | `grist_query_sql` | Run SQL queries with JOINs and aggregations |
 | `grist_get_records` | Fetch records with filters |
-| `grist_manage_records` | CRUD operations on table records |
+| `grist_manage_records` | All record CRUD operations (add/update/delete/upsert) |
 | `grist_manage_schema` | Schema operations: tables, columns, summaries |
 | `grist_manage_pages` | Page layout and management |
 | `grist_create_document` | Create new Grist documents or copy existing ones |

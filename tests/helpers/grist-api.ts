@@ -4,12 +4,43 @@
  * Higher-level helpers for common Grist API operations in tests
  */
 
+import { threadId } from 'node:worker_threads'
 import { inject } from 'vitest'
 import type { ToolContext } from '../../src/registry/types.js'
 import type { CellValue } from '../../src/schemas/api-responses.js'
 import { GristClient } from '../../src/services/grist-client.js'
 import { SchemaCache } from '../../src/services/schema-cache.js'
 import type { DocId, TableId, WorkspaceId } from '../../src/types/advanced.js'
+
+// =============================================================================
+// Unique Resource Naming
+// =============================================================================
+
+/**
+ * Counter for generating unique resource names within a worker thread.
+ * Combined with threadId and timestamp, ensures uniqueness even under parallel execution.
+ */
+let resourceCounter = 0
+
+/**
+ * Generate a unique resource name for test isolation.
+ *
+ * Combines:
+ * - Worker thread ID (isolation across parallel workers)
+ * - Timestamp (isolation across time)
+ * - Counter (isolation within same millisecond)
+ *
+ * @example
+ * uniqueResourceName('Workspace') // => "Workspace_w3_1702745123456_1"
+ */
+export function uniqueResourceName(prefix: string): string {
+  const workerId = threadId ?? 0
+  return `${prefix}_w${workerId}_${Date.now()}_${++resourceCounter}`
+}
+
+// =============================================================================
+// Test Context Types
+// =============================================================================
 
 export interface TestContext {
   client: GristClient
@@ -78,49 +109,52 @@ export async function getFirstWorkspace(client: GristClient, orgId: number): Pro
 }
 
 /**
- * Create a test workspace
+ * Create a test workspace with a unique name for isolation.
  */
 export async function createTestWorkspace(
   client: GristClient,
   orgId: number,
-  name: string = `Test Workspace ${Date.now()}`
+  name?: string
 ): Promise<WorkspaceId> {
+  const workspaceName = name ?? uniqueResourceName('TestWorkspace')
   const workspaceId = await client.post<number>(`/orgs/${orgId}/workspaces`, {
-    name
+    name: workspaceName
   })
   return workspaceId as WorkspaceId
 }
 
 /**
- * Create a test document
+ * Create a test document with a unique name for isolation.
  */
 export async function createTestDocument(
   client: GristClient,
   workspaceId: WorkspaceId,
-  name: string = `Test Document ${Date.now()}`
+  name?: string
 ): Promise<DocId> {
+  const docName = name ?? uniqueResourceName('TestDoc')
   const docId = await client.post<string>(`/workspaces/${workspaceId}/docs`, {
-    name
+    name: docName
   })
   return docId as DocId
 }
 
 /**
- * Create a test table
+ * Create a test table with a unique name for isolation.
  */
 export async function createTestTable(
   client: GristClient,
   docId: DocId,
-  tableId: string = `TestTable_${Date.now()}`,
+  tableId?: string,
   columns: Array<{ id: string; fields?: Record<string, unknown> }> = [
     { id: 'name', fields: { type: 'Text', label: 'Name' } },
     { id: 'value', fields: { type: 'Numeric', label: 'Value' } }
   ]
 ): Promise<TableId> {
+  const tableName = tableId ?? uniqueResourceName('TestTable')
   await client.post(`/docs/${docId}/tables`, {
-    tables: [{ id: tableId, columns }]
+    tables: [{ id: tableName, columns }]
   })
-  return tableId as TableId
+  return tableName as TableId
 }
 
 /**
@@ -219,7 +253,8 @@ export async function createFullTestContext(
 }
 
 /**
- * Cleanup test context (delete all created resources)
+ * Cleanup test context (delete all created resources).
+ * Verifies deletion to catch silent cleanup failures.
  */
 export async function cleanupTestContext(context: Partial<TestContext>): Promise<void> {
   // Check for SKIP_CLEANUP environment variable
@@ -231,11 +266,32 @@ export async function cleanupTestContext(context: Partial<TestContext>): Promise
     return
   }
 
+  // Delete document first
   if (context.docId && context.client) {
     await deleteDocument(context.client, context.docId)
+
+    // Verify document was actually deleted
+    try {
+      await context.client.get(`/docs/${context.docId}`)
+      // If we get here, the document still exists
+      console.warn(`⚠️ Cleanup verification failed: Document ${context.docId} still exists`)
+    } catch {
+      // Expected: 404 means document was deleted successfully
+    }
   }
+
+  // Delete workspace
   if (context.workspaceId && context.client) {
     await deleteWorkspace(context.client, context.workspaceId)
+
+    // Verify workspace was actually deleted
+    try {
+      await context.client.get(`/workspaces/${context.workspaceId}`)
+      // If we get here, the workspace still exists
+      console.warn(`⚠️ Cleanup verification failed: Workspace ${context.workspaceId} still exists`)
+    } catch {
+      // Expected: 404 means workspace was deleted successfully
+    }
   }
 }
 

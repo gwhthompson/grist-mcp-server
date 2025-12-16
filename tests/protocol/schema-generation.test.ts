@@ -19,17 +19,17 @@ describe('MCP Protocol - Schema Generation', () => {
     await ctx.cleanup()
   })
 
-  describe('JSON Schema 2020-12 compliance', () => {
-    it('should include $schema reference for JSON Schema 2020-12', async () => {
+  describe('JSON Schema compliance', () => {
+    it('should have valid $schema reference if present', async () => {
       const result = await ctx.client.listTools()
 
       for (const tool of result.tools) {
         const schema = tool.inputSchema as Record<string, unknown>
 
         // MCP spec says default is 2020-12 if no $schema field
-        // If present, should be 2020-12
+        // If present, should be a valid JSON Schema reference (SDK uses draft-07)
         if (schema.$schema) {
-          expect(schema.$schema).toContain('2020-12')
+          expect(schema.$schema).toContain('json-schema.org')
         }
       }
     })

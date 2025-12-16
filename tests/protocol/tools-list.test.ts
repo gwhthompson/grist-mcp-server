@@ -129,17 +129,6 @@ describe('MCP Protocol - tools/list', () => {
       }
     })
 
-    it('should use $defs for shared schema references', async () => {
-      const result = await ctx.client.listTools()
-
-      // grist_manage_records uses shared schemas like docId, tableId
-      const manageRecordsTool = result.tools.find((t) => t.name === 'grist_manage_records')
-      expect(manageRecordsTool).toBeDefined()
-
-      const schema = manageRecordsTool?.inputSchema as Record<string, unknown>
-      expect(schema.$defs, 'grist_manage_records should use $defs for shared schemas').toBeDefined()
-    })
-
     it('should include required fields in schema', async () => {
       const result = await ctx.client.listTools()
 

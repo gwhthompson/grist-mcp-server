@@ -1,80 +1,72 @@
 /**
  * Consolidated page and widget management tool.
  *
- * Consolidates grist_build_page, grist_configure_widget, and grist_update_page
- * into a single batched operations interface.
- *
- * Benefits:
- * - ~75% reduction in tools/list token usage for page operations
- * - Batch multiple page/widget operations in a single API call
- * - Consistent interface for all page/widget CRUD operations
- *
  * Operations:
- * - Pages: create, rename, delete, reorder
- * - Widgets: add, remove, configure, link
+ * - Layout: create_page (declarative), set_layout, get_layout
+ * - Metadata: rename_page, delete_page, reorder_pages
+ * - Config: configure_widget
  */
 
 import { z } from 'zod'
 import { type ToolContext, type ToolDefinition, WRITE_SAFE_ANNOTATIONS } from '../registry/types.js'
 import { ApplyResponseSchema } from '../schemas/api-responses.js'
 import { DocIdSchema, ResponseFormatSchema } from '../schemas/common.js'
-import { toGristWidgetType, UserWidgetTypeSchema } from '../schemas/pages-widgets.js'
-import { validateWidgetLink } from '../services/link-validator.js'
 import {
-  buildCreateViewSectionAction,
-  buildHorizontalSplitLayout,
-  buildLeafLayout,
-  buildUpdateLayoutAction,
-  buildVerticalSplitLayout,
-  processCreateViewSectionResults,
-  serializeSortSpec
-} from '../services/pages-builder.js'
+  executeCreatePage,
+  executeGetLayout,
+  executeSetLayout,
+  LayoutNodeSchema
+} from '../services/declarative-layout/index.js'
+import { serializeSortSpec } from '../services/pages-builder.js'
 import { buildViewSectionUpdate, ViewSectionService } from '../services/view-section.js'
 import {
   getPageByName,
   resolveColumnNameToColRef,
   resolveWidgetNameToSectionId
 } from '../services/widget-resolver.js'
-import type { SectionId, ViewId } from '../types/advanced.js'
-import type { ApplyResponse, LayoutSpec, SQLQueryResponse, UserAction } from '../types.js'
+import type { SectionId } from '../types/advanced.js'
+import type { ApplyResponse, SQLQueryResponse } from '../types.js'
 import { first } from '../utils/array-helpers.js'
 import { extractFields } from '../utils/grist-field-extractor.js'
-import { validateRetValues } from '../validators/apply-response.js'
 import { GristTool } from './base/GristTool.js'
-import { fetchWidgetTableMetadata, getFirstSectionId } from './pages/shared.js'
-
-// Use registered UserWidgetTypeSchema from pages-widgets.ts
-const WidgetTypeSchema = UserWidgetTypeSchema
+import { fetchWidgetTableMetadata } from './pages/shared.js'
 
 // =============================================================================
-// Page Operation Schemas
+// Layout Operation Schemas
 // =============================================================================
 
 const CreatePageOperationSchema = z
   .object({
     action: z.literal('create_page'),
     name: z.string().min(1).max(100).describe('Page name'),
-    widgets: z
-      .array(
-        z
-          .object({
-            table: z.string().min(1).describe('Table name for widget data'),
-            type: WidgetTypeSchema.default('grid').describe('Widget type'),
-            title: z.string().optional().describe('Widget title'),
-            chartType: z
-              .enum(['bar', 'pie', 'line', 'area', 'scatter', 'kaplan_meier', 'donut'])
-              .optional()
-              .describe('Required when type is "chart"')
-          })
-          .refine((w) => w.type !== 'chart' || w.chartType, {
-            message: 'chartType is required when type is "chart"'
-          })
-      )
-      .min(1)
-      .max(10)
-      .describe('Widgets to create on the page')
+    layout: LayoutNodeSchema.describe('Declarative layout with widgets and arrangement')
   })
-  .describe('Create a new page with widgets')
+  .describe('Create a new page with declarative layout')
+
+const SetLayoutOperationSchema = z
+  .object({
+    action: z.literal('set_layout'),
+    page: z.union([z.string().min(1), z.number().int().positive()]).describe('Page name or viewId'),
+    layout: LayoutNodeSchema.describe(
+      'New layout (must include all existing widgets or remove them)'
+    ),
+    remove: z
+      .array(z.number().int().positive())
+      .optional()
+      .describe('Section IDs to remove from the page')
+  })
+  .describe('Update page layout. All existing widgets must be in layout or remove array.')
+
+const GetLayoutOperationSchema = z
+  .object({
+    action: z.literal('get_layout'),
+    page: z.union([z.string().min(1), z.number().int().positive()]).describe('Page name or viewId')
+  })
+  .describe('Get page layout in declarative format')
+
+// =============================================================================
+// Metadata Operation Schemas
+// =============================================================================
 
 const RenamePageOperationSchema = z
   .object({
@@ -100,27 +92,8 @@ const ReorderPagesOperationSchema = z
   .describe('Reorder pages in navigation')
 
 // =============================================================================
-// Widget Operation Schemas
+// Config Operation Schema
 // =============================================================================
-
-const AddWidgetOperationSchema = z
-  .object({
-    action: z.literal('add_widget'),
-    page: z.string().min(1).describe('Page name'),
-    table: z.string().min(1).describe('Table name for widget data'),
-    type: WidgetTypeSchema.default('grid').describe('Widget type'),
-    title: z.string().optional().describe('Widget title'),
-    position: z.enum(['bottom', 'right', 'replace']).default('bottom').describe('Position on page')
-  })
-  .describe('Add a widget to an existing page')
-
-const RemoveWidgetOperationSchema = z
-  .object({
-    action: z.literal('remove_widget'),
-    page: z.string().min(1).describe('Page name'),
-    widget: z.string().min(1).describe('Widget title to remove')
-  })
-  .describe('Remove a widget from a page')
 
 const ConfigureWidgetOperationSchema = z
   .object({
@@ -131,19 +104,9 @@ const ConfigureWidgetOperationSchema = z
     sortBy: z
       .array(z.union([z.number(), z.string()]))
       .optional()
-      .describe('Sort columns')
+      .describe('Sort columns (e.g., ["-Date", "Amount"])')
   })
-  .describe('Configure widget properties')
-
-const LinkWidgetsOperationSchema = z
-  .object({
-    action: z.literal('link_widgets'),
-    page: z.string().min(1).describe('Page name'),
-    target: z.string().min(1).describe('Target widget to filter'),
-    source: z.string().min(1).describe('Source widget providing selection'),
-    linkColumn: z.string().optional().describe('Column for linking (e.g., reference column)')
-  })
-  .describe('Link two widgets for master-detail relationship')
+  .describe('Configure widget properties (title, sorting)')
 
 // =============================================================================
 // Discriminated Union and Main Schema
@@ -151,13 +114,12 @@ const LinkWidgetsOperationSchema = z
 
 const PageOperationSchema = z.discriminatedUnion('action', [
   CreatePageOperationSchema,
+  SetLayoutOperationSchema,
+  GetLayoutOperationSchema,
   RenamePageOperationSchema,
   DeletePageOperationSchema,
   ReorderPagesOperationSchema,
-  AddWidgetOperationSchema,
-  RemoveWidgetOperationSchema,
-  ConfigureWidgetOperationSchema,
-  LinkWidgetsOperationSchema
+  ConfigureWidgetOperationSchema
 ])
 
 export const ManagePagesSchema = z.strictObject({
@@ -253,161 +215,144 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
     switch (op.action) {
       case 'create_page':
         return this.executeCreatePage(docId, op)
+      case 'set_layout':
+        return this.executeSetLayout(docId, op)
+      case 'get_layout':
+        return this.executeGetLayout(docId, op)
       case 'rename_page':
         return this.executeRenamePage(docId, op)
       case 'delete_page':
         return this.executeDeletePage(docId, op)
       case 'reorder_pages':
         return this.executeReorderPages(docId, op)
-      case 'add_widget':
-        return this.executeAddWidget(docId, op)
-      case 'remove_widget':
-        return this.executeRemoveWidget(docId, op)
       case 'configure_widget':
         return this.executeConfigureWidget(docId, op)
-      case 'link_widgets':
-        return this.executeLinkWidgets(docId, op)
     }
   }
 
   // ---------------------------------------------------------------------------
-  // Page Operations
+  // Layout Operations
   // ---------------------------------------------------------------------------
 
   private async executeCreatePage(
     docId: string,
     op: Extract<PageOperation, { action: 'create_page' }>
   ): Promise<OperationResult> {
-    // Get table refs for all widgets
-    const tableRefs = new Map<string, number>()
-    for (const widget of op.widgets) {
-      if (!tableRefs.has(widget.table)) {
+    const result = await executeCreatePage(
+      this.client,
+      docId,
+      op.name,
+      op.layout,
+      async (tableId: string) => {
         const tableResp = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
           sql: 'SELECT id FROM _grist_Tables WHERE tableId = ?',
-          args: [widget.table]
+          args: [tableId]
         })
         if (tableResp.records.length === 0) {
-          throw new Error(`Table "${widget.table}" not found`)
+          throw new Error(`Table "${tableId}" not found`)
         }
-        const record = first(tableResp.records, `Table ${widget.table}`)
+        const record = first(tableResp.records, `Table ${tableId}`)
         const fields = extractFields(record)
-        tableRefs.set(widget.table, fields.id as number)
-      }
-    }
-
-    // Create first widget to get the view
-    const firstWidget = op.widgets[0]
-    if (!firstWidget) {
-      throw new Error('At least one widget is required')
-    }
-    const firstTableRef = tableRefs.get(firstWidget.table)
-    if (!firstTableRef) {
-      throw new Error(`Table "${firstWidget.table}" not found`)
-    }
-    const widgetType = toGristWidgetType(firstWidget.type)
-
-    const createAction = buildCreateViewSectionAction(
-      firstTableRef,
-      0, // viewRef=0 creates a new page
-      widgetType,
-      null,
-      null
-    )
-
-    const createResp = await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [createAction],
-      {
-        schema: ApplyResponseSchema,
-        context: `Creating page "${op.name}"`
+        return fields.id as number
       }
     )
-
-    validateRetValues(createResp, { context: `Creating page "${op.name}"` })
-    const results = processCreateViewSectionResults(createResp.retValues)
-    const firstResult = results[0] as { viewRef: number; sectionRef: number }
-    const viewRef = firstResult.viewRef
-    const firstSectionId = firstResult.sectionRef
-
-    // Rename the page
-    const renameAction: UserAction = ['UpdateRecord', '_grist_Views', viewRef, { name: op.name }]
-    await this.client.post<ApplyResponse>(`/docs/${docId}/apply`, [renameAction], {
-      schema: ApplyResponseSchema,
-      context: `Renaming page to "${op.name}"`
-    })
-
-    // Set title for first widget if provided
-    if (firstWidget.title) {
-      await this.client.post<ApplyResponse>(
-        `/docs/${docId}/apply`,
-        [['UpdateRecord', '_grist_Views_section', firstSectionId, { title: firstWidget.title }]],
-        { schema: ApplyResponseSchema, context: `Setting widget title` }
-      )
-    }
-
-    // Set initial layoutSpec for first widget - critical for proper positioning
-    // Without this, getLayoutSpec returns empty {} and subsequent widgets position incorrectly
-    const initialLayout = buildLeafLayout(firstSectionId)
-    await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [buildUpdateLayoutAction(viewRef, initialLayout)],
-      { schema: ApplyResponseSchema, context: `Setting initial layout` }
-    )
-
-    // Create additional widgets
-    for (let i = 1; i < op.widgets.length; i++) {
-      const widget = op.widgets[i]
-      if (!widget) continue
-      const tableRef = tableRefs.get(widget.table)
-      if (!tableRef) continue
-      const type = toGristWidgetType(widget.type)
-
-      const addAction = buildCreateViewSectionAction(tableRef, viewRef, type, null, null)
-      const addResp = await this.client.post<ApplyResponse>(`/docs/${docId}/apply`, [addAction], {
-        schema: ApplyResponseSchema,
-        context: `Adding widget for "${widget.table}"`
-      })
-
-      validateRetValues(addResp, { context: `Adding widget` })
-      const addResults = processCreateViewSectionResults(addResp.retValues)
-      const newSectionId = (addResults[0] as { sectionRef: number }).sectionRef
-
-      // Update layout
-      const service = new ViewSectionService(this.client)
-      const layoutSpecStr = await service.getLayoutSpec(docId, viewRef as ViewId)
-      const currentLayout = JSON.parse(layoutSpecStr || '{}') as LayoutSpec
-
-      const newLayout = buildVerticalSplitLayout(
-        getFirstSectionId(currentLayout),
-        newSectionId,
-        0.5
-      )
-      await this.client.post<ApplyResponse>(
-        `/docs/${docId}/apply`,
-        [buildUpdateLayoutAction(viewRef, newLayout)],
-        { schema: ApplyResponseSchema, context: `Updating layout` }
-      )
-
-      // Set title if provided
-      if (widget.title) {
-        await this.client.post<ApplyResponse>(
-          `/docs/${docId}/apply`,
-          [['UpdateRecord', '_grist_Views_section', newSectionId, { title: widget.title }]],
-          { schema: ApplyResponseSchema, context: `Setting widget title` }
-        )
-      }
-    }
 
     return {
       action: 'create_page',
       success: true,
       details: {
-        pageName: op.name,
-        viewId: viewRef,
-        widgetsCreated: op.widgets.length
+        pageName: result.pageName,
+        viewId: result.viewId,
+        widgetsCreated: result.widgetsCreated,
+        sectionIds: result.sectionIds
       }
     }
   }
+
+  private async executeSetLayout(
+    docId: string,
+    op: Extract<PageOperation, { action: 'set_layout' }>
+  ): Promise<OperationResult> {
+    // Resolve page
+    const viewId =
+      typeof op.page === 'number' ? op.page : (await this.resolvePageName(docId, op.page)).viewRef
+
+    const result = await executeSetLayout(
+      this.client,
+      docId,
+      viewId,
+      op.layout,
+      op.remove ?? [],
+      async (tableId: string) => {
+        const tableResp = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+          sql: 'SELECT id FROM _grist_Tables WHERE tableId = ?',
+          args: [tableId]
+        })
+        if (tableResp.records.length === 0) {
+          throw new Error(`Table "${tableId}" not found`)
+        }
+        const record = first(tableResp.records, `Table ${tableId}`)
+        const fields = extractFields(record)
+        return fields.id as number
+      },
+      async () => {
+        // Get existing widgets on page
+        const widgetsResp = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+          sql: `
+            SELECT vs.id, t.tableId, vs.tableRef
+            FROM _grist_Views_section vs
+            JOIN _grist_Tables t ON vs.tableRef = t.id
+            WHERE vs.parentId = ?
+          `,
+          args: [viewId]
+        })
+
+        const widgets = new Map<number, { tableId: string; tableRef: number }>()
+        for (const record of widgetsResp.records) {
+          const fields = extractFields(record)
+          widgets.set(fields.id as number, {
+            tableId: fields.tableId as string,
+            tableRef: fields.tableRef as number
+          })
+        }
+        return widgets
+      }
+    )
+
+    return {
+      action: 'set_layout',
+      success: true,
+      details: {
+        viewId: result.viewId,
+        widgetsAdded: result.widgetsAdded,
+        widgetsRemoved: result.widgetsRemoved
+      }
+    }
+  }
+
+  private async executeGetLayout(
+    docId: string,
+    op: Extract<PageOperation, { action: 'get_layout' }>
+  ): Promise<OperationResult> {
+    // Resolve page
+    const viewId =
+      typeof op.page === 'number' ? op.page : (await this.resolvePageName(docId, op.page)).viewRef
+
+    const result = await executeGetLayout(this.client, docId, viewId)
+
+    return {
+      action: 'get_layout',
+      success: true,
+      details: {
+        layout: result.layout,
+        widgets: result.widgets
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Metadata Operations
+  // ---------------------------------------------------------------------------
 
   private async executeRenamePage(
     docId: string,
@@ -443,7 +388,9 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
     op: Extract<PageOperation, { action: 'delete_page' }>
   ): Promise<OperationResult> {
     const page = await this.resolvePageName(docId, op.page)
-    const actions: UserAction[] = [['BulkRemoveRecord', '_grist_Pages', [page.id]]]
+    const actions: Array<['BulkRemoveRecord' | 'RemoveTable', string, number[] | string]> = [
+      ['BulkRemoveRecord', '_grist_Pages', [page.id]]
+    ]
     const deletedTables: string[] = []
 
     if (op.deleteData) {
@@ -460,7 +407,7 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
       for (const record of tablesResp.records) {
         const fields = extractFields(record)
         const tableId = fields.tableId as string
-        actions.push(['RemoveTable', tableId])
+        actions.push(['RemoveTable', tableId, tableId])
         deletedTables.push(tableId)
       }
     }
@@ -485,7 +432,7 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
     docId: string,
     op: Extract<PageOperation, { action: 'reorder_pages' }>
   ): Promise<OperationResult> {
-    const actions: UserAction[] = []
+    const actions: Array<['UpdateRecord', string, number, Record<string, unknown>]> = []
 
     for (let i = 0; i < op.order.length; i++) {
       const pageName = op.order[i]
@@ -509,139 +456,8 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
   }
 
   // ---------------------------------------------------------------------------
-  // Widget Operations
+  // Config Operations
   // ---------------------------------------------------------------------------
-
-  private async executeAddWidget(
-    docId: string,
-    op: Extract<PageOperation, { action: 'add_widget' }>
-  ): Promise<OperationResult> {
-    const page = await this.resolvePageName(docId, op.page)
-
-    // Get table ref
-    const tableResp = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
-      sql: 'SELECT id FROM _grist_Tables WHERE tableId = ?',
-      args: [op.table]
-    })
-    if (tableResp.records.length === 0) {
-      throw new Error(`Table "${op.table}" not found`)
-    }
-    const tableRef = (first(tableResp.records, `Table ${op.table}`) as { id: number }).id
-
-    // Get current layout
-    const service = new ViewSectionService(this.client)
-    const layoutSpecStr = await service.getLayoutSpec(docId, page.viewRef as ViewId)
-    const currentLayout = JSON.parse(layoutSpecStr || '{}') as LayoutSpec
-
-    // Create widget
-    const widgetType = toGristWidgetType(op.type)
-    const createAction = buildCreateViewSectionAction(
-      tableRef,
-      page.viewRef,
-      widgetType,
-      null,
-      null
-    )
-    const createResp = await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [createAction],
-      {
-        schema: ApplyResponseSchema,
-        context: `Adding widget to "${op.page}"`
-      }
-    )
-
-    validateRetValues(createResp, { context: `Adding widget` })
-    const results = processCreateViewSectionResults(createResp.retValues)
-    const newSectionId = (results[0] as { sectionRef: number }).sectionRef
-
-    // Build new layout
-    let newLayout: LayoutSpec
-    const firstSectionId = getFirstSectionId(currentLayout)
-    if (op.position === 'replace') {
-      newLayout = buildLeafLayout(newSectionId)
-    } else if (op.position === 'right') {
-      newLayout = buildHorizontalSplitLayout(firstSectionId, newSectionId, 0.5)
-    } else {
-      newLayout = buildVerticalSplitLayout(firstSectionId, newSectionId, 0.5)
-    }
-
-    const updateActions: UserAction[] = [buildUpdateLayoutAction(page.viewRef, newLayout)]
-    if (op.title) {
-      updateActions.push([
-        'UpdateRecord',
-        '_grist_Views_section',
-        newSectionId,
-        { title: op.title }
-      ])
-    }
-
-    await this.client.post<ApplyResponse>(`/docs/${docId}/apply`, updateActions, {
-      schema: ApplyResponseSchema,
-      context: `Updating layout and widget title`
-    })
-
-    return {
-      action: 'add_widget',
-      success: true,
-      details: {
-        page: op.page,
-        table: op.table,
-        sectionId: newSectionId
-      }
-    }
-  }
-
-  private async executeRemoveWidget(
-    docId: string,
-    op: Extract<PageOperation, { action: 'remove_widget' }>
-  ): Promise<OperationResult> {
-    const page = await this.resolvePageName(docId, op.page)
-    const sectionId = await resolveWidgetNameToSectionId(
-      this.client,
-      docId,
-      page.viewRef,
-      op.widget
-    )
-
-    // Delete widget
-    await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [['BulkRemoveRecord', '_grist_Views_section', [sectionId]]],
-      {
-        schema: ApplyResponseSchema,
-        context: `Removing widget "${op.widget}"`
-      }
-    )
-
-    // Rebuild layout with remaining widgets
-    const remainingWidgets = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
-      sql: 'SELECT id FROM _grist_Views_section WHERE parentId = ? AND id != ? LIMIT 1',
-      args: [page.viewRef, sectionId]
-    })
-
-    if (remainingWidgets.records.length > 0) {
-      const remainingSectionId = (
-        first(remainingWidgets.records, 'Remaining widget') as { id: number }
-      ).id
-      const newLayout = buildLeafLayout(remainingSectionId)
-      await this.client.post<ApplyResponse>(
-        `/docs/${docId}/apply`,
-        [buildUpdateLayoutAction(page.viewRef, newLayout)],
-        { schema: ApplyResponseSchema, context: `Updating layout` }
-      )
-    }
-
-    return {
-      action: 'remove_widget',
-      success: true,
-      details: {
-        page: op.page,
-        widget: op.widget,
-        sectionId: sectionId
-      }
-    }
-  }
 
   private async executeConfigureWidget(
     docId: string,
@@ -694,99 +510,6 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
         page: op.page,
         widget: op.widget,
         updates: Object.keys(updates)
-      }
-    }
-  }
-
-  private async executeLinkWidgets(
-    docId: string,
-    op: Extract<PageOperation, { action: 'link_widgets' }>
-  ): Promise<OperationResult> {
-    const page = await this.resolvePageName(docId, op.page)
-
-    const targetSectionId = await resolveWidgetNameToSectionId(
-      this.client,
-      docId,
-      page.viewRef,
-      op.target
-    )
-    const sourceSectionId = await resolveWidgetNameToSectionId(
-      this.client,
-      docId,
-      page.viewRef,
-      op.source
-    )
-
-    const metadata = await fetchWidgetTableMetadata(this.client, docId, [
-      sourceSectionId,
-      targetSectionId
-    ])
-    const sourceColRef = 0
-    let targetColRef = 0
-
-    if (op.linkColumn) {
-      const targetMetadata = metadata.get(targetSectionId)
-      if (targetMetadata) {
-        targetColRef = await resolveColumnNameToColRef(
-          this.client,
-          docId,
-          targetMetadata.tableId,
-          op.linkColumn
-        )
-      }
-    }
-
-    // Validate link
-    await validateWidgetLink(
-      this.client,
-      docId,
-      sourceSectionId,
-      targetSectionId,
-      sourceColRef,
-      targetColRef
-    )
-
-    // Update target widget with link
-    const service = new ViewSectionService(this.client)
-    const existing = await service.getViewSection(docId, targetSectionId as SectionId)
-    const updatePayload = buildViewSectionUpdate(existing, {
-      linkSrcSectionRef: sourceSectionId,
-      linkSrcColRef: sourceColRef,
-      linkTargetColRef: targetColRef
-    })
-
-    await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [['UpdateRecord', '_grist_Views_section', targetSectionId, updatePayload]],
-      {
-        schema: ApplyResponseSchema,
-        context: `Linking widgets`
-      }
-    )
-
-    // Verify the link was actually persisted
-    const verifiedSection = await service.getViewSection(docId, targetSectionId as SectionId)
-    if (verifiedSection.linkSrcSectionRef !== sourceSectionId) {
-      throw new Error(
-        `Widget linking failed: linkSrcSectionRef was not persisted. ` +
-          `Expected ${sourceSectionId}, got ${verifiedSection.linkSrcSectionRef}. ` +
-          `This may indicate incompatible widget types or Grist rejected the link configuration.`
-      )
-    }
-
-    return {
-      action: 'link_widgets',
-      success: true,
-      details: {
-        page: op.page,
-        target: op.target,
-        source: op.source,
-        link_column: op.linkColumn,
-        verified: {
-          linkSrcSectionRef: verifiedSection.linkSrcSectionRef,
-          linkSrcColRef: verifiedSection.linkSrcColRef,
-          linkTargetColRef: verifiedSection.linkTargetColRef
-        }
       }
     }
   }
@@ -891,8 +614,10 @@ export const ManagePagesOutputSchema = z.object({
 export const MANAGE_PAGES_TOOL: ToolDefinition = {
   name: 'grist_manage_pages',
   title: 'Manage Pages',
-  description: 'Create/rename/delete pages, add/remove/configure widgets, link widgets',
-  purpose: 'Page and widget operations',
+  description:
+    'Declarative page layouts with widget arrangement and linking. ' +
+    'Also: rename/delete/reorder pages, configure widget sorting.',
+  purpose: 'Page layout and management',
   category: 'document_structure',
   inputSchema: ManagePagesSchema,
   outputSchema: ManagePagesOutputSchema,
@@ -900,42 +625,77 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
   handler: managePages,
   docs: {
     overview:
-      'Batch page and widget operations. Pages: create, rename, delete, reorder. ' +
-      'Widgets: add, remove, configure (title, sorting), link for master-detail.',
+      'Create pages with declarative layouts specifying widget arrangement (cols/rows splits) and linking. ' +
+      'Modify layouts with set_layout, read with get_layout. ' +
+      'Also supports: rename_page, delete_page, reorder_pages, configure_widget.',
     examples: [
       {
-        desc: 'Create page with widgets',
+        desc: 'Create page with master-detail layout',
         input: {
           docId: 'abc123',
           operations: [
             {
               action: 'create_page',
-              name: 'Dashboard',
-              widgets: [
-                { table: 'Summary', type: 'chart', title: 'Overview' },
-                { table: 'Details', type: 'grid', title: 'Transactions' }
-              ]
+              name: 'Company Dashboard',
+              layout: {
+                cols: [
+                  { id: 'list', table: 'Companies', widget: 'grid' },
+                  {
+                    table: 'Contacts',
+                    widget: 'card_list',
+                    link: { filter: { from: 'list', to: 'CompanyRef' } }
+                  }
+                ]
+              }
             }
           ]
         }
       },
       {
-        desc: 'Link widgets',
+        desc: 'Create page with sync-linked widgets',
         input: {
           docId: 'abc123',
           operations: [
             {
-              action: 'link_widgets',
-              page: 'Dashboard',
-              target: 'Transactions',
-              source: 'Overview',
-              linkColumn: 'CategoryRef'
+              action: 'create_page',
+              name: 'Order Details',
+              layout: {
+                cols: [
+                  { id: 'orders', table: 'Orders', widget: 'grid' },
+                  { table: 'Orders', widget: 'card', link: { sync: 'orders' } }
+                ]
+              }
             }
           ]
         }
       },
       {
-        desc: 'Reorder and rename',
+        desc: 'Get and modify layout',
+        input: {
+          docId: 'abc123',
+          operations: [{ action: 'get_layout', page: 'Dashboard' }]
+        }
+      },
+      {
+        desc: 'Update layout with new widget',
+        input: {
+          docId: 'abc123',
+          operations: [
+            {
+              action: 'set_layout',
+              page: 'Dashboard',
+              layout: {
+                rows: [
+                  { cols: [5, 6] },
+                  { table: 'Summary', widget: 'chart', chartType: 'bar', weight: 2 }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        desc: 'Rename and reorder pages',
         input: {
           docId: 'abc123',
           operations: [
@@ -945,22 +705,14 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
         }
       },
       {
-        desc: 'Add widget and configure',
+        desc: 'Configure widget sorting',
         input: {
           docId: 'abc123',
           operations: [
             {
-              action: 'add_widget',
-              page: 'Dashboard',
-              table: 'Sales',
-              type: 'grid',
-              title: 'Recent Sales',
-              position: 'right'
-            },
-            {
               action: 'configure_widget',
               page: 'Dashboard',
-              widget: 'Recent Sales',
+              widget: 'Transactions',
               sortBy: ['-Date', 'Amount']
             }
           ]
@@ -970,8 +722,15 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
     errors: [
       { error: 'Page not found', solution: 'Check page name (case-sensitive)' },
       { error: 'Table not found', solution: 'Use grist_get_tables to list tables' },
-      { error: 'Widget not found', solution: 'Use widget title as shown in Grist UI' },
-      { error: 'Partial failure', solution: 'Check partial_failure.operation_index' }
+      { error: 'Section not found', solution: 'Use get_layout to see widget section IDs' },
+      {
+        error: 'Widget reference not found',
+        solution: 'Ensure id is defined before being referenced in link'
+      },
+      {
+        error: 'Orphaned widgets',
+        solution: 'Include all existing widgets in layout or add to remove array'
+      }
     ]
   }
 }

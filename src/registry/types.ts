@@ -1,3 +1,4 @@
+import type { ToolAnnotations as MCPToolAnnotations } from '@modelcontextprotocol/sdk/types.js'
 import type { z } from 'zod'
 import type { GristClient } from '../services/grist-client.js'
 import type { SchemaCache } from '../services/schema-cache.js'
@@ -16,12 +17,19 @@ export interface ToolContext {
 
 /**
  * Tool behavior hints for MCP clients.
+ *
+ * Extends the MCP SDK's ToolAnnotations with:
+ * - Required boolean hints (not optional) - forces explicit behavior declaration
+ * - Custom `progressHint` for long-running operations
+ *
+ * @see MCPToolAnnotations from @modelcontextprotocol/sdk/types.js
  */
-export interface ToolAnnotations {
+export interface ToolAnnotations extends Omit<MCPToolAnnotations, 'title'> {
   readonly readOnlyHint: boolean
   readonly destructiveHint: boolean
   readonly idempotentHint: boolean
   readonly openWorldHint: boolean
+  /** Custom extension: hints that the operation may take significant time */
   readonly progressHint?: boolean
 }
 

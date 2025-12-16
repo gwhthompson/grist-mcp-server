@@ -5,7 +5,7 @@
  * - Existing widgets by section ID: `5` or `[5, 2]` (weighted) or `{section: 5}`
  * - New widgets: `{table: "T", widget: "grid"}`
  * - Layout splits: `{cols: [...]}` or `{rows: [...]}`
- * - Widget linking: 7 semantic link types (sync, select, filter, group, summary, refs, custom)
+ * - Widget linking: 7 semantic link types with explicit type discriminator
  */
 
 import { z } from 'zod'
@@ -15,74 +15,145 @@ import { z } from 'zod'
 // =============================================================================
 
 /**
- * Link target can be:
+ * Widget identifier can be:
  * - number: existing section ID
  * - string: local ID defined in the same layout
  */
-export const LinkTargetSchema = z.union([z.number().int().positive(), z.string().min(1)])
+export const WidgetIdSchema = z.union([z.number().int().positive(), z.string().min(1)])
 
-export type LinkTarget = z.infer<typeof LinkTargetSchema>
+export type WidgetId = z.infer<typeof WidgetIdSchema>
+
+// Legacy alias for backward compatibility
+export const LinkTargetSchema = WidgetIdSchema
+export type LinkTarget = WidgetId
 
 // =============================================================================
-// Link Schemas (7 types from spec)
+// Link Schemas (7 types with explicit discriminator)
+//
+// All link types are named from the TARGET widget's perspective using
+// preposition patterns: child_of, matched_by, detail_of, etc.
 // =============================================================================
 
-/** Cursor sync: same table, same row */
-const SyncLinkSchema = z.strictObject({
-  sync: LinkTargetSchema
+/**
+ * Type 1: Master-detail filter (Row→Col)
+ *
+ * This widget is a child of the source widget.
+ * Shows records where target_column (a Ref in this table) points to the selected row in source.
+ *
+ * Example: Products linked to Categories via the "Category" Ref column
+ */
+const ChildOfLinkSchema = z.strictObject({
+  type: z.literal('child_of'),
+  source_widget: WidgetIdSchema.describe('Parent widget that drives this link'),
+  target_column: z.string().min(1).describe('Ref column in THIS table that points to source table')
 })
 
-/** Follow Ref column: source.col → target row */
-const SelectLinkSchema = z.strictObject({
-  select: z.strictObject({
-    from: LinkTargetSchema,
-    col: z.string().min(1)
-  })
+/**
+ * Type 2: Column matching filter (Col→Col)
+ *
+ * This widget filters by matching column values with the source widget.
+ * Both columns typically reference the same third table.
+ *
+ * Example: Invoices and Payments both have a "Customer" Ref column
+ */
+const MatchedByLinkSchema = z.strictObject({
+  type: z.literal('matched_by'),
+  source_widget: WidgetIdSchema.describe('Widget to match column values with'),
+  source_column: z.string().min(1).describe('Column in source table'),
+  target_column: z.string().min(1).describe('Column in THIS table that must match')
 })
 
-/** Filter: row→col or col→col */
-const FilterLinkSchema = z.strictObject({
-  filter: z.strictObject({
-    from: LinkTargetSchema,
-    col: z.string().min(1).optional(),
-    to: z.string().min(1)
-  })
+/**
+ * Type 3: Summary-to-detail filter (Summary-Group)
+ *
+ * This widget shows detail records grouped in the selected summary row.
+ * The source must be a summary table; uses its "group" column automatically.
+ *
+ * Example: Sales summary by Category → individual Sales records
+ */
+const DetailOfLinkSchema = z.strictObject({
+  type: z.literal('detail_of'),
+  source_widget: WidgetIdSchema.describe('Summary widget to show detail records for')
 })
 
-/** Summary group-by link */
-const GroupLinkSchema = z.strictObject({
-  group: LinkTargetSchema
+/**
+ * Type 4: Summary drill-down (Summary hierarchy)
+ *
+ * This widget is a more detailed breakdown of the source summary.
+ * Source and target are both summary tables with different groupby columns.
+ *
+ * Example: Sales by Region → Sales by Region + Product
+ */
+const BreakdownOfLinkSchema = z.strictObject({
+  type: z.literal('breakdown_of'),
+  source_widget: WidgetIdSchema.describe('Less-detailed summary widget to drill down from')
 })
 
-/** Summary table link */
-const SummaryLinkSchema = z.strictObject({
-  summary: LinkTargetSchema
+/**
+ * Type 5: RefList display (Show Referenced Records)
+ *
+ * This widget shows all records listed in the source's RefList column.
+ * Filters to show exactly the records referenced by the RefList.
+ *
+ * Example: Project's TeamMembers (RefList) → show those Employees
+ */
+const ListedInLinkSchema = z.strictObject({
+  type: z.literal('listed_in'),
+  source_widget: WidgetIdSchema.describe('Widget containing the RefList column'),
+  source_column: z.string().min(1).describe('RefList column in source table')
 })
 
-/** Show referenced records via RefList */
-const RefsLinkSchema = z.strictObject({
-  refs: z.strictObject({
-    from: LinkTargetSchema,
-    col: z.string().min(1)
-  })
+/**
+ * Type 6: Cursor sync (Same-Table)
+ *
+ * This widget syncs its cursor position with the source widget.
+ * Both widgets must show the same table. No filtering occurs.
+ *
+ * Example: Grid view synced with Card view of the same table
+ */
+const SyncedWithLinkSchema = z.strictObject({
+  type: z.literal('synced_with'),
+  source_widget: WidgetIdSchema.describe('Widget showing the same table to sync cursor with')
 })
 
-/** Custom widget selection */
-const CustomLinkSchema = z.strictObject({
-  custom: LinkTargetSchema
+/**
+ * Type 7: Reference follow (Cursor via Ref)
+ *
+ * This widget shows the record referenced by the source's Ref column.
+ * When you select a row in source, cursor jumps to the referenced record.
+ *
+ * Example: Select an Order → cursor moves to the Order's Customer record
+ */
+const ReferencedByLinkSchema = z.strictObject({
+  type: z.literal('referenced_by'),
+  source_widget: WidgetIdSchema.describe('Widget containing the Ref column'),
+  source_column: z.string().min(1).describe('Ref column in source table that points to THIS table')
 })
 
-export const LinkSchema = z.union([
-  SyncLinkSchema,
-  SelectLinkSchema,
-  FilterLinkSchema,
-  GroupLinkSchema,
-  SummaryLinkSchema,
-  RefsLinkSchema,
-  CustomLinkSchema
+// =============================================================================
+// Combined Link Schema (Discriminated Union)
+// =============================================================================
+
+export const LinkSchema = z.discriminatedUnion('type', [
+  ChildOfLinkSchema,
+  MatchedByLinkSchema,
+  DetailOfLinkSchema,
+  BreakdownOfLinkSchema,
+  ListedInLinkSchema,
+  SyncedWithLinkSchema,
+  ReferencedByLinkSchema
 ])
 
 export type Link = z.infer<typeof LinkSchema>
+
+// Export individual schemas for use in type guards
+export type ChildOfLink = z.infer<typeof ChildOfLinkSchema>
+export type MatchedByLink = z.infer<typeof MatchedByLinkSchema>
+export type DetailOfLink = z.infer<typeof DetailOfLinkSchema>
+export type BreakdownOfLink = z.infer<typeof BreakdownOfLinkSchema>
+export type ListedInLink = z.infer<typeof ListedInLinkSchema>
+export type SyncedWithLink = z.infer<typeof SyncedWithLinkSchema>
+export type ReferencedByLink = z.infer<typeof ReferencedByLinkSchema>
 
 // =============================================================================
 // Widget Type Schemas
@@ -230,32 +301,32 @@ export function isRowSplit(node: LayoutNode): node is { rows: LayoutNode[]; weig
 // Link Type Guards
 // =============================================================================
 
-export function isSyncLink(link: Link): link is z.infer<typeof SyncLinkSchema> {
-  return 'sync' in link
+export function isChildOfLink(link: Link): link is ChildOfLink {
+  return link.type === 'child_of'
 }
 
-export function isSelectLink(link: Link): link is z.infer<typeof SelectLinkSchema> {
-  return 'select' in link
+export function isMatchedByLink(link: Link): link is MatchedByLink {
+  return link.type === 'matched_by'
 }
 
-export function isFilterLink(link: Link): link is z.infer<typeof FilterLinkSchema> {
-  return 'filter' in link
+export function isDetailOfLink(link: Link): link is DetailOfLink {
+  return link.type === 'detail_of'
 }
 
-export function isGroupLink(link: Link): link is z.infer<typeof GroupLinkSchema> {
-  return 'group' in link
+export function isBreakdownOfLink(link: Link): link is BreakdownOfLink {
+  return link.type === 'breakdown_of'
 }
 
-export function isSummaryLink(link: Link): link is z.infer<typeof SummaryLinkSchema> {
-  return 'summary' in link
+export function isListedInLink(link: Link): link is ListedInLink {
+  return link.type === 'listed_in'
 }
 
-export function isRefsLink(link: Link): link is z.infer<typeof RefsLinkSchema> {
-  return 'refs' in link
+export function isSyncedWithLink(link: Link): link is SyncedWithLink {
+  return link.type === 'synced_with'
 }
 
-export function isCustomLink(link: Link): link is z.infer<typeof CustomLinkSchema> {
-  return 'custom' in link
+export function isReferencedByLink(link: Link): link is ReferencedByLink {
+  return link.type === 'referenced_by'
 }
 
 // =============================================================================

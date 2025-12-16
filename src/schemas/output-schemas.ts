@@ -17,25 +17,29 @@ import { z } from 'zod'
 // ============================================================================
 
 /** Pagination metadata included in list responses */
-export const PaginationOutputSchema = z.object({
-  total: z.number().describe('Total number of items available'),
-  offset: z.number().describe('Starting position of current page'),
-  limit: z.number().describe('Maximum items per page'),
-  hasMore: z.boolean().describe('Whether more items are available'),
-  nextOffset: z.number().nullable().describe('Offset for next page, null if no more')
-})
+export const PaginationOutputSchema = z
+  .object({
+    total: z.number().describe('Total number of items available'),
+    offset: z.number().describe('Starting position of current page'),
+    limit: z.number().describe('Maximum items per page'),
+    hasMore: z.boolean().describe('Whether more items are available'),
+    nextOffset: z.number().nullable().describe('Offset for next page, null if no more')
+  })
+  .describe('Pagination metadata for list responses')
 
 /** Extended pagination with page info */
 export const ExtendedPaginationOutputSchema = PaginationOutputSchema.extend({
   pageNumber: z.number().describe('Current page number (1-indexed)'),
   totalPages: z.number().describe('Total number of pages'),
   itemsInPage: z.number().describe('Number of items in current page')
-})
+}).describe('Extended pagination with page numbers')
 
 /** Standard success response base */
-export const SuccessResponseSchema = z.object({
-  success: z.literal(true)
-})
+export const SuccessResponseSchema = z
+  .object({
+    success: z.literal(true)
+  })
+  .describe('Success indicator')
 
 // ============================================================================
 // Discovery Tool Outputs
@@ -94,18 +98,20 @@ export const GetDocumentsOutputSchema = z.object({
  * Note: Input uses `visibleCol` (string | number) for convenience.
  * Output provides `visibleCol` (numeric ID) and `visibleColName` (resolved name).
  */
-const FullColumnSchema = z.object({
-  id: z.string().describe('Column ID'),
-  label: z.string().describe('Column label'),
-  type: z.string().describe('Column type'),
-  isFormula: z.boolean().describe('Whether column is a formula'),
-  formula: z.string().nullable().describe('Formula expression if applicable'),
-  widgetOptions: z
-    .union([z.string(), z.record(z.string(), z.unknown()), z.null()])
-    .describe('Widget options'),
-  visibleCol: z.number().nullable().optional().describe('Visible column ID (numeric)'),
-  visibleColName: z.string().nullable().optional().describe('Visible column name (resolved)')
-})
+const FullColumnSchema = z
+  .object({
+    id: z.string().describe('Column ID'),
+    label: z.string().describe('Column label'),
+    type: z.string().describe('Column type'),
+    isFormula: z.boolean().describe('Whether column is a formula'),
+    formula: z.string().nullable().describe('Formula expression if applicable'),
+    widgetOptions: z
+      .union([z.string(), z.record(z.string(), z.unknown()), z.null()])
+      .describe('Widget options'),
+    visibleCol: z.number().nullable().optional().describe('Visible column ID (numeric)'),
+    visibleColName: z.string().nullable().optional().describe('Visible column name (resolved)')
+  })
+  .describe('Full column schema with type and formula information')
 
 /** grist_get_tables output */
 export const GetTablesOutputSchema = z.object({
@@ -342,30 +348,32 @@ export const CreateDocumentOutputSchema = z.object({
 // ============================================================================
 
 /** Widget info in page structure */
-const PageWidgetSchema = z.object({
-  widgetId: z.number().describe('Widget section ID'),
-  title: z.string().describe('Widget title'),
-  widgetType: z.string().describe('Widget type (grid, card, card_list, chart, form, custom)'),
-  tableId: z.string().describe('Data source table'),
-  tableRef: z.number().describe('Table reference ID'),
-  isSummaryTable: z.boolean().describe('Whether showing summary data'),
-  summarySourceTable: z.string().optional().describe('Source table for summary'),
-  groupByColumns: z.array(z.string()).optional().describe('Group-by columns for summary'),
-  linkedTo: z
-    .object({
-      sourceWidgetId: z.number().describe('Source widget section ID'),
-      sourceColRef: z.number().describe('Source column reference'),
-      targetColRef: z.number().describe('Target column reference')
-    })
-    .optional()
-    .describe('Link configuration'),
-  chartConfig: z
-    .object({
-      chartType: z.string().describe('Chart type')
-    })
-    .optional()
-    .describe('Chart configuration if applicable')
-})
+const PageWidgetSchema = z
+  .object({
+    widgetId: z.number().describe('Widget section ID'),
+    title: z.string().describe('Widget title'),
+    widgetType: z.string().describe('Widget type (grid, card, card_list, chart, form, custom)'),
+    tableId: z.string().describe('Data source table'),
+    tableRef: z.number().describe('Table reference ID'),
+    isSummaryTable: z.boolean().describe('Whether showing summary data'),
+    summarySourceTable: z.string().optional().describe('Source table for summary'),
+    groupByColumns: z.array(z.string()).optional().describe('Group-by columns for summary'),
+    linkedTo: z
+      .object({
+        sourceWidgetId: z.number().describe('Source widget section ID'),
+        sourceColRef: z.number().describe('Source column reference'),
+        targetColRef: z.number().describe('Target column reference')
+      })
+      .optional()
+      .describe('Widget link configuration'),
+    chartConfig: z
+      .object({
+        chartType: z.string().describe('Chart type')
+      })
+      .optional()
+      .describe('Chart configuration if applicable')
+  })
+  .describe('Widget displayed on a page')
 
 /** grist_get_pages output */
 export const GetPagesOutputSchema = z.object({
@@ -435,16 +443,18 @@ export const UpdatePageOutputSchema = z.object({
 // ============================================================================
 
 /** Webhook info schema */
-const WebhookInfoSchema = z.object({
-  id: z.string().describe('Webhook ID'),
-  name: z.string().nullable().describe('Webhook name'),
-  url: z.string().describe('Webhook URL'),
-  tableId: z.string().describe('Source table'),
-  eventTypes: z.array(z.string()).describe('Trigger events'),
-  enabled: z.boolean().describe('Whether webhook is active'),
-  isReadyColumn: z.string().nullable().describe('Ready column filter'),
-  memo: z.string().nullable().describe('Webhook notes')
-})
+const WebhookInfoSchema = z
+  .object({
+    id: z.string().describe('Webhook ID'),
+    name: z.string().nullable().describe('Webhook name'),
+    url: z.string().describe('Webhook URL'),
+    tableId: z.string().describe('Source table'),
+    eventTypes: z.array(z.string()).describe('Trigger events'),
+    enabled: z.boolean().describe('Whether webhook is active'),
+    isReadyColumn: z.string().nullable().describe('Ready column filter'),
+    memo: z.string().nullable().describe('Webhook notes')
+  })
+  .describe('Webhook configuration details')
 
 /** grist_manage_webhooks output for list action */
 export const WebhookListOutputSchema = z.object({

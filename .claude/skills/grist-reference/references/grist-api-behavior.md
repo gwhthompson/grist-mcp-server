@@ -97,3 +97,42 @@ Lists stored without format marker:
 ['L', 'Red', 'Blue'] → '["Red", "Blue"]'  (storage)
 '["Red", "Blue"]' → ['L', 'Red', 'Blue']  (retrieval)
 ```
+
+---
+
+## Conditional Formatting (Rules)
+
+Conditional formatting in Grist is split across two locations:
+
+### rulesOptions (widgetOptions)
+
+Contains **style definitions** only:
+```json
+{
+  "rulesOptions": [
+    {
+      "textColor": "#FF0000",
+      "fillColor": "#FFEEEE"
+    },
+    {
+      "textColor": "#00FF00",
+      "fillColor": "#EEFFEE"
+    }
+  ]
+}
+```
+
+### rules (column property)
+
+Contains **formula references**:
+```json
+{
+  "rules": ["$Amount > 1000", "$Status == 'Urgent'"]
+}
+```
+
+**Note:** When reading column configuration via SQL, the `rules` property contains the formulas while `widgetOptions.rulesOptions` contains only the visual styles. The indices must align - `rulesOptions[0]` applies when `rules[0]` is true.
+
+This means:
+- To fully understand conditional formatting, you need BOTH the column's `rules` array AND the `widgetOptions.rulesOptions` array
+- The `rulesOptions` alone doesn't tell you WHEN the styles apply, only WHAT styles apply

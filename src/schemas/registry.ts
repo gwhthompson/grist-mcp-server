@@ -7,6 +7,14 @@
  */
 
 import { z } from 'zod'
+import {
+  ExistingPaneSchema,
+  LayoutNodeSchema,
+  LinkSchema,
+  LinkTargetSchema,
+  NewPaneSchema
+} from '../services/declarative-layout/schema.js'
+import { PageRefSchema } from '../tools/manage-pages.js'
 import { RecordDataSchema } from '../tools/manage-records.js'
 import {
   ChoiceOptionsSchema,
@@ -50,4 +58,12 @@ export function registerSchemas(): void {
 
   // grist_manage_pages - reused in create/modify operations
   UserWidgetTypeSchema.register(z.globalRegistry, { id: 'pageWidgetType' }) // 2x
+
+  // grist_manage_pages - declarative layout schemas
+  LinkTargetSchema.register(z.globalRegistry, { id: 'linkTarget' }) // 9x
+  LinkSchema.register(z.globalRegistry, { id: 'widgetLink' }) // 2x
+  ExistingPaneSchema.register(z.globalRegistry, { id: 'existingPane' }) // 2x
+  NewPaneSchema.register(z.globalRegistry, { id: 'newPane' }) // 2x
+  PageRefSchema.register(z.globalRegistry, { id: 'pageRef' }) // 2x
+  LayoutNodeSchema.register(z.globalRegistry, { id: 'layoutNode' }) // 2x (recursive)
 }

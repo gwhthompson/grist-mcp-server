@@ -262,7 +262,9 @@ const WebhookOperationsArraySchema = z
     {
       message:
         'list and clear_queue operations must be the only operation if present. ' +
-        'These cannot be batched with other operations.'
+        'Reason: "list" returns a snapshot that would be inconsistent if mixed with mutations; ' +
+        '"clear_queue" is destructive and ordering with creates is undefined. ' +
+        'Call these in separate requests.'
     }
   )
   .describe('Array of webhook operations to perform in sequence')

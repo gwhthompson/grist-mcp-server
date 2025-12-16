@@ -96,8 +96,14 @@ export function fromLayoutSpec(spec: LayoutSpec, options: FromLayoutSpecOptions 
  * Reconstruct a Link from widget linking metadata.
  *
  * This is a best-effort reconstruction based on the colRef values.
- * Some link types (like group vs sync) require additional context
- * that may not be available, so we make educated guesses.
+ * Some link types require additional context that may not be available,
+ * so we make educated guesses based on the colRef pattern.
+ *
+ * ColRef patterns:
+ * - Both 0: synced_with, detail_of, or breakdown_of (cursor sync or summary)
+ * - Source set, target 0: referenced_by or listed_in (Ref/RefList follow)
+ * - Target set, source 0: child_of (master-detail filter)
+ * - Both set: matched_by (column matching filter)
  */
 function reconstructLink(info: WidgetInfo): Link | undefined {
   const { linkSrcSectionRef, linkSrcColRef, linkTargetColRef } = info
@@ -106,50 +112,50 @@ function reconstructLink(info: WidgetInfo): Link | undefined {
     return undefined
   }
 
-  // Both colRefs are 0: cursor sync or summary
+  // Both colRefs are 0: cursor sync or summary relationship
   if (
     (linkSrcColRef === 0 || linkSrcColRef === undefined) &&
     (linkTargetColRef === 0 || linkTargetColRef === undefined)
   ) {
-    // Could be sync or summary - default to sync
-    // (would need table relationship info to distinguish)
-    return { sync: linkSrcSectionRef }
+    // Could be synced_with, detail_of, or breakdown_of
+    // Default to synced_with (would need table relationship info to distinguish)
+    return {
+      type: 'synced_with',
+      source_widget: linkSrcSectionRef
+    }
   }
 
-  // Source colRef set, target is 0: select or refs
+  // Source colRef set, target is 0: referenced_by or listed_in
   if (
     linkSrcColRef &&
     linkSrcColRef > 0 &&
     (linkTargetColRef === 0 || linkTargetColRef === undefined)
   ) {
-    // Could be select (Ref) or refs (RefList) - would need column type
-    // Default to select, use string placeholder for col name
+    // Could be referenced_by (Ref) or listed_in (RefList) - would need column type
+    // Default to referenced_by with placeholder column name
     return {
-      select: {
-        from: linkSrcSectionRef,
-        col: `colRef_${linkSrcColRef}` // Placeholder - would need resolution
-      }
+      type: 'referenced_by',
+      source_widget: linkSrcSectionRef,
+      source_column: `colRef_${linkSrcColRef}` // Placeholder - would need resolution
     }
   }
 
-  // Target colRef set: filter
+  // Target colRef set: child_of or matched_by (filter relationship)
   if (linkTargetColRef && linkTargetColRef > 0) {
     if (linkSrcColRef && linkSrcColRef > 0) {
-      // Col→Col filter
+      // Col→Col filter: matched_by
       return {
-        filter: {
-          from: linkSrcSectionRef,
-          col: `colRef_${linkSrcColRef}`,
-          to: `colRef_${linkTargetColRef}`
-        }
+        type: 'matched_by',
+        source_widget: linkSrcSectionRef,
+        source_column: `colRef_${linkSrcColRef}`,
+        target_column: `colRef_${linkTargetColRef}`
       }
     } else {
-      // Row→Col filter
+      // Row→Col filter: child_of (master-detail)
       return {
-        filter: {
-          from: linkSrcSectionRef,
-          to: `colRef_${linkTargetColRef}`
-        }
+        type: 'child_of',
+        source_widget: linkSrcSectionRef,
+        target_column: `colRef_${linkTargetColRef}`
       }
     }
   }

@@ -1,22 +1,22 @@
 /**
  * Link resolver for declarative layouts.
  *
- * Transforms semantic link types (sync, select, filter, etc.) to
+ * Transforms semantic link types (child_of, matched_by, etc.) to
  * Grist's internal format (linkSrcSectionRef, linkSrcColRef, linkTargetColRef).
  */
 
 import { ValidationError } from '../../errors/ValidationError.js'
 import type { GristClient } from '../grist-client.js'
 import { resolveColumnNameToColRef } from '../widget-resolver.js'
-import type { Link, LinkTarget } from './schema.js'
+import type { Link, WidgetId } from './schema.js'
 import {
-  isCustomLink,
-  isFilterLink,
-  isGroupLink,
-  isRefsLink,
-  isSelectLink,
-  isSummaryLink,
-  isSyncLink
+  isBreakdownOfLink,
+  isChildOfLink,
+  isDetailOfLink,
+  isListedInLink,
+  isMatchedByLink,
+  isReferencedByLink,
+  isSyncedWithLink
 } from './schema.js'
 import type { WidgetRegistry } from './widget-registry.js'
 
@@ -63,8 +63,8 @@ export async function resolveLink(
   registry: WidgetRegistry,
   getWidgetInfo: (sectionId: number) => Promise<WidgetInfo>
 ): Promise<ResolvedLink> {
-  // Resolve source section ID (may be local ID or numeric)
-  const sourceSectionId = resolveTarget(link, registry)
+  // All link types have source_widget - resolve it via registry
+  const sourceSectionId = resolveWidgetId(link.source_widget, registry)
 
   // Self-link check
   if (sourceSectionId === targetSectionId) {
@@ -90,64 +90,69 @@ export async function resolveLink(
   }
 
   // Dispatch to specific resolver based on link type
-  if (isSyncLink(link)) {
-    return resolveSyncLink(sourceSectionId, sourceInfo, targetTableId)
-  }
-
-  if (isSelectLink(link)) {
-    return resolveSelectLink(
+  if (isChildOfLink(link)) {
+    return resolveChildOfLink(
       client,
       docId,
       sourceSectionId,
       sourceInfo,
       targetTableId,
-      link.select.col
+      link.target_column
     )
   }
 
-  if (isFilterLink(link)) {
-    return resolveFilterLink(client, docId, sourceSectionId, sourceInfo, targetTableId, link.filter)
+  if (isMatchedByLink(link)) {
+    return resolveMatchedByLink(
+      client,
+      docId,
+      sourceSectionId,
+      sourceInfo,
+      targetTableId,
+      link.source_column,
+      link.target_column
+    )
   }
 
-  if (isGroupLink(link)) {
-    return resolveGroupLink(sourceSectionId, sourceInfo)
+  if (isDetailOfLink(link)) {
+    return resolveDetailOfLink(sourceSectionId, sourceInfo)
   }
 
-  if (isSummaryLink(link)) {
-    return resolveSummaryLink(sourceSectionId, sourceInfo)
+  if (isBreakdownOfLink(link)) {
+    return resolveBreakdownOfLink(sourceSectionId, sourceInfo)
   }
 
-  if (isRefsLink(link)) {
-    return resolveRefsLink(client, docId, sourceSectionId, sourceInfo, link.refs.col)
+  if (isListedInLink(link)) {
+    return resolveListedInLink(client, docId, sourceSectionId, sourceInfo, link.source_column)
   }
 
-  if (isCustomLink(link)) {
-    return resolveCustomLink(sourceSectionId)
+  if (isSyncedWithLink(link)) {
+    return resolveSyncedWithLink(sourceSectionId, sourceInfo, targetTableId)
   }
 
-  throw new ValidationError('link', link, 'Unknown link type')
+  if (isReferencedByLink(link)) {
+    return resolveReferencedByLink(
+      client,
+      docId,
+      sourceSectionId,
+      sourceInfo,
+      targetTableId,
+      link.source_column
+    )
+  }
+
+  // TypeScript exhaustiveness check - should never reach here with discriminated union
+  throw new ValidationError('link', link, `Unknown link type: ${(link as { type: string }).type}`)
 }
 
 // =============================================================================
-// Link Target Resolution
+// Widget ID Resolution
 // =============================================================================
 
 /**
- * Extract the source target from a link and resolve via registry.
+ * Resolve a widget ID (section ID or local ID) to a section ID.
  */
-function resolveTarget(link: Link, registry: WidgetRegistry): number {
-  let target: LinkTarget
-
-  if (isSyncLink(link)) target = link.sync
-  else if (isSelectLink(link)) target = link.select.from
-  else if (isFilterLink(link)) target = link.filter.from
-  else if (isGroupLink(link)) target = link.group
-  else if (isSummaryLink(link)) target = link.summary
-  else if (isRefsLink(link)) target = link.refs.from
-  else if (isCustomLink(link)) target = link.custom
-  else throw new Error('Unknown link type')
-
-  return registry.resolve(target)
+function resolveWidgetId(widgetId: WidgetId, registry: WidgetRegistry): number {
+  return registry.resolve(widgetId)
 }
 
 // =============================================================================
@@ -155,9 +160,161 @@ function resolveTarget(link: Link, registry: WidgetRegistry): number {
 // =============================================================================
 
 /**
- * Sync link: cursor sync between widgets showing same table.
+ * child_of: Master-detail filter (Row→Col)
+ *
+ * This widget shows records where target_column references the selected row in source.
+ * Example: Products table filtered by selected Category
  */
-function resolveSyncLink(
+async function resolveChildOfLink(
+  client: GristClient,
+  docId: string,
+  sourceSectionId: number,
+  sourceInfo: WidgetInfo,
+  targetTableId: string,
+  targetColumn: string
+): Promise<ResolvedLink> {
+  // Resolve target column (the Ref column in THIS table)
+  const targetColRef = await resolveColumnNameToColRef(client, docId, targetTableId, targetColumn)
+
+  // Validate column is a Ref/RefList pointing to source table
+  await validateRefColumn(
+    client,
+    docId,
+    targetColRef,
+    sourceInfo.tableId,
+    'Ref or RefList',
+    `child_of link: target_column "${targetColumn}"`
+  )
+
+  return {
+    linkSrcSectionRef: sourceSectionId,
+    linkSrcColRef: 0, // Row selection from source
+    linkTargetColRef: targetColRef
+  }
+}
+
+/**
+ * matched_by: Column matching filter (Col→Col)
+ *
+ * This widget filters by matching column values between source and target.
+ * Both columns typically reference the same third table.
+ * Example: Invoices and Payments both filtered by matching Customer
+ */
+async function resolveMatchedByLink(
+  client: GristClient,
+  docId: string,
+  sourceSectionId: number,
+  sourceInfo: WidgetInfo,
+  targetTableId: string,
+  sourceColumn: string,
+  targetColumn: string
+): Promise<ResolvedLink> {
+  // Resolve both columns
+  const sourceColRef = await resolveColumnNameToColRef(
+    client,
+    docId,
+    sourceInfo.tableId,
+    sourceColumn
+  )
+  const targetColRef = await resolveColumnNameToColRef(client, docId, targetTableId, targetColumn)
+
+  return {
+    linkSrcSectionRef: sourceSectionId,
+    linkSrcColRef: sourceColRef,
+    linkTargetColRef: targetColRef
+  }
+}
+
+/**
+ * detail_of: Summary-to-detail filter (Summary-Group)
+ *
+ * This widget shows detail records belonging to the selected summary group.
+ * Source must be a summary table.
+ * Example: Sales summary by Category → individual Sales records
+ */
+function resolveDetailOfLink(sourceSectionId: number, sourceInfo: WidgetInfo): ResolvedLink {
+  // Source must be a summary table
+  if (!sourceInfo.isSummaryTable) {
+    throw new ValidationError(
+      'link.detail_of',
+      sourceSectionId,
+      `detail_of link requires source to be a summary table. ` +
+        `Widget ${sourceSectionId} shows "${sourceInfo.tableId}" which is not a summary table.`
+    )
+  }
+
+  // Grist uses 0 for both colRefs; it infers the group relationship from the summary
+  return {
+    linkSrcSectionRef: sourceSectionId,
+    linkSrcColRef: 0,
+    linkTargetColRef: 0
+  }
+}
+
+/**
+ * breakdown_of: Summary drill-down (Summary hierarchy)
+ *
+ * This widget is a more detailed breakdown of the source summary.
+ * Both source and target are summary tables with different groupby columns.
+ * Example: Sales by Region → Sales by Region + Product
+ */
+function resolveBreakdownOfLink(sourceSectionId: number, sourceInfo: WidgetInfo): ResolvedLink {
+  // Source must be a summary table
+  if (!sourceInfo.isSummaryTable) {
+    throw new ValidationError(
+      'link.breakdown_of',
+      sourceSectionId,
+      `breakdown_of link requires source to be a summary table. ` +
+        `Widget ${sourceSectionId} shows "${sourceInfo.tableId}" which is not a summary table.`
+    )
+  }
+
+  return {
+    linkSrcSectionRef: sourceSectionId,
+    linkSrcColRef: 0,
+    linkTargetColRef: 0
+  }
+}
+
+/**
+ * listed_in: RefList display (Show Referenced Records)
+ *
+ * This widget shows records listed in the source's RefList column.
+ * Example: Project's TeamMembers (RefList) → show those Employees
+ */
+async function resolveListedInLink(
+  client: GristClient,
+  docId: string,
+  sourceSectionId: number,
+  sourceInfo: WidgetInfo,
+  sourceColumn: string
+): Promise<ResolvedLink> {
+  // Resolve the RefList column in source table
+  const colRef = await resolveColumnNameToColRef(client, docId, sourceInfo.tableId, sourceColumn)
+
+  // Validate column is a RefList type
+  await validateRefListColumn(
+    client,
+    docId,
+    colRef,
+    `listed_in link: source_column "${sourceColumn}"`
+  )
+
+  return {
+    linkSrcSectionRef: sourceSectionId,
+    linkSrcColRef: colRef,
+    linkTargetColRef: 0
+  }
+}
+
+/**
+ * synced_with: Cursor sync (Same-Table)
+ *
+ * This widget syncs its cursor position with the source widget.
+ * Both widgets must show the same table. No filtering occurs.
+ * Example: Grid view synced with Card view of the same table
+ */
+function resolveSyncedWithLink(
   sourceSectionId: number,
   sourceInfo: WidgetInfo,
   targetTableId: string
@@ -165,9 +322,9 @@ function resolveSyncLink(
   // Sync requires same table
   if (sourceInfo.tableId !== targetTableId) {
     throw new ValidationError(
-      'link.sync',
+      'link.synced_with',
       sourceSectionId,
-      `Sync link requires both widgets to show the same table. ` +
+      `synced_with link requires both widgets to show the same table. ` +
         `Source shows "${sourceInfo.tableId}", target shows "${targetTableId}".`
     )
   }
@@ -180,153 +337,36 @@ function resolveSyncLink(
 }
 
 /**
- * Select link: cursor follows a Reference column.
+ * referenced_by: Reference follow (Cursor via Ref)
+ *
+ * This widget shows the record referenced by the source's Ref column.
+ * When you select a row in source, cursor jumps to the referenced record.
+ * Example: Select an Order → cursor moves to the Order's Customer record
  */
-async function resolveSelectLink(
+async function resolveReferencedByLink(
   client: GristClient,
   docId: string,
   sourceSectionId: number,
   sourceInfo: WidgetInfo,
   targetTableId: string,
-  colId: string
+  sourceColumn: string
 ): Promise<ResolvedLink> {
-  // Resolve column name to colRef
-  const colRef = await resolveColumnNameToColRef(client, docId, sourceInfo.tableId, colId)
+  // Resolve the Ref column in source table
+  const colRef = await resolveColumnNameToColRef(client, docId, sourceInfo.tableId, sourceColumn)
 
   // Validate column is a Ref type pointing to target table
-  await validateRefColumn(client, docId, sourceInfo.tableRef, colRef, targetTableId, 'Ref')
-
-  return {
-    linkSrcSectionRef: sourceSectionId,
-    linkSrcColRef: colRef,
-    linkTargetColRef: 0
-  }
-}
-
-/**
- * Filter link: filter target by source selection.
- */
-async function resolveFilterLink(
-  client: GristClient,
-  docId: string,
-  sourceSectionId: number,
-  sourceInfo: WidgetInfo,
-  targetTableId: string,
-  filter: { from: LinkTarget; col?: string; to: string }
-): Promise<ResolvedLink> {
-  // Resolve target column
-  const targetColRef = await resolveColumnNameToColRef(client, docId, targetTableId, filter.to)
-
-  // If source column specified (col→col filter)
-  if (filter.col) {
-    const sourceColRef = await resolveColumnNameToColRef(
-      client,
-      docId,
-      sourceInfo.tableId,
-      filter.col
-    )
-
-    return {
-      linkSrcSectionRef: sourceSectionId,
-      linkSrcColRef: sourceColRef,
-      linkTargetColRef: targetColRef
-    }
-  }
-
-  // Row→col filter: target column must be Ref/RefList pointing to source table
   await validateRefColumn(
     client,
     docId,
-    0,
-    targetColRef,
-    sourceInfo.tableId,
-    'Ref or RefList',
-    targetTableId
+    colRef,
+    targetTableId,
+    'Ref',
+    `referenced_by link: source_column "${sourceColumn}"`
   )
 
   return {
     linkSrcSectionRef: sourceSectionId,
-    linkSrcColRef: 0,
-    linkTargetColRef: targetColRef
-  }
-}
-
-/**
- * Group link: show records belonging to selected summary group.
- */
-function resolveGroupLink(sourceSectionId: number, sourceInfo: WidgetInfo): ResolvedLink {
-  // Source must be a summary table
-  if (!sourceInfo.isSummaryTable) {
-    throw new ValidationError(
-      'link.group',
-      sourceSectionId,
-      `Group link requires source to be a summary table. ` +
-        `Widget ${sourceSectionId} shows "${sourceInfo.tableId}" which is not a summary table.`
-    )
-  }
-
-  // Use special "group" marker for srcColRef
-  // In Grist, this is represented as a special value
-  return {
-    linkSrcSectionRef: sourceSectionId,
-    linkSrcColRef: 0, // Group links use 0, Grist infers from summary relationship
-    linkTargetColRef: 0
-  }
-}
-
-/**
- * Summary link: link summary table to its source or more detailed summary.
- */
-function resolveSummaryLink(sourceSectionId: number, sourceInfo: WidgetInfo): ResolvedLink {
-  // Source must be a summary table
-  if (!sourceInfo.isSummaryTable) {
-    throw new ValidationError(
-      'link.summary',
-      sourceSectionId,
-      `Summary link requires source to be a summary table. ` +
-        `Widget ${sourceSectionId} shows "${sourceInfo.tableId}" which is not a summary table.`
-    )
-  }
-
-  return {
-    linkSrcSectionRef: sourceSectionId,
-    linkSrcColRef: 0,
-    linkTargetColRef: 0
-  }
-}
-
-/**
- * Refs link: show records referenced by a RefList column.
- */
-async function resolveRefsLink(
-  client: GristClient,
-  docId: string,
-  sourceSectionId: number,
-  sourceInfo: WidgetInfo,
-  colId: string
-): Promise<ResolvedLink> {
-  // Resolve column name to colRef
-  const colRef = await resolveColumnNameToColRef(client, docId, sourceInfo.tableId, colId)
-
-  // Validate column is a RefList type
-  await validateRefListColumn(client, docId, sourceInfo.tableRef, colRef)
-
-  return {
-    linkSrcSectionRef: sourceSectionId,
     linkSrcColRef: colRef,
-    linkTargetColRef: 0
-  }
-}
-
-/**
- * Custom link: for custom widgets with allowSelectBy.
- */
-function resolveCustomLink(sourceSectionId: number): ResolvedLink {
-  // Custom links just need the source section
-  // The custom widget handles the actual filtering logic
-  return {
-    linkSrcSectionRef: sourceSectionId,
-    linkSrcColRef: 0,
     linkTargetColRef: 0
   }
 }
@@ -341,11 +381,10 @@ function resolveCustomLink(sourceSectionId: number): ResolvedLink {
 async function validateRefColumn(
   client: GristClient,
   docId: string,
-  _tableRef: number,
   colRef: number,
   expectedTargetTable: string,
   expectedType: string,
-  _actualTableId?: string
+  context: string
 ): Promise<void> {
   const response = await client.post<{ records: Array<{ fields: Record<string, unknown> }> }>(
     `/docs/${docId}/sql`,
@@ -372,7 +411,7 @@ async function validateRefColumn(
     throw new ValidationError(
       'column',
       colId,
-      `Column "${colId}" has type "${colType}", expected ${expectedType}. ` +
+      `${context}: Column "${colId}" has type "${colType}", expected ${expectedType}. ` +
         `Only Reference columns can be used for this link type.`
     )
   }
@@ -382,8 +421,8 @@ async function validateRefColumn(
     throw new ValidationError(
       'column',
       colId,
-      `Column "${colId}" references "${targetTable}", not "${expectedTargetTable}". ` +
-        `The reference column must point to the target table for this link to work.`
+      `${context}: Column "${colId}" references "${targetTable}", not "${expectedTargetTable}". ` +
+        `The reference column must point to the correct table for this link to work.`
     )
   }
 }
@@ -394,8 +433,8 @@ async function validateRefColumn(
 async function validateRefListColumn(
   client: GristClient,
   docId: string,
-  _tableRef: number,
-  colRef: number
+  colRef: number,
+  context: string
 ): Promise<void> {
   const response = await client.post<{ records: Array<{ fields: Record<string, unknown> }> }>(
     `/docs/${docId}/sql`,
@@ -421,8 +460,8 @@ async function validateRefListColumn(
     throw new ValidationError(
       'column',
       colId,
-      `Column "${colId}" has type "${colType}", expected RefList. ` +
-        `The refs link type requires a Reference List column.`
+      `${context}: Column "${colId}" has type "${colType}", expected RefList. ` +
+        `This link type requires a Reference List column.`
     )
   }
 }

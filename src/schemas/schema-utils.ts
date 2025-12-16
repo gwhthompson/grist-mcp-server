@@ -11,19 +11,89 @@ import { z } from 'zod'
 import type { ToolDefinition } from '../registry/types.js'
 
 /**
+ * Recursively clean a schema object and all nested schemas.
+ * Removes redundant fields for token optimization:
+ * - `id` field (AJV interprets it as $id, breaking validation)
+ * - `type` when `const` is present (type is inferred)
+ * - `minLength`/`maxLength` when pattern enforces exact length
+ * - `pattern` when `format: "uuid"` is present
+ * - Empty `required: []` arrays
+ * - `additionalProperties: false` (z.strictObject enforces at runtime)
+ */
+function cleanSchemaObject(obj: Record<string, unknown>): void {
+  // Remove `id` field - AJV interprets it as JSON Schema $id keyword
+  // This breaks validation. The key itself serves as the identifier.
+  delete obj.id
+
+  // Remove redundant type when const is present - type is inferred from const value
+  if (obj.const !== undefined && obj.type !== undefined) {
+    delete obj.type
+  }
+
+  // Remove minLength/maxLength when pattern enforces exact length
+  if (obj.pattern && obj.minLength === obj.maxLength && obj.minLength !== undefined) {
+    delete obj.minLength
+    delete obj.maxLength
+  }
+
+  // Remove redundant pattern when format: "uuid" is present
+  // format: "uuid" is a JSON Schema standard - the regex pattern is redundant (~220 bytes saved)
+  if (obj.format === 'uuid' && obj.pattern) {
+    delete obj.pattern
+  }
+
+  // Remove empty required arrays - they add bytes but provide no value
+  if (Array.isArray(obj.required) && obj.required.length === 0) {
+    delete obj.required
+  }
+
+  // Remove redundant additionalProperties: false - z.strictObject() enforces this at runtime
+  // JSON Schema validators don't need this when we control the input via Zod
+  if (obj.additionalProperties === false) {
+    delete obj.additionalProperties
+  }
+
+  // Recursively clean nested schemas
+  if (obj.properties && typeof obj.properties === 'object') {
+    for (const prop of Object.values(obj.properties as Record<string, unknown>)) {
+      if (prop && typeof prop === 'object') {
+        cleanSchemaObject(prop as Record<string, unknown>)
+      }
+    }
+  }
+
+  // Clean items schema (for arrays)
+  if (obj.items && typeof obj.items === 'object') {
+    cleanSchemaObject(obj.items as Record<string, unknown>)
+  }
+
+  // Clean anyOf/oneOf/allOf schemas
+  for (const key of ['anyOf', 'oneOf', 'allOf']) {
+    if (Array.isArray(obj[key])) {
+      for (const item of obj[key] as unknown[]) {
+        if (item && typeof item === 'object') {
+          cleanSchemaObject(item as Record<string, unknown>)
+        }
+      }
+    }
+  }
+}
+
+/**
  * Clean and validate JSON Schema output for token optimization and consistency.
- * - Removes redundant id field in $defs (already the key name)
- * - Removes redundant type field when const is present (type is inferred)
- * - Removes redundant minLength/maxLength when pattern enforces length
- * - Removes redundant pattern when format: "uuid" is present (format is standard)
- * - Validates no unnamed schemas (__schema0, etc.) exist
  *
- * @throws Error if unnamed schemas are found - indicates missing registration
+ * @param schema - The JSON Schema object to clean
+ * @param context - Context string for error messages (e.g., "grist_help inputSchema")
+ * @throws Error if unnamed schemas (__schema0, etc.) are found - indicates missing registration
  */
 export function cleanAndValidateSchema(
   schema: Record<string, unknown>,
   context: string
 ): Record<string, unknown> {
+  // Clean the root schema
+  cleanSchemaObject(schema)
+
+  // Clean $defs
   const defs = schema.$defs as Record<string, Record<string, unknown>> | undefined
   if (defs) {
     for (const [key, def] of Object.entries(defs)) {
@@ -31,25 +101,10 @@ export function cleanAndValidateSchema(
       if (key.startsWith('__schema')) {
         throw new Error(`Unnamed schema "${key}" in ${context}. Register it with z.globalRegistry.`)
       }
-      // Clean `id` field - AJV interprets it as JSON Schema $id keyword
-      // This breaks validation. The key itself serves as the identifier.
-      delete def.id
-      // Remove redundant type when const is present - type is inferred from const value
-      if (def.const !== undefined && def.type !== undefined) {
-        delete def.type
-      }
-      // Remove minLength/maxLength when pattern enforces exact length
-      if (def.pattern && def.minLength === def.maxLength && def.minLength !== undefined) {
-        delete def.minLength
-        delete def.maxLength
-      }
-      // Remove redundant pattern when format: "uuid" is present
-      // format: "uuid" is a JSON Schema standard - the regex pattern is redundant (~220 bytes saved)
-      if (def.format === 'uuid' && def.pattern) {
-        delete def.pattern
-      }
+      cleanSchemaObject(def)
     }
   }
+
   return schema
 }
 

@@ -32,6 +32,13 @@ import { GristTool } from './base/GristTool.js'
 import { fetchWidgetTableMetadata } from './pages/shared.js'
 
 // =============================================================================
+// Shared Schemas
+// =============================================================================
+
+/** Page reference: name (string) or viewId (number) */
+export const PageRefSchema = z.union([z.string().min(1), z.number().int().positive()])
+
+// =============================================================================
 // Layout Operation Schemas
 // =============================================================================
 
@@ -46,7 +53,7 @@ const CreatePageOperationSchema = z
 const SetLayoutOperationSchema = z
   .object({
     action: z.literal('set_layout'),
-    page: z.union([z.string().min(1), z.number().int().positive()]).describe('Page name or viewId'),
+    page: PageRefSchema.describe('Page name or viewId'),
     layout: LayoutNodeSchema.describe(
       'New layout (must include all existing widgets or remove them)'
     ),
@@ -60,7 +67,7 @@ const SetLayoutOperationSchema = z
 const GetLayoutOperationSchema = z
   .object({
     action: z.literal('get_layout'),
-    page: z.union([z.string().min(1), z.number().int().positive()]).describe('Page name or viewId')
+    page: PageRefSchema.describe('Page name or viewId')
   })
   .describe('Get page layout in declarative format')
 
@@ -627,10 +634,18 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
     overview:
       'Create pages with declarative layouts specifying widget arrangement (cols/rows splits) and linking. ' +
       'Modify layouts with set_layout, read with get_layout. ' +
-      'Also supports: rename_page, delete_page, reorder_pages, configure_widget.',
+      'Also supports: rename_page, delete_page, reorder_pages, configure_widget.\n\n' +
+      'LINK TYPES (7 types, defined on the target widget):\n' +
+      '- child_of: Master-detail filter - this widget shows children of selected row (target_column is Ref to source)\n' +
+      '- matched_by: Column matching - filter by matching column values between tables\n' +
+      '- detail_of: Summary-to-detail - show records grouped in selected summary row\n' +
+      '- breakdown_of: Summary drill - more detailed breakdown of source summary\n' +
+      "- listed_in: RefList display - show records listed in source's RefList column\n" +
+      '- synced_with: Cursor sync - sync cursor position (same table, both widgets)\n' +
+      "- referenced_by: Reference follow - cursor jumps to record referenced by source's Ref column",
     examples: [
       {
-        desc: 'Create page with master-detail layout',
+        desc: 'Create page with master-detail layout (child_of)',
         input: {
           docId: 'abc123',
           operations: [
@@ -639,11 +654,15 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
               name: 'Company Dashboard',
               layout: {
                 cols: [
-                  { id: 'list', table: 'Companies', widget: 'grid' },
+                  { id: 'companies', table: 'Companies', widget: 'grid' },
                   {
                     table: 'Contacts',
                     widget: 'card_list',
-                    link: { filter: { from: 'list', to: 'CompanyRef' } }
+                    link: {
+                      type: 'child_of',
+                      source_widget: 'companies',
+                      target_column: 'Company'
+                    }
                   }
                 ]
               }
@@ -652,7 +671,7 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
         }
       },
       {
-        desc: 'Create page with sync-linked widgets',
+        desc: 'Create page with cursor sync (synced_with)',
         input: {
           docId: 'abc123',
           operations: [
@@ -662,7 +681,38 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
               layout: {
                 cols: [
                   { id: 'orders', table: 'Orders', widget: 'grid' },
-                  { table: 'Orders', widget: 'card', link: { sync: 'orders' } }
+                  {
+                    table: 'Orders',
+                    widget: 'card',
+                    link: { type: 'synced_with', source_widget: 'orders' }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      {
+        desc: 'Column matching across tables (matched_by)',
+        input: {
+          docId: 'abc123',
+          operations: [
+            {
+              action: 'create_page',
+              name: 'Customer View',
+              layout: {
+                cols: [
+                  { id: 'invoices', table: 'Invoices', widget: 'grid' },
+                  {
+                    table: 'Payments',
+                    widget: 'grid',
+                    link: {
+                      type: 'matched_by',
+                      source_widget: 'invoices',
+                      source_column: 'Customer',
+                      target_column: 'Customer'
+                    }
+                  }
                 ]
               }
             }

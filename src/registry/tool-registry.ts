@@ -93,6 +93,23 @@ export async function registerTool<TSchema extends z.ZodType<any, any>>(
       try {
         const result = await definition.handler(context, params as z.infer<TSchema>)
 
+        // Development-mode output validation (MCP spec: "Servers MUST provide structured
+        // results that conform to this schema")
+        if (
+          process.env.NODE_ENV === 'development' &&
+          definition.outputSchema &&
+          result.structuredContent
+        ) {
+          const validation = definition.outputSchema.safeParse(result.structuredContent)
+          if (!validation.success) {
+            log.warn('Output schema validation failed', {
+              tool: definition.name,
+              issues: validation.error.issues.slice(0, 3), // First 3 issues
+              hint: 'Output does not match outputSchema - update schema or handler'
+            })
+          }
+        }
+
         if (shouldLogCalls) {
           const duration = Date.now() - startTime
           log.info('Tool completed', {

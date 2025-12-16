@@ -36,9 +36,9 @@ export function toTableId(raw: string): TableId {
   if (!raw || raw.trim().length === 0) {
     throw new TypeError('TableId cannot be empty')
   }
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(raw)) {
+  if (!/^[A-Z_][A-Za-z0-9_]*$/.test(raw)) {
     throw new TypeError(
-      `Invalid TableId format: "${raw}". Must start with letter/underscore and contain only alphanumeric/underscore characters`
+      `Invalid TableId format: "${raw}". Must start with uppercase letter or underscore, followed by letters, numbers, or underscores`
     )
   }
   return raw as TableId

@@ -31,32 +31,39 @@ export {
   resolveLink,
   type WidgetInfo as LinkWidgetInfo
 } from './link-resolver.js'
-// Schema and types
-// Type guards
+// Schema and type guards
 export {
+  // Link types
+  type BreakdownOfLink,
+  type ChildOfLink,
+  // Utility functions
   collectExistingSectionIds,
   collectLocalIds,
   collectNewPanes,
+  // Types
   type DeclarativeChartType,
   DeclarativeChartTypeSchema,
   type DeclarativeWidgetType,
   DeclarativeWidgetTypeSchema,
+  type DetailOfLink,
   type ExistingPane,
   ExistingPaneSchema,
   getSectionId,
   getWeight,
+  // Link type guards
+  isBreakdownOfLink,
+  isChildOfLink,
+  // Layout type guards
   isColSplit,
-  isCustomLink,
+  isDetailOfLink,
   isExistingPane,
-  isFilterLink,
-  isGroupLink,
+  isListedInLink,
+  isMatchedByLink,
   isNewPane,
-  isRefsLink,
+  isReferencedByLink,
   isRowSplit,
   isSectionId,
-  isSelectLink,
-  isSummaryLink,
-  isSyncLink,
+  isSyncedWithLink,
   isWeightedSection,
   type LayoutNode,
   LayoutNodeSchema,
@@ -64,8 +71,14 @@ export {
   LinkSchema,
   type LinkTarget,
   LinkTargetSchema,
+  type ListedInLink,
+  type MatchedByLink,
   type NewPane,
-  NewPaneSchema
+  NewPaneSchema,
+  type ReferencedByLink,
+  type SyncedWithLink,
+  type WidgetId,
+  WidgetIdSchema
 } from './schema.js'
 // Layout transforms
 export {

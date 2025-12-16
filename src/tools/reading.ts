@@ -5,7 +5,8 @@ import {
   type ToolContext,
   type ToolDefinition
 } from '../registry/types.js'
-import { decodeCellValue, decodeCellValueWithType } from '../schemas/api-responses.js'
+import { decodeCellValue } from '../schemas/api-responses.js'
+import { decodeFromApi } from '../schemas/cell-codecs.js'
 import {
   ColumnSelectionSchema,
   DocIdSchema,
@@ -336,7 +337,7 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
       const decodedFields: Record<string, unknown> = {}
       for (const [key, value] of Object.entries(record.fields)) {
         const colType = columnTypes.get(key) || 'Text'
-        decodedFields[key] = decodeCellValueWithType(value, colType)
+        decodedFields[key] = decodeFromApi(value, colType)
       }
 
       return {

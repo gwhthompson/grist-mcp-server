@@ -49,7 +49,9 @@ const RuleStyleBaseSchema = z.object({
   fontStrikethrough: z.boolean()
 })
 
-export const RuleStyleSchema = RuleStyleBaseSchema.partial().describe('Conditional formatting style')
+export const RuleStyleSchema = RuleStyleBaseSchema.partial().describe(
+  'Conditional formatting style'
+)
 
 // =============================================================================
 // Column Style Schema (universal styling, nested in `style` property)
@@ -250,7 +252,6 @@ export const ColumnDefinitionSchema = z.object({
   // Universal styling (all column types)
   style: ColumnStyleSchema.optional()
 })
-
 
 export type ColumnDefinition = z.infer<typeof ColumnDefinitionSchema>
 

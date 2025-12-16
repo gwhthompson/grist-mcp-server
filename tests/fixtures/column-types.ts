@@ -1,17 +1,11 @@
 /**
  * Column Type Fixtures
  *
- * Complete fixtures for all 11 Grist column types with proper widgetOptions
+ * Complete fixtures for all 11 Grist column types with proper widgetOptions.
+ * Sample values use Grist REST API format (simple timestamps, ['L', ...] for lists).
  */
 
 import type { CellValue } from '../../src/schemas/api-responses.js'
-import {
-  createDate,
-  createDateTime,
-  createList,
-  createReference,
-  createReferenceList
-} from '../helpers/cell-values.js'
 import {
   buildAttachmentsWidgetOptions,
   buildBoolWidgetOptions,
@@ -38,6 +32,13 @@ export interface ColumnFixture {
   }
   sampleValues: CellValue[]
 }
+
+// Helper functions for API-format values
+const apiDate = (timestamp: number) => timestamp
+const apiDateTime = (timestamp: number) => timestamp
+const apiList = (...items: (string | number)[]) => ['L', ...items] as CellValue
+const apiRef = (rowId: number) => rowId
+const apiRefList = (...rowIds: number[]) => ['L', ...rowIds] as CellValue
 
 /**
  * Complete fixtures for all 11 Grist column types
@@ -91,7 +92,7 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
     sampleValues: [true, false, true, false, null]
   },
 
-  // 5. Date
+  // 5. Date - API returns plain timestamps
   date: {
     id: 'dateColumn',
     fields: {
@@ -101,15 +102,15 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       description: 'Date column'
     },
     sampleValues: [
-      createDate(1704844800), // 2024-01-10
-      createDate(1609459200), // 2021-01-01
-      createDate(0), // Epoch
+      apiDate(1704844800), // 2024-01-10
+      apiDate(1609459200), // 2021-01-01
+      apiDate(0), // Epoch
       null,
-      createDate(1735689600) // 2025-01-01
+      apiDate(1735689600) // 2025-01-01
     ]
   },
 
-  // 6. DateTime
+  // 6. DateTime - API returns plain timestamps
   dateTime: {
     id: 'dateTimeColumn',
     fields: {
@@ -122,15 +123,15 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       description: 'DateTime column with timezone'
     },
     sampleValues: [
-      createDateTime(1704945919, 'UTC'),
-      createDateTime(1609459200, 'America/New_York'),
-      createDateTime(1735689600, 'Europe/London'),
+      apiDateTime(1704945919),
+      apiDateTime(1609459200),
+      apiDateTime(1735689600),
       null,
-      createDateTime(0, 'UTC')
+      apiDateTime(0)
     ]
   },
 
-  // 7. Choice
+  // 7. Choice - plain strings
   choice: {
     id: 'choiceColumn',
     fields: {
@@ -150,7 +151,7 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
     sampleValues: ['New', 'In Progress', 'Done', 'Archived', null]
   },
 
-  // 8. ChoiceList
+  // 8. ChoiceList - API uses ['L', ...strings]
   choiceList: {
     id: 'choiceListColumn',
     fields: {
@@ -168,15 +169,15 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       description: 'Multiple choice column with styling'
     },
     sampleValues: [
-      createList('tag1'),
-      createList('tag1', 'tag2'),
-      createList('tag2', 'tag3', 'tag4'),
-      createList(),
+      apiList('tag1'),
+      apiList('tag1', 'tag2'),
+      apiList('tag2', 'tag3', 'tag4'),
+      apiList(), // Empty list = ['L']
       null
     ]
   },
 
-  // 9. Ref (requires reference table)
+  // 9. Ref - API returns plain row IDs
   ref: {
     id: 'refColumn',
     fields: {
@@ -185,16 +186,10 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       widgetOptions: buildRefWidgetOptions({ alignment: 'left' }),
       description: 'Reference to another table'
     },
-    sampleValues: [
-      createReference('ReferenceTable', 1),
-      createReference('ReferenceTable', 2),
-      createReference('ReferenceTable', 3),
-      null,
-      createReference('ReferenceTable', 5)
-    ]
+    sampleValues: [apiRef(1), apiRef(2), apiRef(3), null, apiRef(5)]
   },
 
-  // 10. RefList (requires reference table)
+  // 10. RefList - API uses ['L', ...rowIds]
   refList: {
     id: 'refListColumn',
     fields: {
@@ -204,15 +199,15 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       description: 'Reference list to another table'
     },
     sampleValues: [
-      createReferenceList('ReferenceTable', [1]),
-      createReferenceList('ReferenceTable', [1, 2]),
-      createReferenceList('ReferenceTable', [2, 3, 4]),
-      createReferenceList('ReferenceTable', []),
+      apiRefList(1),
+      apiRefList(1, 2),
+      apiRefList(2, 3, 4),
+      apiRefList(), // Empty list = ['L']
       null
     ]
   },
 
-  // 11. Attachments
+  // 11. Attachments - API uses ['L', ...attachmentIds]
   attachments: {
     id: 'attachmentsColumn',
     fields: {
@@ -222,11 +217,11 @@ export const COLUMN_TYPE_FIXTURES: Record<string, ColumnFixture> = {
       description: 'File attachments column'
     },
     sampleValues: [
-      createList(1), // Attachment ID 1
-      createList(2, 3), // Multiple attachments
-      createList(), // No attachments
+      apiList(1), // Attachment ID 1
+      apiList(2, 3), // Multiple attachments
+      apiList(), // No attachments
       null,
-      createList(5, 6, 7) // Multiple attachments
+      apiList(5, 6, 7) // Multiple attachments
     ]
   }
 }

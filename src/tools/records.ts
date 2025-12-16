@@ -9,6 +9,7 @@ import {
   WRITE_IDEMPOTENT_ANNOTATIONS
 } from '../registry/types.js'
 import { ApplyResponseSchema, CellValueSchema } from '../schemas/api-responses.js'
+import { encodeRecordForApi } from '../schemas/cell-codecs.js'
 import {
   DocIdSchema,
   FilterSchema,
@@ -75,7 +76,15 @@ export class AddRecordsTool extends GristTool<typeof AddRecordsSchema, unknown> 
     // Data integrity validation (Ref values exist, Choice values valid)
     await validateRecordsDataIntegrity(params.records, columns, tableId, docId, schemaCache)
 
-    const action = buildBulkAddRecordAction(tableId, params.records)
+    // Build column type map for transformation
+    const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
+
+    // Transform user-friendly formats to API formats (ISO dates → timestamps, arrays → ["L", ...])
+    const transformedRecords = params.records.map((record) =>
+      encodeRecordForApi(record, columnTypes)
+    )
+
+    const action = buildBulkAddRecordAction(tableId, transformedRecords)
     const response = await this.client.post<ApplyResponse>(
       `/docs/${params.docId}/apply`,
       [serializeUserAction(action)],
@@ -147,7 +156,17 @@ export class UpdateRecordsTool extends GristTool<typeof UpdateRecordsSchema, unk
     // Data integrity validation (Ref values exist, Choice values valid)
     await validateRecordsDataIntegrity([params.updates], columns, tableId, docId, schemaCache)
 
-    const action = buildBulkUpdateRecordAction(tableId, params.rowIds.map(toRowId), params.updates)
+    // Build column type map for transformation
+    const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
+
+    // Transform user-friendly formats to API formats
+    const transformedUpdates = encodeRecordForApi(params.updates, columnTypes)
+
+    const action = buildBulkUpdateRecordAction(
+      tableId,
+      params.rowIds.map(toRowId),
+      transformedUpdates
+    )
 
     const response = await this.client.post<ApplyResponse>(
       `/docs/${params.docId}/apply`,
@@ -216,8 +235,17 @@ export class UpsertRecordsTool extends GristTool<typeof UpsertRecordsSchema, unk
     // Data integrity validation (Ref values exist, Choice values valid)
     await validateUpsertRecordsDataIntegrity(params.records, columns, tableId, docId, schemaCache)
 
+    // Build column type map for transformation
+    const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
+
+    // Transform user-friendly formats to API formats in both require and fields
+    const transformedRecords = params.records.map((record) => ({
+      require: record.require ? encodeRecordForApi(record.require, columnTypes) : undefined,
+      fields: record.fields ? encodeRecordForApi(record.fields, columnTypes) : undefined
+    }))
+
     const requestBody = {
-      records: params.records
+      records: transformedRecords
     }
 
     const queryParams: Record<string, string> = {}

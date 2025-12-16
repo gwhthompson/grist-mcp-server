@@ -4,6 +4,7 @@
  * Higher-level helpers for common Grist API operations in tests
  */
 
+import { inject } from 'vitest'
 import type { ToolContext } from '../../src/registry/types.js'
 import type { CellValue } from '../../src/schemas/api-responses.js'
 import { GristClient } from '../../src/services/grist-client.js'
@@ -20,13 +21,21 @@ export interface TestContext {
 }
 
 /**
- * Create a test Grist client
+ * Create a test Grist client using Vitest's inject() for proper test isolation.
+ * Values are provided by globalSetup.ts via Vitest's provide/inject mechanism.
  */
-export function createTestClient(
-  url: string = process.env.GRIST_URL || 'http://localhost:8989',
-  apiKey: string = process.env.GRIST_API_KEY || 'test_api_key'
-): GristClient {
-  return new GristClient(url, apiKey)
+export function createTestClient(url?: string, apiKey?: string): GristClient {
+  const resolvedUrl = url ?? inject('GRIST_BASE_URL')
+  const resolvedApiKey = apiKey ?? inject('GRIST_API_KEY')
+
+  if (!resolvedUrl || !resolvedApiKey) {
+    throw new Error(
+      'GRIST_BASE_URL and GRIST_API_KEY not available. ' +
+        'Ensure globalSetup.ts ran successfully.'
+    )
+  }
+
+  return new GristClient(resolvedUrl, resolvedApiKey)
 }
 
 /**

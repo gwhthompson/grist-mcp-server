@@ -11,6 +11,7 @@ import { setupToolsListHandler } from './schemas/schema-utils.js'
 // Register schemas with z.globalRegistry for named JSON Schema $refs
 // Must be called before any schema generation (tools/list)
 registerSchemas()
+
 import {
   consoleLoggingStrategy,
   getToolStatsByCategory,
@@ -167,39 +168,6 @@ function setupSignalHandlers(): void {
 
 setupSignalHandlers()
 
-export {
-  createCensored,
-  createDate,
-  createDateTime,
-  createDict,
-  createException,
-  createList,
-  createPending,
-  createReference,
-  createReferenceList,
-  createUnmarshallable,
-  extractDate,
-  extractDateTime,
-  extractDict,
-  extractListItems,
-  extractReference,
-  extractReferenceList,
-  GristObjCode,
-  getCellValueType,
-  isCensored,
-  isDate,
-  isDateTime,
-  isDict,
-  isException,
-  isList,
-  isPending,
-  isPrimitive,
-  isReference,
-  isReferenceList,
-  isUnmarshallable,
-  SAMPLE_CELL_VALUES,
-  validateCellValue
-} from './encoding/cell-value-helpers.js'
 // Re-export server factory for programmatic use
 export {
   createGristMcpServer,

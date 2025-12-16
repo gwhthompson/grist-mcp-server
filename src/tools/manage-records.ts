@@ -19,6 +19,7 @@ import {
   WRITE_SAFE_ANNOTATIONS
 } from '../registry/types.js'
 import { ApplyResponseSchema, CellValueSchema } from '../schemas/api-responses.js'
+import { encodeRecordForApi } from '../schemas/cell-codecs.js'
 import {
   DocIdSchema,
   FilterSchema,
@@ -297,7 +298,13 @@ export class ManageRecordsTool extends GristTool<
       schemaCache
     )
 
-    const action = buildBulkAddRecordAction(tableIdBranded, op.records)
+    // Build column type map for transformation
+    const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
+
+    // Transform user-friendly formats to API formats
+    const transformedRecords = op.records.map((record) => encodeRecordForApi(record, columnTypes))
+
+    const action = buildBulkAddRecordAction(tableIdBranded, transformedRecords)
     const response = await this.client.post<ApplyResponse>(
       `/docs/${docId}/apply`,
       [serializeUserAction(action)],
@@ -352,13 +359,18 @@ export class ManageRecordsTool extends GristTool<
       )
     }
 
+    // Build column type map for transformation
+    const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
+
     // Build bulk update action - group updates by fields being updated
     // For simplicity, process each record individually
     for (const record of op.records) {
+      // Transform user-friendly formats to API formats
+      const transformedFields = encodeRecordForApi(record.fields, columnTypes)
       const action = buildBulkUpdateRecordAction(
         tableIdBranded,
         [toRowId(record.id)],
-        record.fields
+        transformedFields
       )
       const response = await this.client.post<ApplyResponse>(
         `/docs/${docId}/apply`,
@@ -451,6 +463,15 @@ export class ManageRecordsTool extends GristTool<
       schemaCache
     )
 
+    // Build column type map for transformation
+    const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
+
+    // Transform user-friendly formats to API formats in both require and fields
+    const transformedRecords = op.records.map((record) => ({
+      require: encodeRecordForApi(record.require, columnTypes),
+      fields: record.fields ? encodeRecordForApi(record.fields, columnTypes) : undefined
+    }))
+
     const queryParams: Record<string, string> = {}
     if (op.onMany && op.onMany !== 'first') {
       queryParams.onmany = op.onMany
@@ -467,7 +488,7 @@ export class ManageRecordsTool extends GristTool<
 
     const response = await this.client.put<UpsertResponse | null>(
       `/docs/${docId}/tables/${tableId}/records`,
-      { records: op.records },
+      { records: transformedRecords },
       { config: { params: queryParams } }
     )
 

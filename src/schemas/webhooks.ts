@@ -12,8 +12,7 @@ export const WebhookIdSchema = z
 
 // ALLOWED_WEBHOOK_DOMAINS provides server-side SSRF protection
 export const WebhookUrlSchema = z
-  .string()
-  .url({ message: 'Must be a valid URL (e.g., "https://example.com/webhook")' })
+  .httpUrl({ message: 'Must be a valid HTTP/HTTPS URL (e.g., "https://example.com/webhook")' })
   .max(2000, {
     message: 'URL must be 2000 characters or less (standard HTTP URL limit)'
   })

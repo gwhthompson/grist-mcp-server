@@ -9,8 +9,20 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import type { CellValue } from '../../../src/schemas/api-responses.js'
 import type { DocId, TableId } from '../../../src/types/advanced.js'
 import { TableBuilder } from '../../builders/table-builder.js'
-import { extractListItems, isList } from '../../helpers/cell-values.js'
 import { ensureGristReady } from '../../helpers/docker.js'
+
+// Simple helpers for list handling (supports both decoded and raw API format)
+function isList(value: unknown): value is unknown[] {
+  return Array.isArray(value)
+}
+
+function extractListItems(value: unknown): unknown[] {
+  if (!Array.isArray(value)) return []
+  // Handle both decoded (plain array) and raw API format (["L", ...])
+  if (value[0] === 'L') return value.slice(1)
+  return value
+}
+
 import {
   addTestRecords,
   cleanupTestContext,

@@ -134,22 +134,12 @@ function validateTextColumn(value: CellValue, colId: string): void {
 }
 
 function validateDateColumn(value: CellValue, colId: string, columnType: string): void {
+  // Accept user-friendly formats (transformation happens after validation)
   const isUnixTimestamp = typeof value === 'number'
+  const isIsoDateString =
+    typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?/.test(value)
 
-  const isDateEncoded =
-    Array.isArray(value) && value.length === 2 && value[0] === 'd' && typeof value[1] === 'number'
-
-  const isDateTimeEncoded =
-    Array.isArray(value) &&
-    value.length === 3 &&
-    value[0] === 'D' &&
-    typeof value[1] === 'number' &&
-    typeof value[2] === 'string'
-
-  const isValidDateFormat =
-    isUnixTimestamp || (columnType === 'Date' ? isDateEncoded : isDateEncoded || isDateTimeEncoded)
-
-  if (!isValidDateFormat) {
+  if (!isUnixTimestamp && !isIsoDateString) {
     const providedType = Array.isArray(value) ? 'array' : typeof value
     throw new ColumnValidationError(
       colId,
@@ -175,30 +165,19 @@ function validateChoiceColumn(value: CellValue, colId: string): void {
 }
 
 function validateChoiceListColumn(value: CellValue, colId: string): void {
+  // Accept user-friendly format: plain string arrays (transformation happens after validation)
   if (Array.isArray(value)) {
-    const isValidEncoding = value[0] === 'L' && value.slice(1).every((v) => typeof v === 'string')
+    const isValidUserFormat = value.every((v) => typeof v === 'string')
+    const isValidApiFormat = value[0] === 'L' && value.slice(1).every((v) => typeof v === 'string')
 
-    if (!isValidEncoding) {
-      const looksLikeNaturalFormat = value.every((v) => typeof v === 'string')
-
-      if (looksLikeNaturalFormat) {
-        throw new ColumnValidationError(
-          colId,
-          'ChoiceList',
-          value,
-          'preprocessing_failed',
-          `ChoiceList column "${colId}" received unencoded array: ${JSON.stringify(value)}. ` +
-            `This suggests Zod preprocessing did not run. Internal error - please report this issue.`
-        )
-      }
-
+    if (!isValidUserFormat && !isValidApiFormat) {
       throw new ColumnValidationError(
         colId,
         'ChoiceList',
         value,
-        'invalid_encoding',
-        `ChoiceList column "${colId}" has invalid encoding. ` +
-          `Expected: ['L', 'item1', 'item2', ...] ` +
+        'invalid_array',
+        `ChoiceList column "${colId}" expects array of strings. ` +
+          `Example: {"${colId}": ["option1", "option2"]}. ` +
           `Got: ${JSON.stringify(value)}`
       )
     }
@@ -232,30 +211,19 @@ function validateRefColumn(value: CellValue, colId: string): void {
 }
 
 function validateRefListColumn(value: CellValue, colId: string): void {
+  // Accept user-friendly format: plain number arrays (transformation happens after validation)
   if (Array.isArray(value)) {
-    const isValidEncoding = value[0] === 'L' && value.slice(1).every((v) => typeof v === 'number')
+    const isValidUserFormat = value.every((v) => typeof v === 'number')
+    const isValidApiFormat = value[0] === 'L' && value.slice(1).every((v) => typeof v === 'number')
 
-    if (!isValidEncoding) {
-      const looksLikeNaturalFormat = value.every((v) => typeof v === 'number')
-
-      if (looksLikeNaturalFormat) {
-        throw new ColumnValidationError(
-          colId,
-          'RefList',
-          value,
-          'preprocessing_failed',
-          `RefList column "${colId}" received unencoded array: ${JSON.stringify(value)}. ` +
-            `This suggests Zod preprocessing did not run. Internal error - please report this issue.`
-        )
-      }
-
+    if (!isValidUserFormat && !isValidApiFormat) {
       throw new ColumnValidationError(
         colId,
         'RefList',
         value,
-        'invalid_encoding',
-        `RefList column "${colId}" has invalid encoding. ` +
-          `Expected: ['L', 1, 2, 3, ...] ` +
+        'invalid_array',
+        `RefList column "${colId}" expects array of row IDs. ` +
+          `Example: {"${colId}": [1, 2, 3]}. ` +
           `Got: ${JSON.stringify(value)}`
       )
     }

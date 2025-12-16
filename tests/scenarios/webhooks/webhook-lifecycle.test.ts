@@ -511,7 +511,7 @@ describe('Webhook Management - Integration Tests', () => {
           },
           response_format: 'json'
         })
-      ).rejects.toThrow(/localhost|private|publicly accessible/i)
+      ).rejects.toThrow(/valid.*URL|Invalid hostname/i)
     })
 
     it('should reject private IP addresses', async () => {
@@ -528,7 +528,7 @@ describe('Webhook Management - Integration Tests', () => {
           },
           response_format: 'json'
         })
-      ).rejects.toThrow(/private|publicly accessible|192\.168/i)
+      ).rejects.toThrow(/valid.*URL|Invalid hostname/i)
     })
 
     it('should trim whitespace from URLs', async () => {
@@ -656,7 +656,7 @@ describe('Webhook Management - Integration Tests', () => {
           },
           response_format: 'json'
         })
-      ).rejects.toThrow(/valid URL/i)
+      ).rejects.toThrow(/valid.*URL|HTTP.*URL/i)
     })
 
     it('should reject URLs longer than 2000 characters', async () => {

@@ -47,7 +47,11 @@ export interface StandardErrorResponse {
   [key: string]: unknown
 }
 
-export type CellValue = null | string | number | boolean | [string, ...unknown[]]
+/**
+ * User-facing cell value type. Plain arrays are used (not internal Grist markers).
+ * Codecs in cell-codecs.ts handle transformation to/from API format.
+ */
+export type CellValue = null | string | number | boolean | (string | number)[]
 
 export type ColValues = { [colId: string]: CellValue[] }
 

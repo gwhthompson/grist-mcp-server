@@ -2,6 +2,7 @@ import { ValidationError } from '../errors/ValidationError.js'
 import type { UserWidgetType } from '../schemas/pages-widgets.js'
 import { toGristWidgetType as convertWidgetType } from '../schemas/pages-widgets.js'
 import type {
+  CellValue,
   CreateViewSectionResult,
   LayoutSpec,
   SingleColValues,
@@ -92,12 +93,7 @@ export function buildAddRecordAction(
   rowId: number | null,
   colValues: Record<string, unknown>
 ): UserAction {
-  return [
-    'AddRecord',
-    tableId,
-    rowId,
-    colValues as Record<string, string | number | boolean | null | [string, ...unknown[]]>
-  ]
+  return ['AddRecord', tableId, rowId, colValues as Record<string, CellValue>]
 }
 
 export function buildUpdateRecordAction(
@@ -105,12 +101,7 @@ export function buildUpdateRecordAction(
   rowId: number,
   colValues: Record<string, unknown>
 ): UserAction {
-  return [
-    'UpdateRecord',
-    tableId,
-    rowId,
-    colValues as Record<string, string | number | boolean | null | [string, ...unknown[]]>
-  ]
+  return ['UpdateRecord', tableId, rowId, colValues as Record<string, CellValue>]
 }
 
 export function serializeLayoutSpec(layoutSpec: LayoutSpec): string {

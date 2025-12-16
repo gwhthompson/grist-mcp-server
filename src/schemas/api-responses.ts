@@ -2,63 +2,22 @@ import { z } from 'zod'
 import { log } from '../utils/shared-logger.js'
 import { WidgetOptionsSchema, WidgetOptionsStringSchema } from './widget-options.js'
 
+// Known object codes for graceful handling of legacy/internal formats
 const KNOWN_OBJ_CODES = new Set(['L', 'l', 'O', 'D', 'd', 'S', 'C', 'R', 'r', 'E', 'P', 'U', 'V'])
-// Track unknown codes we've warned about (avoid log spam)
 const warnedCellValueCodes = new Set<string>()
 
-// Idempotent: encoded values pass through unchanged
-function preprocessCellValue(val: unknown): unknown {
-  // Regex first - Date.parse is too permissive
-  if (typeof val === 'string') {
-    const isISO8601 = /^\d{4}-\d{2}-\d{2}(T|$)/.test(val)
-    if (isISO8601) {
-      const timestampMs = Date.parse(val)
-      if (!Number.isNaN(timestampMs)) {
-        const timestampSec = Math.floor(timestampMs / 1000)
-        if (val.includes('T')) return ['D', timestampSec, 'UTC']
-        return ['d', timestampSec]
-      }
-    }
-  }
-
-  if (Array.isArray(val)) {
-    if (val.length === 0) return ['L']
-
-    const firstElem = val[0]
-
-    // Must check structure, not just first letter
-    if (typeof firstElem === 'string' && firstElem.length === 1) {
-      const isValidEncoding =
-        (firstElem === 'd' && val.length === 2 && typeof val[1] === 'number') ||
-        (firstElem === 'D' &&
-          val.length === 3 &&
-          typeof val[1] === 'number' &&
-          typeof val[2] === 'string') ||
-        firstElem === 'L' ||
-        (firstElem === 'R' && val.length === 3) ||
-        (firstElem === 'r' && val.length === 3 && Array.isArray(val[2])) ||
-        (firstElem === 'O' &&
-          val.length === 2 &&
-          val[1] !== null &&
-          typeof val[1] === 'object' &&
-          !Array.isArray(val[1])) ||
-        (firstElem === 'l' && val.length >= 2)
-
-      if (isValidEncoding) return val
-    }
-
-    if (val.every((v) => typeof v === 'string')) return ['L', ...val]
-    if (val.every((v) => typeof v === 'number')) return ['L', ...val]
-  }
-
-  return val
-}
-
+/**
+ * Decode cell values from API responses - handles legacy/internal formats.
+ * For column-type-aware decoding (timestamps → ISO strings), use decodeFromApi from cell-codecs.ts
+ */
 export function decodeCellValue(val: unknown): unknown {
   if (Array.isArray(val) && val.length > 0) {
     const first = val[0]
 
+    // Strip 'L' marker from lists
     if (first === 'L') return val.slice(1)
+
+    // Legacy lookup/reference formats that may appear in some responses
     if (first === 'l' && val.length >= 2) return Array.isArray(val[1]) ? val[1] : [val[1]]
     if (first === 'r' && val.length === 3 && typeof val[1] === 'string' && Array.isArray(val[2]))
       return val[2]
@@ -70,17 +29,7 @@ export function decodeCellValue(val: unknown): unknown {
     )
       return val[2]
 
-    if (first === 'd' && val.length === 2 && typeof val[1] === 'number') {
-      return new Date(val[1] * 1000).toISOString().split('T')[0]
-    }
-    if (
-      first === 'D' &&
-      val.length === 3 &&
-      typeof val[1] === 'number' &&
-      typeof val[2] === 'string'
-    ) {
-      return new Date(val[1] * 1000).toISOString()
-    }
+    // Dict format
     if (first === 'O' && val.length === 2 && typeof val[1] === 'object') return val[1]
 
     // Graceful degradation: warn about unknown codes but return raw value
@@ -131,92 +80,27 @@ export function decodeRecords(
   return records.map(decodeRecord)
 }
 
-/**
- * Decode cell value using column type information.
- * Handles raw timestamps for Date/DateTime columns that Grist returns as plain numbers.
- * @param value - The raw cell value from Grist API
- * @param columnType - The Grist column type (e.g., "Date", "DateTime:UTC", "Text", "Numeric")
- * @returns Decoded value with dates converted to ISO strings
- */
-export function decodeCellValueWithType(value: unknown, columnType: string): unknown {
-  // First apply existing decoding for encoded values (e.g., ['L', ...], ['d', ts])
-  const decoded = decodeCellValue(value)
-
-  // If it's a number and column is Date/DateTime, convert to ISO string
-  // Grist API returns Date/DateTime as raw Unix timestamps (seconds), not encoded arrays
-  if (typeof decoded === 'number') {
-    if (columnType === 'Date') {
-      return new Date(decoded * 1000).toISOString().split('T')[0] // "YYYY-MM-DD"
-    }
-    if (columnType.startsWith('DateTime')) {
-      return new Date(decoded * 1000).toISOString() // "YYYY-MM-DDTHH:mm:ss.sssZ"
-    }
-  }
-
-  return decoded
-}
+// NOTE: decodeCellValueWithType and decodeRecordFieldsWithTypes have been removed.
+// Use decodeFromApi and decodeRecordFromApi from cell-codecs.ts instead for column-type-aware decoding.
 
 /**
- * Decode all fields in a record using column type information.
- * @param fields - Record fields from Grist API
- * @param columnTypes - Map of column ID to column type
- * @returns Decoded fields with dates converted to ISO strings
- */
-export function decodeRecordFieldsWithTypes(
-  fields: Record<string, unknown>,
-  columnTypes: Map<string, string>
-): Record<string, unknown> {
-  const decoded: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(fields)) {
-    const colType = columnTypes.get(key) || 'Text'
-    decoded[key] = decodeCellValueWithType(value, colType)
-  }
-  return decoded
-}
-
-/**
- * User-facing schema for cell values - only natural formats.
- * This is what LLMs see in tool JSON schemas via zod-to-json-schema.
- * MCP SDK uses pipeStrategy: "input" so only this schema is exposed.
+ * User-facing schema for cell values - validates structure only.
+ * Transformation to API format is done separately via encodeForApi from cell-codecs.ts
+ * with column type information (so ISO dates only transform for Date/DateTime columns).
  */
 export const CellValueInputSchema = z.union([
   z.null().describe('Empty cell'),
-  z.string().describe('Text value. For dates use ISO 8601: "2024-01-15" or "2024-01-15T10:30:00Z"'),
-  z.number().describe('Numeric value. For Ref columns, use row ID directly'),
+  z.string().describe('Text, or ISO date/datetime for Date/DateTime columns'),
+  z.number().describe('Number, timestamp, or row ID for Ref columns'),
   z.boolean().describe('True or false'),
-  z
-    .array(z.union([z.string(), z.number(), z.boolean()]))
-    .describe('List of values for ChoiceList or RefList columns')
+  z.array(z.union([z.string(), z.number()])).describe('Array for ChoiceList/RefList/Attachments')
 ])
 
 /**
- * Internal schema validating Grist-encoded formats (after preprocessing).
- * NOT exposed in JSON Schema - only used internally for validation after transform.
+ * CellValueSchema - validation only, no transformation.
+ * Use encodeForApi/encodeRecordForApi from cell-codecs.ts for column-type-aware transformation.
  */
-const GristEncodedCellValueSchema = z.union([
-  z.null(),
-  z.string(),
-  z.number(),
-  z.boolean(),
-  z.tuple([z.literal('L')]).rest(z.union([z.string(), z.number(), z.boolean()])),
-  z.tuple([z.literal('l')]).rest(z.unknown()),
-  z.tuple([z.literal('d'), z.number()]),
-  z.tuple([z.literal('D'), z.number(), z.string()]),
-  z.tuple([z.literal('r'), z.string(), z.array(z.number())]),
-  z.tuple([z.literal('R'), z.string(), z.number()]),
-  z.tuple([z.literal('O'), z.record(z.string(), z.unknown())]),
-  z.tuple([z.enum(['E', 'P', 'U', 'C', 'S', 'V'])]).rest(z.unknown())
-])
-
-/**
- * CellValueSchema for tool inputs.
- * - JSON Schema shows CellValueInputSchema (natural formats only) via pipeStrategy: "input"
- * - Runtime: transform converts natural -> Grist encoded via preprocessCellValue
- * - Validates transformed output against GristEncodedCellValueSchema
- */
-export const CellValueSchema = CellValueInputSchema.transform(preprocessCellValue).pipe(
-  GristEncodedCellValueSchema
-)
+export const CellValueSchema = CellValueInputSchema
 
 export const WorkspaceSummarySchema = z.object({
   id: z.number(),

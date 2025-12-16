@@ -51,8 +51,8 @@ export const GetWorkspacesOutputSchema = z.object({
       orgDomain: z.string().optional().describe('Organization domain'),
       docCount: z.number().describe('Number of documents'),
       access: z.string().describe('Access level'),
-      createdAt: z.string().datetime().optional().describe('Creation timestamp'),
-      updatedAt: z.string().datetime().optional().describe('Last update timestamp')
+      createdAt: z.iso.datetime().optional().describe('Creation timestamp'),
+      updatedAt: z.iso.datetime().optional().describe('Last update timestamp')
     })
   ),
   total: z.number(),
@@ -76,8 +76,8 @@ export const GetDocumentsOutputSchema = z.object({
       access: z.string().describe('Access level'),
       url: z.string().optional().describe('Document URL'),
       isPinned: z.boolean().optional().describe('Whether document is pinned'),
-      createdAt: z.string().datetime().optional().describe('Creation timestamp'),
-      updatedAt: z.string().datetime().optional().describe('Last update timestamp'),
+      createdAt: z.iso.datetime().optional().describe('Creation timestamp'),
+      updatedAt: z.iso.datetime().optional().describe('Last update timestamp'),
       public: z.boolean().optional().describe('Whether document is public')
     })
   ),

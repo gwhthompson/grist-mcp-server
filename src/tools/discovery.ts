@@ -112,10 +112,11 @@ export async function discoverTools(
       name: tool.name,
       description: tool.description,
       category: tool.category,
-      inputSchema: z.toJSONSchema(tool.inputSchema, { reused: 'ref', io: 'input' }) as Record<
-        string,
-        unknown
-      >
+      inputSchema: z.toJSONSchema(tool.inputSchema, {
+        reused: 'ref',
+        io: 'input',
+        target: 'draft-2020-12'
+      }) as Record<string, unknown>
     }
 
     const result: DiscoverToolsOutput = {
@@ -164,10 +165,11 @@ export async function discoverTools(
       name: tool.name,
       description: tool.description,
       category: tool.category,
-      inputSchema: z.toJSONSchema(tool.inputSchema, { reused: 'ref', io: 'input' }) as Record<
-        string,
-        unknown
-      >
+      inputSchema: z.toJSONSchema(tool.inputSchema, {
+        reused: 'ref',
+        io: 'input',
+        target: 'draft-2020-12'
+      }) as Record<string, unknown>
     }
   })
 

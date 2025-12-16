@@ -119,7 +119,7 @@
     },
     {
       "name": "grist_manage_pages",
-      "description": "Page and widget operations"
+      "description": "Page layout and management"
     },
     {
       "name": "grist_create_document",

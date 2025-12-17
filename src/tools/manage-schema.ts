@@ -307,7 +307,12 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     } else if (result.success) {
       // Generate contextual next steps based on operations performed
       const tableCreates = result.results.filter((r) => r.action === 'create_table')
+      const tableDeletes = result.results.filter((r) => r.action === 'delete_table')
+      const tableRenames = result.results.filter((r) => r.action === 'rename_table')
       const columnAdds = result.results.filter((r) => r.action === 'add_column')
+      const columnRemoves = result.results.filter((r) => r.action === 'remove_column')
+      const columnRenames = result.results.filter((r) => r.action === 'rename_column')
+      const columnModifies = result.results.filter((r) => r.action === 'modify_column')
       const summaryCreates = result.results.filter((r) => r.action === 'create_summary')
 
       if (tableCreates.length > 0) {
@@ -317,9 +322,41 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
         nextSteps.push(`Use grist_manage_pages action='create_page' to create a view`)
       }
 
+      if (tableDeletes.length > 0) {
+        nextSteps.push(`Use grist_get_tables to verify table was deleted`)
+        nextSteps.push(`Update any formulas or pages that referenced the deleted table`)
+      }
+
+      if (tableRenames.length > 0) {
+        const firstRename = tableRenames[0]
+        const newTableId = firstRename?.details.new_tableId as string
+        nextSteps.push(`Use grist_get_tables to verify rename to "${newTableId}"`)
+        nextSteps.push(`Update any formulas or references using the old table name`)
+      }
+
       if (columnAdds.length > 0 && tableCreates.length === 0) {
         nextSteps.push(
           `Use grist_get_tables with detail_level='full_schema' to verify column configuration`
+        )
+      }
+
+      if (columnRemoves.length > 0) {
+        nextSteps.push(`Use grist_get_tables with detail_level='columns' to verify column removal`)
+        nextSteps.push(`Update any formulas that referenced the removed column`)
+      }
+
+      if (columnRenames.length > 0) {
+        const firstRename = columnRenames[0]
+        const newColId = firstRename?.details.new_colId as string
+        nextSteps.push(
+          `Use grist_get_tables with detail_level='columns' to verify rename to "${newColId}"`
+        )
+        nextSteps.push(`Update any formulas referencing the old column name`)
+      }
+
+      if (columnModifies.length > 0) {
+        nextSteps.push(
+          `Use grist_get_tables with detail_level='full_schema' to verify column changes`
         )
       }
 

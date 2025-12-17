@@ -12,12 +12,7 @@
 
 import { z } from 'zod'
 import { MAX_RECORDS_PER_BATCH } from '../constants.js'
-import {
-  DESTRUCTIVE_ANNOTATIONS,
-  type ToolContext,
-  type ToolDefinition,
-  WRITE_SAFE_ANNOTATIONS
-} from '../registry/types.js'
+import type { ToolContext, ToolDefinition } from '../registry/types.js'
 import { ApplyResponseSchema, CellValueSchema } from '../schemas/api-responses.js'
 import { encodeRecordForApi } from '../schemas/cell-codecs.js'
 import {
@@ -296,6 +291,7 @@ export class ManageRecordsTool extends GristTool<
       // Generate contextual next steps based on operations performed
       const addResults = result.results.filter((r) => r.action === 'add' && r.recordIds?.length)
       const updateResults = result.results.filter((r) => r.action === 'update')
+      const deleteResults = result.results.filter((r) => r.action === 'delete')
 
       if (addResults.length > 0) {
         const firstAdd = addResults[0]
@@ -308,6 +304,15 @@ export class ManageRecordsTool extends GristTool<
 
       if (updateResults.length > 0) {
         nextSteps.push(`Use grist_get_records to verify updated data`)
+      }
+
+      if (deleteResults.length > 0) {
+        const firstDelete = deleteResults[0]
+        if (firstDelete) {
+          nextSteps.push(
+            `Use grist_get_records with tableId="${firstDelete.tableId}" to verify records were deleted`
+          )
+        }
       }
 
       // Suggest page creation if data was added

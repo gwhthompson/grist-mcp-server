@@ -537,7 +537,8 @@ export const ManageWebhooksOutputSchema = z.looseObject({
       error: z.string(),
       completedOperations: z.number()
     })
-    .optional()
+    .optional(),
+  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
 })
 
 // ============================================================================

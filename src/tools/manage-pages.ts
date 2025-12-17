@@ -270,6 +270,10 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
       nextSteps.push(`Resume from operation index ${result.partial_failure.operation_index}`)
     } else if (result.success) {
       const pageCreates = result.results.filter((r) => r.action === 'create_page')
+      const pageRenames = result.results.filter((r) => r.action === 'rename_page')
+      const pageDeletes = result.results.filter((r) => r.action === 'delete_page')
+      const reorderOps = result.results.filter((r) => r.action === 'reorder_pages')
+      const configureOps = result.results.filter((r) => r.action === 'configure_widget')
       const linkOps = result.results.filter((r) => r.action === 'link_widgets')
       const getLayouts = result.results.filter((r) => r.action === 'get_layout')
 
@@ -283,6 +287,30 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
             `Use link_widgets with viewId=${viewId} and sectionIds=[${sectionIds.join(', ')}] to connect widgets`
           )
         }
+      }
+
+      // After rename_page
+      if (pageRenames.length > 0) {
+        const firstRename = pageRenames[0]
+        const newName = firstRename?.details.newName as string
+        nextSteps.push(`Use get_layout to verify page "${newName}" configuration`)
+      }
+
+      // After delete_page
+      if (pageDeletes.length > 0) {
+        nextSteps.push(`Use get_layout on remaining pages to verify document structure`)
+      }
+
+      // After reorder_pages
+      if (reorderOps.length > 0) {
+        nextSteps.push(`Page order updated. Navigate through pages to verify new order`)
+      }
+
+      // After configure_widget
+      if (configureOps.length > 0) {
+        nextSteps.push(
+          `Use grist_get_records to verify widget displays data with new configuration`
+        )
       }
 
       // After link_widgets, suggest verifying

@@ -139,6 +139,7 @@ interface ManageWebhooksResponse {
     error: string
     completedOperations: number
   }
+  nextSteps?: string[]
 }
 
 /**
@@ -195,6 +196,58 @@ export class ManageWebhooksTool extends GristTool<
       results,
       message: `Successfully completed ${operations.length} webhook operation(s)`
     }
+  }
+
+  protected async afterExecute(
+    result: ManageWebhooksResponse,
+    params: ManageWebhooksInput
+  ): Promise<ManageWebhooksResponse> {
+    const nextSteps: string[] = []
+
+    if (result.partialFailure) {
+      nextSteps.push(
+        `Fix error in operation ${result.partialFailure.operationIndex}: ${result.partialFailure.error}`
+      )
+      nextSteps.push(`Resume from operation index ${result.partialFailure.operationIndex}`)
+    } else if (result.success) {
+      // Generate contextual next steps based on operations performed
+      const operations = params.operations
+      const hasCreate = operations.some((op) => op.action === 'create')
+      const hasDelete = operations.some((op) => op.action === 'delete')
+      const hasUpdate = operations.some((op) => op.action === 'update')
+      const hasList = operations.some((op) => op.action === 'list')
+      const hasClearQueue = operations.some((op) => op.action === 'clear_queue')
+
+      if (hasList && result.results.length > 0) {
+        const listResult = result.results.find((r) => r.operation === 'list')
+        if (listResult && 'webhooks' in listResult && listResult.webhooks.length === 0) {
+          nextSteps.push(`No webhooks found. Use action="create" to set up webhook notifications`)
+        }
+      }
+
+      if (hasCreate) {
+        const createResults = result.results.filter((r) => r.operation === 'create')
+        for (const cr of createResults) {
+          if ('tableId' in cr) {
+            nextSteps.push(`Test webhook by adding/updating records in "${cr.tableId}" table`)
+          }
+        }
+      }
+
+      if (hasUpdate) {
+        nextSteps.push(`Use action="list" to verify webhook configuration changes`)
+      }
+
+      if (hasDelete) {
+        nextSteps.push(`Verify webhook removed from receiving service`)
+      }
+
+      if (hasClearQueue) {
+        nextSteps.push(`Monitor webhook queue with action="list" to verify delivery`)
+      }
+    }
+
+    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
   }
 
   private async executeOperation(

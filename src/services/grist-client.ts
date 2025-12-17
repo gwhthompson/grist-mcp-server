@@ -502,6 +502,22 @@ export class GristClient {
     )
   }
 
+  private detect400KeyError(sanitizedMessage: string): boolean {
+    return String(sanitizedMessage).toLowerCase().includes('keyerror')
+  }
+
+  private buildKeyError(sanitizedMessage: string): Error {
+    // Extract the key name from messages like "KeyError 'NonExistentColumn'"
+    const keyMatch = sanitizedMessage.match(/'([^']+)'/)
+    const keyName = keyMatch ? keyMatch[1] : 'unknown'
+
+    return new Error(
+      `Column not found: '${keyName}'. ` +
+        `Use grist_get_tables with detail_level="columns" to see available column names. ` +
+        `Column IDs are case-sensitive and must match exactly.`
+    )
+  }
+
   private buildEncodingError(sanitizedMessage: string): Error {
     return new Error(
       `Grist server error (500): Data validation failed. ` +
@@ -558,6 +574,11 @@ export class GristClient {
   private handle400Error(path: string, sanitizedMessage: string): Error {
     if (this.detect400SqlError(path)) {
       return this.buildSqlError(sanitizedMessage)
+    }
+
+    // Check for KeyError (column/key not found) before generic validation
+    if (this.detect400KeyError(sanitizedMessage)) {
+      return this.buildKeyError(sanitizedMessage)
     }
 
     if (this.detect400ValidationError(sanitizedMessage)) {

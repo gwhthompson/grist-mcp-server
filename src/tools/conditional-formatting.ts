@@ -254,7 +254,10 @@ export const CONDITIONAL_TOOLS: ReadonlyArray<ToolDefinition> = [
         '- **row**: Rules apply to entire rows in Raw Data view\n' +
         '- **field**: Rules apply to column in ONE specific widget only\n\n' +
         'Rules use Python formulas (e.g., $Price > 1000) and style options ' +
-        '(fillColor, textColor, fontBold). Use action="list" first to see existing rules.',
+        '(fillColor, textColor, fontBold). Use action="list" first to see existing rules.\n\n' +
+        '**NOTE:** This is the central tool for ALL visual formatting. When creating ' +
+        'columns with rulesOptions in grist_manage_schema, those rules use this same ' +
+        'formatting system internally.',
       examples: [
         {
           desc: 'Add column rule (applies to all views)',
@@ -330,7 +333,11 @@ export const CONDITIONAL_TOOLS: ReadonlyArray<ToolDefinition> = [
         '- row: Only requires tableId. Rules apply to Raw Data view rows.\n' +
         '- field: Requires colId AND (sectionId OR pageName+widgetTitle). Rules apply to one widget.\n\n' +
         '**Formula syntax (Python):** $Price > 1000, $Status == "Active", $DueDate < NOW()\n' +
-        '**Style options:** fillColor, textColor (#RRGGBB), fontBold, fontItalic, fontUnderline, fontStrikethrough'
+        '**Style options:** fillColor, textColor (#RRGGBB), fontBold, fontItalic, fontUnderline, fontStrikethrough\n\n' +
+        'RELATED TOOLS:\n' +
+        '- grist_manage_schema: Create columns with rulesOptions (uses this formatting system)\n' +
+        '- grist_get_pages: Find widget sectionId for field-scope rules\n' +
+        '- grist_manage_pages: Create widgets where field rules can be applied'
     }
   }
 ] as const

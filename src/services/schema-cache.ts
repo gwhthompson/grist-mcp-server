@@ -52,6 +52,32 @@ interface TableRefCacheEntry {
   timestamp: number
 }
 
+/**
+ * Section/widget metadata for link validation.
+ * Fetched fresh each time (not cached) - Grist query latency is
+ * negligible compared to LLM round-trip time.
+ */
+export interface SectionInfo {
+  /** Section ID (unique widget identifier) */
+  sectionId: number
+  /** Parent view ID (page) */
+  viewId: number
+  /** Table this widget displays */
+  tableId: string
+  /** Widget type: record, detail, chart, custom, form */
+  widgetType: string
+  /** Widget title (may be empty) */
+  title: string
+  /** For summary widgets: the source table ref */
+  summarySourceTable?: number
+  /** Link source section ID (if linked) */
+  linkSrcSectionRef?: number
+  /** Link source column ID (if linked) */
+  linkSrcColRef?: number
+  /** Link target column ID (if linked) */
+  linkTargetColRef?: number
+}
+
 export class SchemaCache {
   private cache: Map<string, CacheEntry> = new Map()
   private tableRefCache: Map<string, TableRefCacheEntry> = new Map()
@@ -115,6 +141,28 @@ export class SchemaCache {
   async getTableRef(docId: DocId, tableName: string): Promise<number | null> {
     const tableRefs = await this.getTableRefs(docId)
     return tableRefs.get(tableName) ?? null
+  }
+
+  /**
+   * Gets sections (widgets) on a specific page.
+   * Always fetches fresh - Grist query latency (~20-50ms) is negligible
+   * compared to LLM round-trip time (1-5s).
+   */
+  async getPageSections(docId: DocId, viewId: number): Promise<SectionInfo[]> {
+    return this.fetchPageSections(docId, viewId)
+  }
+
+  /**
+   * Gets a specific section by ID, checking if it exists on the given page.
+   * Returns undefined if section doesn't exist on this page.
+   */
+  async getSection(
+    docId: DocId,
+    viewId: number,
+    sectionId: number
+  ): Promise<SectionInfo | undefined> {
+    const sections = await this.getPageSections(docId, viewId)
+    return sections.find((s) => s.sectionId === sectionId)
   }
 
   /**
@@ -242,25 +290,32 @@ export class SchemaCache {
     const totalSize = this.cache.size + this.tableRefCache.size
     const entriesToRemove = Math.ceil(totalSize * 0.1)
 
-    const allEntries: Array<{ key: string; timestamp: number; isTableRef: boolean }> = []
+    const allEntries: Array<{ key: string; timestamp: number; cacheType: 'column' | 'tableRef' }> =
+      []
 
     for (const [key, entry] of this.cache.entries()) {
-      allEntries.push({ key, timestamp: entry.timestamp, isTableRef: false })
+      allEntries.push({ key, timestamp: entry.timestamp, cacheType: 'column' })
     }
 
     for (const [key, entry] of this.tableRefCache.entries()) {
-      allEntries.push({ key, timestamp: entry.timestamp, isTableRef: true })
+      allEntries.push({ key, timestamp: entry.timestamp, cacheType: 'tableRef' })
     }
 
     allEntries.sort((a, b) => a.timestamp - b.timestamp)
 
     for (let i = 0; i < entriesToRemove && i < allEntries.length; i++) {
-      // Safe: loop bound guarantees allEntries[i] exists
-      const entry = allEntries[i] as { key: string; timestamp: number; isTableRef: boolean }
-      if (entry.isTableRef) {
-        this.tableRefCache.delete(entry.key)
-      } else {
-        this.cache.delete(entry.key)
+      const entry = allEntries[i] as {
+        key: string
+        timestamp: number
+        cacheType: 'column' | 'tableRef'
+      }
+      switch (entry.cacheType) {
+        case 'column':
+          this.cache.delete(entry.key)
+          break
+        case 'tableRef':
+          this.tableRefCache.delete(entry.key)
+          break
       }
     }
   }
@@ -329,6 +384,59 @@ export class SchemaCache {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error)
       throw new Error(`Failed to fetch table references for document "${docId}": ${errorMessage}`)
+    }
+  }
+
+  /**
+   * Fetches sections (widgets) on a specific page via SQL.
+   * Joins with _grist_Tables to get tableId string.
+   */
+  private async fetchPageSections(docId: DocId, viewId: number): Promise<SectionInfo[]> {
+    try {
+      const response = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+        sql: `
+          SELECT
+            s.id as sectionId,
+            s.parentId as viewId,
+            t.tableId as tableId,
+            s.parentKey as widgetType,
+            s.title as title,
+            s.summarySourceTable as summarySourceTable,
+            s.linkSrcSectionRef as linkSrcSectionRef,
+            s.linkSrcColRef as linkSrcColRef,
+            s.linkTargetColRef as linkTargetColRef
+          FROM _grist_Views_section s
+          LEFT JOIN _grist_Tables t ON s.tableRef = t.id
+          WHERE s.parentId = ?
+          ORDER BY s.id
+        `,
+        args: [viewId]
+      })
+
+      const sections: SectionInfo[] = []
+      for (const record of response.records) {
+        const rec = record as Record<string, unknown>
+        const fields = (rec.fields as Record<string, unknown> | undefined) ?? rec
+
+        sections.push({
+          sectionId: fields.sectionId as number,
+          viewId: fields.viewId as number,
+          tableId: (fields.tableId as string) ?? '',
+          widgetType: (fields.widgetType as string) ?? 'record',
+          title: (fields.title as string) ?? '',
+          summarySourceTable: fields.summarySourceTable as number | undefined,
+          linkSrcSectionRef: fields.linkSrcSectionRef as number | undefined,
+          linkSrcColRef: fields.linkSrcColRef as number | undefined,
+          linkTargetColRef: fields.linkTargetColRef as number | undefined
+        })
+      }
+
+      return sections
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error)
+      throw new Error(
+        `Failed to fetch sections for page ${viewId} in document "${docId}": ${errorMessage}`
+      )
     }
   }
 }

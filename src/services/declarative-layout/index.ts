@@ -20,7 +20,6 @@ export {
   type FromLayoutSpecOptions,
   formatGetLayoutResult,
   fromLayoutSpec,
-  fromLayoutSpecWithResolution,
   type GetLayoutResult as FromLayoutResult,
   type WidgetInfo as FromLayoutWidgetInfo
 } from './from-layout-spec.js'
@@ -38,7 +37,6 @@ export {
   type ChildOfLink,
   // Utility functions
   collectExistingSectionIds,
-  collectLocalIds,
   collectNewPanes,
   // Types
   type DeclarativeChartType,
@@ -87,5 +85,5 @@ export {
   toLayoutSpec,
   validateExistingSections
 } from './to-layout-spec.js'
-// Widget registry
+// Widget registry - kept for pending link processing (still needed for link_widgets)
 export { type PendingLink, WidgetRegistry } from './widget-registry.js'

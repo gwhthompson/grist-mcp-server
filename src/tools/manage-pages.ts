@@ -12,12 +12,21 @@ import { type ToolContext, type ToolDefinition, WRITE_SAFE_ANNOTATIONS } from '.
 import { ApplyResponseSchema } from '../schemas/api-responses.js'
 import { DocIdSchema, ResponseFormatSchema } from '../schemas/common.js'
 import {
+  buildLinkActions,
   executeCreatePage,
   executeGetLayout,
   executeSetLayout,
-  LayoutNodeSchema
+  LayoutNodeSchema,
+  LinkSchema,
+  type ResolvedLink,
+  resolveLink,
+  type WidgetId,
+  WidgetIdSchema,
+  WidgetRegistry
 } from '../services/declarative-layout/index.js'
+import type { WidgetInfo as LinkWidgetInfo } from '../services/declarative-layout/link-resolver.js'
 import { serializeSortSpec } from '../services/pages-builder.js'
+import { isSummaryTable } from '../services/summary-table-resolver.js'
 import { buildViewSectionUpdate, ViewSectionService } from '../services/view-section.js'
 import {
   getPageByName,
@@ -116,6 +125,36 @@ const ConfigureWidgetOperationSchema = z
   .describe('Configure widget properties (title, sorting)')
 
 // =============================================================================
+// Link Operation Schema (Architecture B)
+// =============================================================================
+
+/**
+ * Link specification for connecting two widgets.
+ * Both source and target must be sectionIds from the same page.
+ */
+const LinkSpecSchema = z
+  .object({
+    source: WidgetIdSchema.describe('Source widget sectionId'),
+    target: WidgetIdSchema.describe('Target widget sectionId to configure link on'),
+    link: LinkSchema.describe('Link type and configuration')
+  })
+  .describe('Specification for linking two widgets')
+
+/**
+ * Architecture B: Separate operation for configuring widget links.
+ *
+ * Use after create_page/set_layout to establish relationships between widgets.
+ * All widget references use real sectionIds from previous responses.
+ */
+const LinkWidgetsOperationSchema = z
+  .object({
+    action: z.literal('link_widgets'),
+    viewId: z.number().int().positive().describe('Page viewId containing the widgets'),
+    links: z.array(LinkSpecSchema).min(1).max(20).describe('Links to establish between widgets')
+  })
+  .describe('Configure links between widgets on a page. Use sectionIds from create_page response.')
+
+// =============================================================================
 // Discriminated Union and Main Schema
 // =============================================================================
 
@@ -126,7 +165,8 @@ const PageOperationSchema = z.discriminatedUnion('action', [
   RenamePageOperationSchema,
   DeletePageOperationSchema,
   ReorderPagesOperationSchema,
-  ConfigureWidgetOperationSchema
+  ConfigureWidgetOperationSchema,
+  LinkWidgetsOperationSchema
 ])
 
 export const ManagePagesSchema = z.strictObject({
@@ -234,6 +274,8 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
         return this.executeReorderPages(docId, op)
       case 'configure_widget':
         return this.executeConfigureWidget(docId, op)
+      case 'link_widgets':
+        return this.executeLinkWidgets(docId, op)
     }
   }
 
@@ -522,6 +564,155 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
   }
 
   // ---------------------------------------------------------------------------
+  // Link Operations (Architecture B)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Execute link_widgets operation.
+   *
+   * Architecture B: All widget references use real sectionIds from previous responses.
+   * Validates that widgets exist on the specified page before applying links.
+   */
+  private async executeLinkWidgets(
+    docId: string,
+    op: Extract<PageOperation, { action: 'link_widgets' }>
+  ): Promise<OperationResult> {
+    const { viewId, links } = op
+
+    // Phase 1: Validate all widgets exist on the page
+    const widgetsOnPage = await this.fetchWidgetsOnPage(docId, viewId)
+    const widgetMap = new Map(widgetsOnPage.map((w) => [w.sectionId, w]))
+
+    // Collect all referenced sectionIds
+    const referencedIds = new Set<number>()
+    for (const linkSpec of links) {
+      referencedIds.add(linkSpec.source)
+      referencedIds.add(linkSpec.target)
+    }
+
+    // Validate all widgets exist on this page
+    for (const sectionId of referencedIds) {
+      if (!widgetMap.has(sectionId)) {
+        throw new Error(
+          `Widget ${sectionId} not found on page ${viewId}. ` +
+            `Available widgets: ${[...widgetMap.keys()].join(', ')}`
+        )
+      }
+    }
+
+    // Phase 2: Set up registry with all widgets
+    const registry = new WidgetRegistry()
+    for (const w of widgetsOnPage) {
+      registry.register(w.sectionId)
+    }
+
+    // Phase 3: Resolve and build link actions
+    const resolvedLinks: Array<{ sectionId: number; resolved: ResolvedLink }> = []
+
+    // Helper to get widget info
+    const getWidgetInfo = async (sectionId: number): Promise<LinkWidgetInfo> => {
+      const info = widgetMap.get(sectionId)
+      if (!info) {
+        throw new Error(`Widget ${sectionId} not found on page`)
+      }
+      const summaryCheck = await isSummaryTable(this.client, docId, info.tableRef)
+      return {
+        sectionId: info.sectionId,
+        tableId: info.tableId,
+        tableRef: info.tableRef,
+        widgetType: info.widgetType,
+        isSummaryTable: summaryCheck
+      }
+    }
+
+    for (const linkSpec of links) {
+      const targetInfo = widgetMap.get(linkSpec.target)
+      if (!targetInfo) {
+        throw new Error(`Target widget ${linkSpec.target} not found`)
+      }
+
+      // Update link source_widget to use the actual source sectionId
+      const linkWithSource = {
+        ...linkSpec.link,
+        source_widget: linkSpec.source as WidgetId
+      }
+
+      const resolved = await resolveLink(
+        this.client,
+        docId,
+        linkSpec.target,
+        targetInfo.tableId,
+        linkWithSource,
+        registry,
+        getWidgetInfo
+      )
+      resolvedLinks.push({ sectionId: linkSpec.target, resolved })
+    }
+
+    // Phase 4: Apply link actions
+    const actions = buildLinkActions(resolvedLinks)
+    if (actions.length > 0) {
+      await this.client.post<ApplyResponse>(`/docs/${docId}/apply`, actions, {
+        schema: ApplyResponseSchema,
+        context: `Configuring ${links.length} widget link(s)`
+      })
+    }
+
+    return {
+      action: 'link_widgets',
+      success: true,
+      details: {
+        viewId,
+        linksConfigured: links.length,
+        widgets: links.map((l) => ({
+          source: l.source,
+          target: l.target,
+          type: l.link.type
+        }))
+      }
+    }
+  }
+
+  /**
+   * Fetch all widgets on a page with metadata needed for link resolution.
+   */
+  private async fetchWidgetsOnPage(
+    docId: string,
+    viewId: number
+  ): Promise<
+    Array<{
+      sectionId: number
+      tableId: string
+      tableRef: number
+      widgetType: string
+    }>
+  > {
+    const response = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+      sql: `
+        SELECT
+          vs.id as sectionId,
+          t.tableId,
+          vs.tableRef,
+          vs.parentKey as widgetType
+        FROM _grist_Views_section vs
+        JOIN _grist_Tables t ON vs.tableRef = t.id
+        WHERE vs.parentId = ?
+      `,
+      args: [viewId]
+    })
+
+    return response.records.map((record) => {
+      const f = extractFields(record)
+      return {
+        sectionId: f.sectionId as number,
+        tableId: f.tableId as string,
+        tableRef: f.tableRef as number,
+        widgetType: f.widgetType as string
+      }
+    })
+  }
+
+  // ---------------------------------------------------------------------------
   // Helper Methods
   // ---------------------------------------------------------------------------
 
@@ -632,20 +823,34 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
   handler: managePages,
   docs: {
     overview:
-      'Create pages with declarative layouts specifying widget arrangement (cols/rows splits) and linking. ' +
-      'Modify layouts with set_layout, read with get_layout. ' +
-      'Also supports: rename_page, delete_page, reorder_pages, configure_widget.\n\n' +
+      'Create pages with declarative layouts specifying widget arrangement (cols/rows splits). ' +
+      'Use link_widgets to establish relationships between widgets after creation. ' +
+      'Operations: create_page, set_layout, get_layout, link_widgets, rename_page, delete_page, reorder_pages, configure_widget.\n\n' +
+      'ARCHITECTURE B (Two-Step Flow):\n' +
+      '1. create_page returns sectionIds: { viewId: 42, sectionIds: [101, 102] }\n' +
+      '2. link_widgets uses those sectionIds to establish links\n\n' +
       'LINK TYPES (7 types, defined on the target widget):\n' +
-      '- child_of: Master-detail filter - this widget shows children of selected row (target_column is Ref to source)\n' +
-      '- matched_by: Column matching - filter by matching column values between tables\n' +
+      '- child_of: Master-detail filter - target_column is Ref to source table\n' +
+      '- matched_by: Column matching - filter by matching column values\n' +
       '- detail_of: Summary-to-detail - show records grouped in selected summary row\n' +
       '- breakdown_of: Summary drill - more detailed breakdown of source summary\n' +
       "- listed_in: RefList display - show records listed in source's RefList column\n" +
-      '- synced_with: Cursor sync - sync cursor position (same table, both widgets)\n' +
-      "- referenced_by: Reference follow - cursor jumps to record referenced by source's Ref column",
+      '- synced_with: Cursor sync - sync cursor position (same table)\n' +
+      '- referenced_by: Reference follow - cursor jumps to referenced record\n\n' +
+      'LINK TYPE CONSTRAINTS:\n' +
+      '- child_of: target_column must be Ref pointing to source table\n' +
+      '- matched_by: Both columns typically reference same third table\n' +
+      '- detail_of: Source MUST be a summary table\n' +
+      '- breakdown_of: BOTH widgets MUST be summary tables (source less detailed)\n' +
+      '- listed_in: source_column MUST be RefList type\n' +
+      '- synced_with: BOTH widgets MUST show the same table\n' +
+      '- referenced_by: source_column MUST be Ref pointing to target table\n\n' +
+      'RELATED TOOLS:\n' +
+      '- Row/column formatting: grist_manage_conditional_rules (scope: row|column|field)\n' +
+      '- Chart configuration: Use x_axis/y_axis parameters in widget definition',
     examples: [
       {
-        desc: 'Create page with master-detail layout (child_of)',
+        desc: 'Create page then link widgets (master-detail)',
         input: {
           docId: 'abc123',
           operations: [
@@ -654,16 +859,8 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
               name: 'Company Dashboard',
               layout: {
                 cols: [
-                  { id: 'companies', table: 'Companies', widget: 'grid' },
-                  {
-                    table: 'Contacts',
-                    widget: 'card_list',
-                    link: {
-                      type: 'child_of',
-                      source_widget: 'companies',
-                      target_column: 'Company'
-                    }
-                  }
+                  { table: 'Companies', widget: 'grid' },
+                  { table: 'Contacts', widget: 'card_list' }
                 ]
               }
             }
@@ -671,47 +868,41 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
         }
       },
       {
-        desc: 'Create page with cursor sync (synced_with)',
+        desc: 'Link widgets using sectionIds from create_page response',
         input: {
           docId: 'abc123',
           operations: [
             {
-              action: 'create_page',
-              name: 'Order Details',
-              layout: {
-                cols: [
-                  { id: 'orders', table: 'Orders', widget: 'grid' },
-                  {
-                    table: 'Orders',
-                    widget: 'card',
-                    link: { type: 'synced_with', source_widget: 'orders' }
-                  }
-                ]
-              }
+              action: 'link_widgets',
+              viewId: 42,
+              links: [
+                {
+                  source: 101,
+                  target: 102,
+                  link: { type: 'child_of', source_widget: 101, target_column: 'Company' }
+                }
+              ]
             }
           ]
         }
       },
       {
-        desc: 'Column matching across tables (matched_by)',
+        desc: 'Create page with chart and configure axes',
         input: {
           docId: 'abc123',
           operations: [
             {
               action: 'create_page',
-              name: 'Customer View',
+              name: 'Sales Dashboard',
               layout: {
                 cols: [
-                  { id: 'invoices', table: 'Invoices', widget: 'grid' },
+                  { table: 'Sales', widget: 'grid' },
                   {
-                    table: 'Payments',
-                    widget: 'grid',
-                    link: {
-                      type: 'matched_by',
-                      source_widget: 'invoices',
-                      source_column: 'Customer',
-                      target_column: 'Customer'
-                    }
+                    table: 'Sales',
+                    widget: 'chart',
+                    chartType: 'bar',
+                    x_axis: 'Region',
+                    y_axis: ['Revenue', 'Cost']
                   }
                 ]
               }
@@ -774,8 +965,8 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
       { error: 'Table not found', solution: 'Use grist_get_tables to list tables' },
       { error: 'Section not found', solution: 'Use get_layout to see widget section IDs' },
       {
-        error: 'Widget reference not found',
-        solution: 'Ensure id is defined before being referenced in link'
+        error: 'Widget not found on page',
+        solution: 'Use sectionIds from create_page response for link_widgets'
       },
       {
         error: 'Orphaned widgets',

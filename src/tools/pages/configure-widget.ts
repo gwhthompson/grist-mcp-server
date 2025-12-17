@@ -36,6 +36,7 @@ import {
 import type { SectionId, ViewId } from '../../types/advanced.js'
 import type { ApplyResponse, LayoutSpec, SQLQueryResponse, UserAction } from '../../types.js'
 import { first } from '../../utils/array-helpers.js'
+import { extractFields } from '../../utils/grist-field-extractor.js'
 import { validateRetValues } from '../../validators/apply-response.js'
 import { GristTool } from '../base/GristTool.js'
 import { fetchWidgetTableMetadata, getFirstSectionId } from './shared.js'
@@ -387,14 +388,34 @@ class ConfigureWidgetTool extends GristTool<typeof ConfigureWidgetSchema, unknow
             partialUpdate.description = op.description
           }
 
-          // TODO: visible_fields implementation
-          // The visible_fields parameter (defined in schema) is not yet implemented.
-          // Implementation would require:
-          // 1. Query _grist_Views_section_field for fields in this section
-          // 2. Set visibleCol to false for all fields not in visible_fields list
-          // 3. Set visibleCol to true for fields in visible_fields list
-          // 4. Handle field ordering (manualSort or position updates)
-          // Complexity: Moderate - requires careful handling of field visibility state
+          // Handle visible_fields - set which columns are visible in the widget
+          if (op.visible_fields !== undefined && op.visible_fields.length > 0) {
+            // Get the widget's table name from existing metadata
+            const tableResp = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+              sql: `SELECT t.tableId
+                    FROM _grist_Views_section vs
+                    JOIN _grist_Tables t ON vs.tableRef = t.id
+                    WHERE vs.id = ?`,
+              args: [sectionId]
+            })
+
+            if (tableResp.records.length === 0) {
+              throw new Error(`Could not find table for widget ${op.widget}`)
+            }
+
+            const tableRecord = tableResp.records[0] as { fields?: Record<string, unknown> }
+            const tableId = (tableRecord.fields?.tableId ??
+              (tableRecord as unknown as Record<string, unknown>).tableId) as string
+
+            // Build field visibility actions
+            const visibleFieldsActions = await this.setVisibleFields(
+              docId,
+              sectionId,
+              tableId,
+              op.visible_fields
+            )
+            actions.push(...visibleFieldsActions)
+          }
 
           // Validate update
           validateViewSectionUpdate(partialUpdate)
@@ -535,6 +556,127 @@ class ConfigureWidgetTool extends GristTool<typeof ConfigureWidgetSchema, unknow
     }
 
     return resolved
+  }
+
+  /**
+   * Set the visible fields for a widget.
+   *
+   * In Grist, field visibility is presence-based:
+   * - A column is visible if it has a record in `_grist_Views_section_field`
+   * - Field order is controlled by `parentPos`
+   *
+   * This method ensures only the specified columns are visible, in the specified order.
+   *
+   * @param docId - Document ID
+   * @param sectionId - Widget section ID
+   * @param tableId - Table name for the widget
+   * @param visibleFields - Array of column names to show (in display order)
+   * @returns Array of UserActions to apply
+   */
+  private async setVisibleFields(
+    docId: string,
+    sectionId: number,
+    tableId: string,
+    visibleFields: string[]
+  ): Promise<UserAction[]> {
+    // 1. Get all columns in the table (colId → colRef mapping)
+    const columnsResp = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+      sql: `SELECT c.id as colRef, c.colId
+            FROM _grist_Tables_column c
+            JOIN _grist_Tables t ON c.parentId = t.id
+            WHERE t.tableId = ?`,
+      args: [tableId]
+    })
+
+    const colIdToColRef = new Map<string, number>()
+    for (const record of columnsResp.records) {
+      const fields = extractFields(record)
+      colIdToColRef.set(fields.colId as string, fields.colRef as number)
+    }
+
+    // 2. Get existing section fields (colRef → fieldId mapping)
+    const fieldsResp = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+      sql: `SELECT f.id as fieldId, f.colRef
+            FROM _grist_Views_section_field f
+            WHERE f.parentId = ?`,
+      args: [sectionId]
+    })
+
+    const existingFields = new Map<number, number>() // colRef → fieldId
+    for (const record of fieldsResp.records) {
+      const fields = extractFields(record)
+      existingFields.set(fields.colRef as number, fields.fieldId as number)
+    }
+
+    // 3. Build desired colRefs list with validation
+    const desiredColRefs: number[] = []
+    for (const colName of visibleFields) {
+      const colRef = colIdToColRef.get(colName)
+      if (colRef === undefined) {
+        throw new ValidationError(
+          'visible_fields',
+          colName,
+          `Column "${colName}" not found in table "${tableId}". ` +
+            `Available columns: ${[...colIdToColRef.keys()].filter((k) => !k.startsWith('gristHelper_')).join(', ')}`
+        )
+      }
+      desiredColRefs.push(colRef)
+    }
+
+    const desiredColRefSet = new Set(desiredColRefs)
+    const actions: UserAction[] = []
+
+    // 4. Remove unwanted fields (columns not in visibleFields)
+    const fieldIdsToRemove: number[] = []
+    for (const [colRef, fieldId] of existingFields) {
+      if (!desiredColRefSet.has(colRef)) {
+        fieldIdsToRemove.push(fieldId)
+      }
+    }
+    if (fieldIdsToRemove.length > 0) {
+      actions.push(['BulkRemoveRecord', '_grist_Views_section_field', fieldIdsToRemove])
+    }
+
+    // 5. Collect fields to add and update
+    const fieldsToAdd: { colRef: number; parentPos: number }[] = []
+    const fieldsToUpdate: { fieldId: number; parentPos: number }[] = []
+    for (let i = 0; i < desiredColRefs.length; i++) {
+      const colRef = desiredColRefs[i] as number
+      const fieldId = existingFields.get(colRef)
+      if (fieldId !== undefined) {
+        // Update position for existing field
+        fieldsToUpdate.push({ fieldId, parentPos: i + 1 })
+      } else {
+        // Add new field
+        fieldsToAdd.push({ colRef, parentPos: i + 1 })
+      }
+    }
+
+    // 6. Update existing field positions using BulkUpdateRecord
+    if (fieldsToUpdate.length > 0) {
+      actions.push([
+        'BulkUpdateRecord',
+        '_grist_Views_section_field',
+        fieldsToUpdate.map((f) => f.fieldId),
+        { parentPos: fieldsToUpdate.map((f) => f.parentPos) }
+      ])
+    }
+
+    // 7. Add missing fields using BulkAddRecord
+    if (fieldsToAdd.length > 0) {
+      actions.push([
+        'BulkAddRecord',
+        '_grist_Views_section_field',
+        fieldsToAdd.map(() => null),
+        {
+          parentId: fieldsToAdd.map(() => sectionId),
+          colRef: fieldsToAdd.map((f) => f.colRef),
+          parentPos: fieldsToAdd.map((f) => f.parentPos)
+        }
+      ])
+    }
+
+    return actions
   }
 }
 

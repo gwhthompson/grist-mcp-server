@@ -332,6 +332,19 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     // Handle visibleCol setup for Ref columns
     await this.setupVisibleColForTable(docId, tableId, resolvedColumns)
 
+    // Process conditional formatting rules for each column (rulesOptions)
+    let totalRulesApplied = 0
+    for (const column of resolvedColumns) {
+      const rules = extractRulesOptions(column)
+      if (rules && rules.length > 0) {
+        const cfService = new ConditionalFormattingService(this.client, 'column')
+        for (const rule of rules) {
+          await cfService.addRule(docId, tableId, { tableId, colId: column.colId }, rule)
+          totalRulesApplied++
+        }
+      }
+    }
+
     // Invalidate cache
     this.schemaCache.invalidateDocument(toDocId(docId))
 
@@ -340,7 +353,8 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
       success: true,
       details: {
         tableId: tableId,
-        columnsCreated: op.columns.length
+        columnsCreated: op.columns.length,
+        ...(totalRulesApplied > 0 && { conditional_formatting_rules: totalRulesApplied })
       }
     }
   }
@@ -959,7 +973,12 @@ export const MANAGE_SCHEMA_TOOL: ToolDefinition = {
     overview:
       'Batch schema operations: tables (create, rename, delete), columns (add, modify, remove, rename), ' +
       'and summary tables. Operations execute sequentially. ' +
-      '**Ref columns:** Use `type: "Ref"` with `refTable: "TableName"`.',
+      '**Ref columns:** Use `type: "Ref"` with `refTable: "TableName"`.\n\n' +
+      '**Summary tables:** Named `{SourceTable}_summary_{GroupByColumns}` ' +
+      '(e.g., Tasks_summary_Status for Tasks grouped by Status).\n\n' +
+      'RELATED TOOLS:\n' +
+      '- Conditional formatting: grist_manage_conditional_rules (column/row/field scope)\n' +
+      '- Page layouts: grist_manage_pages (widget arrangement and linking)',
     examples: [
       {
         desc: 'Create table with columns',

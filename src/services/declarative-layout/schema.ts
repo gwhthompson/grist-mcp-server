@@ -15,11 +15,13 @@ import { z } from 'zod'
 // =============================================================================
 
 /**
- * Widget identifier can be:
- * - number: existing section ID
- * - string: local ID defined in the same layout
+ * Widget identifier: section ID only.
+ *
+ * Architecture B: All widget references use real sectionIds from the database.
+ * String IDs were removed to eliminate input/output divergence - LLMs now use
+ * the same IDs they receive in responses.
  */
-export const WidgetIdSchema = z.union([z.number().int().positive(), z.string().min(1)])
+export const WidgetIdSchema = z.number().int().positive()
 
 export type WidgetId = z.infer<typeof WidgetIdSchema>
 
@@ -186,25 +188,62 @@ export type DeclarativeChartType = z.infer<typeof DeclarativeChartTypeSchema>
 // Pane Schemas (non-recursive parts)
 // =============================================================================
 
-/** Existing widget with options */
+/**
+ * Existing widget reference with options.
+ *
+ * Architecture B: Removed `link` field - linking is now via `link_widgets` operation.
+ */
 export const ExistingPaneSchema = z.strictObject({
   section: z.number().int().positive(),
-  weight: z.number().positive().optional(),
-  link: LinkSchema.optional()
+  weight: z.number().positive().optional()
 })
 
 export type ExistingPane = z.infer<typeof ExistingPaneSchema>
 
-/** New widget definition */
+/**
+ * Chart display options for configuring axis behavior, stacking, etc.
+ */
+export const ChartOptionsSchema = z
+  .strictObject({
+    multiseries: z.boolean().optional(),
+    lineConnectGaps: z.boolean().optional(),
+    lineMarkers: z.boolean().optional(),
+    stacked: z.boolean().optional(),
+    errorBars: z.boolean().optional(),
+    invertYAxis: z.boolean().optional(),
+    logYAxis: z.boolean().optional(),
+    orientation: z.enum(['h', 'v']).optional(),
+    donutHoleSize: z.number().min(0).max(1).optional(),
+    showTotal: z.boolean().optional(),
+    textSize: z.number().positive().optional(),
+    aggregate: z.string().optional()
+  })
+  .optional()
+
+export type ChartOptions = z.infer<typeof ChartOptionsSchema>
+
+/**
+ * New widget definition.
+ *
+ * Architecture B: Removed `id` and `link` fields.
+ * - `id` was for local string IDs that didn't persist in responses
+ * - `link` is now handled via separate `link_widgets` operation
+ *
+ * This ensures LLMs use the sectionIds returned in responses for linking.
+ */
 export const NewPaneSchema = z
   .strictObject({
     table: z.string().min(1),
     widget: DeclarativeWidgetTypeSchema.default('grid'),
-    id: z.string().min(1).optional(),
     title: z.string().min(1).optional(),
     chartType: DeclarativeChartTypeSchema.optional(),
-    weight: z.number().positive().optional(),
-    link: LinkSchema.optional()
+    /** X-axis column name (for chart widgets) */
+    x_axis: z.string().optional(),
+    /** Y-axis column names / series (for chart widgets) */
+    y_axis: z.array(z.string()).optional(),
+    /** Chart display options */
+    chart_options: ChartOptionsSchema,
+    weight: z.number().positive().optional()
   })
   .refine((data) => data.widget !== 'chart' || data.chartType !== undefined, {
     message: 'chartType is required when widget is "chart"',
@@ -356,31 +395,8 @@ export function getWeight(node: LayoutNode): number | undefined {
   return undefined
 }
 
-/**
- * Extract all local IDs defined in a layout.
- * Used for validating uniqueness and resolving link targets.
- */
-export function collectLocalIds(node: LayoutNode): Set<string> {
-  const ids = new Set<string>()
-
-  function walk(n: LayoutNode): void {
-    if (isNewPane(n) && n.id) {
-      if (ids.has(n.id)) {
-        throw new Error(`Duplicate local ID "${n.id}" in layout`)
-      }
-      ids.add(n.id)
-    }
-    if (isColSplit(n)) {
-      n.cols.forEach(walk)
-    }
-    if (isRowSplit(n)) {
-      n.rows.forEach(walk)
-    }
-  }
-
-  walk(node)
-  return ids
-}
+// NOTE: collectLocalIds was removed in Architecture B.
+// Local string IDs are no longer supported - all widget references use real sectionIds.
 
 /**
  * Collect all new panes defined in a layout.

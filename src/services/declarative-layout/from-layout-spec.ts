@@ -6,7 +6,7 @@
  */
 
 import type { LayoutSpec } from '../../types.js'
-import type { LayoutNode, Link } from './schema.js'
+import type { LayoutNode } from './schema.js'
 
 // =============================================================================
 // Types
@@ -40,34 +40,22 @@ export interface FromLayoutSpecOptions {
 /**
  * Transform a LayoutSpec to declarative format.
  *
+ * Architecture B: Links are no longer embedded in the layout structure.
+ * Link information is returned separately in widget metadata (see formatGetLayoutResult).
+ *
  * @param spec - Grist's internal LayoutSpec
- * @param options - Optional configuration for enriching output
+ * @param options - Optional configuration for enriching output (widgets for metadata)
  * @returns Declarative layout node
  */
 export function fromLayoutSpec(spec: LayoutSpec, options: FromLayoutSpecOptions = {}): LayoutNode {
-  const { widgets, includeLinks = false } = options
+  // Note: includeLinks option is ignored in Architecture B - links not in layout
+  const { includeLinks: _ } = options
+  void _ // Suppress unused variable warning
 
   function transform(s: LayoutSpec): LayoutNode {
     if (s.type === 'leaf') {
-      const sectionId = s.leaf
-
-      // If we have widget info and want to include links
-      if (widgets && includeLinks) {
-        const info = widgets.get(sectionId)
-        if (info?.linkSrcSectionRef && info.linkSrcSectionRef > 0) {
-          // Has linking - return as ExistingPane with link
-          const link = reconstructLink(info)
-          if (link) {
-            return {
-              section: sectionId,
-              link
-            }
-          }
-        }
-      }
-
-      // Simple section reference
-      return sectionId
+      // Architecture B: Just return section ID, no embedded links
+      return s.leaf
     }
 
     // Split node
@@ -88,109 +76,9 @@ export function fromLayoutSpec(spec: LayoutSpec, options: FromLayoutSpecOptions 
   return transform(spec)
 }
 
-// =============================================================================
-// Link Reconstruction
-// =============================================================================
-
-/**
- * Reconstruct a Link from widget linking metadata.
- *
- * This is a best-effort reconstruction based on the colRef values.
- * Some link types require additional context that may not be available,
- * so we make educated guesses based on the colRef pattern.
- *
- * ColRef patterns:
- * - Both 0: synced_with, detail_of, or breakdown_of (cursor sync or summary)
- * - Source set, target 0: referenced_by or listed_in (Ref/RefList follow)
- * - Target set, source 0: child_of (master-detail filter)
- * - Both set: matched_by (column matching filter)
- */
-function reconstructLink(info: WidgetInfo): Link | undefined {
-  const { linkSrcSectionRef, linkSrcColRef, linkTargetColRef } = info
-
-  if (!linkSrcSectionRef || linkSrcSectionRef <= 0) {
-    return undefined
-  }
-
-  // Both colRefs are 0: cursor sync or summary relationship
-  if (
-    (linkSrcColRef === 0 || linkSrcColRef === undefined) &&
-    (linkTargetColRef === 0 || linkTargetColRef === undefined)
-  ) {
-    // Could be synced_with, detail_of, or breakdown_of
-    // Default to synced_with (would need table relationship info to distinguish)
-    return {
-      type: 'synced_with',
-      source_widget: linkSrcSectionRef
-    }
-  }
-
-  // Source colRef set, target is 0: referenced_by or listed_in
-  if (
-    linkSrcColRef &&
-    linkSrcColRef > 0 &&
-    (linkTargetColRef === 0 || linkTargetColRef === undefined)
-  ) {
-    // Could be referenced_by (Ref) or listed_in (RefList) - would need column type
-    // Default to referenced_by with placeholder column name
-    return {
-      type: 'referenced_by',
-      source_widget: linkSrcSectionRef,
-      source_column: `colRef_${linkSrcColRef}` // Placeholder - would need resolution
-    }
-  }
-
-  // Target colRef set: child_of or matched_by (filter relationship)
-  if (linkTargetColRef && linkTargetColRef > 0) {
-    if (linkSrcColRef && linkSrcColRef > 0) {
-      // Col→Col filter: matched_by
-      return {
-        type: 'matched_by',
-        source_widget: linkSrcSectionRef,
-        source_column: `colRef_${linkSrcColRef}`,
-        target_column: `colRef_${linkTargetColRef}`
-      }
-    } else {
-      // Row→Col filter: child_of (master-detail)
-      return {
-        type: 'child_of',
-        source_widget: linkSrcSectionRef,
-        target_column: `colRef_${linkTargetColRef}`
-      }
-    }
-  }
-
-  return undefined
-}
-
-// =============================================================================
-// Enhanced Transform with Column Resolution
-// =============================================================================
-
-/**
- * Transform LayoutSpec to declarative format with resolved column names.
- *
- * @param spec - Grist's internal LayoutSpec
- * @param widgets - Widget metadata map
- * @param resolveColName - Async function to resolve colRef to colId
- * @returns Declarative layout with resolved column names in links
- */
-export async function fromLayoutSpecWithResolution(
-  spec: LayoutSpec,
-  widgets: Map<number, WidgetInfo>,
-  _resolveColName: (tableRef: number, colRef: number) => Promise<string | undefined>
-): Promise<LayoutNode> {
-  // First, collect all colRefs that need resolution
-  const _colRefsToResolve = new Map<string, { tableRef: number; colRef: number }>()
-
-  for (const _info of widgets.values()) {
-    // We'd need tableRef - this is a limitation of the current approach
-    // For now, return the basic transform
-  }
-
-  // Basic transform without full resolution
-  return fromLayoutSpec(spec, { widgets, includeLinks: true })
-}
+// NOTE: Link reconstruction code was removed in Architecture B.
+// Links are no longer embedded in the layout schema - use link_widgets operation.
+// Widget link metadata (linkSrcSectionRef, etc.) is still returned in widget info.
 
 // =============================================================================
 // Output Formatting

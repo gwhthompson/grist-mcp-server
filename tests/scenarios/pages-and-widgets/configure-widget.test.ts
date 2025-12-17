@@ -808,4 +808,225 @@ describe('Configure Widget - Integration Tests', () => {
       expect(result.structuredContent).toHaveProperty('operationsCompleted')
     })
   })
+
+  describe('visible_fields operation', () => {
+    it('should set visible fields to a subset of columns', async () => {
+      // Create page with Orders widget (has multiple columns)
+      await buildPage(context.toolContext, {
+        docId,
+        page_name: 'Visible Fields Test Page',
+        config: {
+          pattern: 'custom',
+          widgets: [
+            {
+              table: 'Orders',
+              widget_type: 'grid',
+              title: 'Orders Widget'
+            }
+          ]
+        },
+        response_format: 'json'
+      })
+
+      // Set visible_fields to only show OrderID and Amount
+      const result = await configureWidget(context.toolContext, {
+        docId,
+        operations: [
+          {
+            action: 'modify',
+            page_name: 'Visible Fields Test Page',
+            widget: 'Orders Widget',
+            visible_fields: ['OrderID', 'Amount']
+          }
+        ],
+        response_format: 'json'
+      })
+
+      expect(result).toBeDefined()
+      const responseText = result.content[0].text
+      expect(responseText).toContain('success')
+      expect(responseText).toContain('true')
+      expect(responseText).toContain('Modified widget')
+
+      // Verify only specified fields are visible by querying _grist_Views_section_field
+      const fieldsResp = await client.post<{
+        records: Array<{ fields: Record<string, unknown> }>
+      }>(`/docs/${docId}/sql`, {
+        sql: `SELECT c.colId
+                FROM _grist_Views_section_field f
+                JOIN _grist_Tables_column c ON f.colRef = c.id
+                JOIN _grist_Views_section vs ON f.parentId = vs.id
+                WHERE vs.title = ?
+                ORDER BY f.parentPos`,
+        args: ['Orders Widget']
+      })
+
+      const visibleColumns = fieldsResp.records.map((r) => {
+        const fields = r.fields || (r as unknown as Record<string, unknown>)
+        return fields.colId
+      })
+
+      // Should have exactly the 2 specified columns in order
+      expect(visibleColumns).toEqual(['OrderID', 'Amount'])
+    })
+
+    it('should reorder fields according to visible_fields order', async () => {
+      // Create page with Orders widget
+      await buildPage(context.toolContext, {
+        docId,
+        page_name: 'Field Reorder Test Page',
+        config: {
+          pattern: 'custom',
+          widgets: [
+            {
+              table: 'Orders',
+              widget_type: 'grid',
+              title: 'Reorder Widget'
+            }
+          ]
+        },
+        response_format: 'json'
+      })
+
+      // Set fields in reverse order: Amount, OrderID
+      const result = await configureWidget(context.toolContext, {
+        docId,
+        operations: [
+          {
+            action: 'modify',
+            page_name: 'Field Reorder Test Page',
+            widget: 'Reorder Widget',
+            visible_fields: ['Amount', 'OrderID']
+          }
+        ],
+        response_format: 'json'
+      })
+
+      expect(result).toBeDefined()
+      expect(result.content[0].text).toContain('success')
+
+      // Verify field order
+      const fieldsResp = await client.post<{
+        records: Array<{ fields: Record<string, unknown> }>
+      }>(`/docs/${docId}/sql`, {
+        sql: `SELECT c.colId
+                FROM _grist_Views_section_field f
+                JOIN _grist_Tables_column c ON f.colRef = c.id
+                JOIN _grist_Views_section vs ON f.parentId = vs.id
+                WHERE vs.title = ?
+                ORDER BY f.parentPos`,
+        args: ['Reorder Widget']
+      })
+
+      const visibleColumns = fieldsResp.records.map((r) => {
+        const fields = r.fields || (r as unknown as Record<string, unknown>)
+        return fields.colId
+      })
+
+      // Should have fields in the specified order
+      expect(visibleColumns).toEqual(['Amount', 'OrderID'])
+    })
+
+    it('should return error for non-existent column name', async () => {
+      // Create page with Orders widget
+      await buildPage(context.toolContext, {
+        docId,
+        page_name: 'Invalid Column Test Page',
+        config: {
+          pattern: 'custom',
+          widgets: [
+            {
+              table: 'Orders',
+              widget_type: 'grid',
+              title: 'Invalid Column Widget'
+            }
+          ]
+        },
+        response_format: 'json'
+      })
+
+      // Try to set visible_fields with non-existent column
+      const result = await configureWidget(context.toolContext, {
+        docId,
+        operations: [
+          {
+            action: 'modify',
+            page_name: 'Invalid Column Test Page',
+            widget: 'Invalid Column Widget',
+            visible_fields: ['OrderID', 'NonExistentColumn']
+          }
+        ],
+        response_format: 'json'
+      })
+
+      expect(result).toBeDefined()
+      expect(result).toHaveErrorResponse(/NonExistentColumn.*not found/i)
+    })
+
+    it('should combine visible_fields with other modify options', async () => {
+      // Create page with Products widget
+      await buildPage(context.toolContext, {
+        docId,
+        page_name: 'Combined Modify Test Page',
+        config: {
+          pattern: 'custom',
+          widgets: [
+            {
+              table: 'Products',
+              widget_type: 'grid',
+              title: 'Products Combined Widget'
+            }
+          ]
+        },
+        response_format: 'json'
+      })
+
+      // Modify title AND set visible_fields in same operation
+      const result = await configureWidget(context.toolContext, {
+        docId,
+        operations: [
+          {
+            action: 'modify',
+            page_name: 'Combined Modify Test Page',
+            widget: 'Products Combined Widget',
+            title: 'Renamed Products Widget',
+            visible_fields: ['ProductName', 'Price']
+          }
+        ],
+        response_format: 'json'
+      })
+
+      expect(result).toBeDefined()
+      expect(result.content[0].text).toContain('success')
+      expect(result.content[0].text).toContain('Modified widget')
+
+      // Verify title was changed
+      const widgetResp = await client.post<{
+        records: Array<{ fields: Record<string, unknown> }>
+      }>(`/docs/${docId}/sql`, {
+        sql: `SELECT title FROM _grist_Views_section WHERE title = ?`,
+        args: ['Renamed Products Widget']
+      })
+      expect(widgetResp.records.length).toBe(1)
+
+      // Verify fields are set
+      const fieldsResp = await client.post<{
+        records: Array<{ fields: Record<string, unknown> }>
+      }>(`/docs/${docId}/sql`, {
+        sql: `SELECT c.colId
+                FROM _grist_Views_section_field f
+                JOIN _grist_Tables_column c ON f.colRef = c.id
+                JOIN _grist_Views_section vs ON f.parentId = vs.id
+                WHERE vs.title = ?
+                ORDER BY f.parentPos`,
+        args: ['Renamed Products Widget']
+      })
+
+      const visibleColumns = fieldsResp.records.map((r) => {
+        const fields = r.fields || (r as unknown as Record<string, unknown>)
+        return fields.colId
+      })
+      expect(visibleColumns).toEqual(['ProductName', 'Price'])
+    })
+  })
 })

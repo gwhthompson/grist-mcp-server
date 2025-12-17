@@ -80,12 +80,7 @@ export function toLayoutSpec(layout: LayoutNode): TransformResult {
 
     // Existing pane with options
     if (isExistingPane(node)) {
-      if (node.link) {
-        existingWidgetLinks.push({
-          sectionId: node.section,
-          link: node.link
-        })
-      }
+      // Note: link handling removed in Architecture B - use link_widgets operation
       return { type: 'leaf', leaf: node.section }
     }
 

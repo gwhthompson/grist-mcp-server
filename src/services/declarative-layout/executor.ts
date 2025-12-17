@@ -12,21 +12,15 @@ import { toGristWidgetType } from '../../schemas/pages-widgets.js'
 import type { ApplyResponse, LayoutSpec } from '../../types.js'
 import type { GristClient } from '../grist-client.js'
 import {
+  buildChartConfigAction,
   buildCreateViewSectionAction,
   buildUpdateLayoutAction,
+  configureChartAxes,
   processCreateViewSectionResults
 } from '../pages-builder.js'
-import { isSummaryTable } from '../summary-table-resolver.js'
 import { formatGetLayoutResult } from './from-layout-spec.js'
-import type { ResolvedLink, WidgetInfo } from './link-resolver.js'
-import { buildLinkActions, resolveLink } from './link-resolver.js'
 import type { LayoutNode } from './schema.js'
-import {
-  collectExistingSectionIds,
-  collectLocalIds,
-  collectNewPanes,
-  LayoutNodeSchema
-} from './schema.js'
+import { collectExistingSectionIds, collectNewPanes, LayoutNodeSchema } from './schema.js'
 import { replacePlaceholders, toLayoutSpec } from './to-layout-spec.js'
 import { WidgetRegistry } from './widget-registry.js'
 
@@ -75,7 +69,7 @@ export async function executeCreatePage(
 ): Promise<CreatePageResult> {
   // Phase 1: Validate and collect
   const validatedLayout = LayoutNodeSchema.parse(layout)
-  collectLocalIds(validatedLayout) // Validates uniqueness, throws on duplicates
+  // Note: collectLocalIds was removed in Architecture B - no string IDs
 
   const newPanes = collectNewPanes(validatedLayout)
   if (newPanes.length === 0) {
@@ -139,8 +133,8 @@ export async function executeCreatePage(
       viewRef = result.viewRef
     }
 
-    // Register the widget
-    registry.register(result.sectionRef, widget.id)
+    // Register the widget (no local ID in Architecture B)
+    registry.register(result.sectionRef)
     sectionIds.push(result.sectionRef)
 
     // Map placeholder to real ID
@@ -150,10 +144,7 @@ export async function executeCreatePage(
       }
     }
 
-    // Queue link if present
-    if (widget.link) {
-      registry.queueLink(result.sectionRef, widget.link, widget.table)
-    }
+    // Note: link handling removed in Architecture B - use link_widgets operation
 
     // Set title if specified
     if (widget.title) {
@@ -162,18 +153,30 @@ export async function executeCreatePage(
       ])
     }
 
-    // Set chart type if chart widget
+    // Configure chart widget (type, options, axes)
     if (widget.widget === 'chart' && widget.chartType) {
-      await client.post(`/docs/${docId}/apply`, [
-        [
-          'UpdateRecord',
-          '_grist_Views_section',
+      // Set chart type and options
+      const chartAction = buildChartConfigAction(
+        result.sectionRef,
+        widget.chartType,
+        widget.chart_options ?? undefined
+      )
+      await client.post(`/docs/${docId}/apply`, [chartAction])
+
+      // Configure chart axes if specified
+      if (widget.x_axis || (widget.y_axis && widget.y_axis.length > 0)) {
+        const axisActions = await configureChartAxes(
+          client,
+          docId,
           result.sectionRef,
-          {
-            chartType: widget.chartType
-          }
-        ]
-      ])
+          widget.table,
+          widget.x_axis,
+          widget.y_axis
+        )
+        if (axisActions.length > 0) {
+          await client.post(`/docs/${docId}/apply`, axisActions)
+        }
+      }
     }
   }
 
@@ -189,8 +192,8 @@ export async function executeCreatePage(
     ['UpdateRecord', '_grist_Views', viewRef, { name: pageName }]
   ])
 
-  // Phase 5: Configure links
-  await configureLinks(client, docId, registry, viewRef)
+  // Note: Phase 5 (link configuration) removed in Architecture B
+  // Use link_widgets operation to configure widget links after page creation
 
   return {
     success: true,
@@ -219,7 +222,7 @@ export async function executeSetLayout(
 ): Promise<SetLayoutResult> {
   // Phase 1: Validate layout
   const validatedLayout = LayoutNodeSchema.parse(layout)
-  collectLocalIds(validatedLayout)
+  // Note: collectLocalIds was removed in Architecture B - no string IDs
 
   // Phase 2: Get existing widgets and validate
   const existingWidgets = await getExistingWidgets()
@@ -292,7 +295,7 @@ export async function executeSetLayout(
       throw new Error(`Failed to create widget for table "${widget.table}"`)
     }
 
-    registry.register(result.sectionRef, widget.id)
+    registry.register(result.sectionRef)
 
     for (const [placeholder, index] of placeholderMap) {
       if (index === i) {
@@ -300,9 +303,7 @@ export async function executeSetLayout(
       }
     }
 
-    if (widget.link) {
-      registry.queueLink(result.sectionRef, widget.link, widget.table)
-    }
+    // Note: link handling removed in Architecture B - use link_widgets operation
 
     if (widget.title) {
       await client.post(`/docs/${docId}/apply`, [
@@ -310,10 +311,30 @@ export async function executeSetLayout(
       ])
     }
 
+    // Configure chart widget (type, options, axes)
     if (widget.widget === 'chart' && widget.chartType) {
-      await client.post(`/docs/${docId}/apply`, [
-        ['UpdateRecord', '_grist_Views_section', result.sectionRef, { chartType: widget.chartType }]
-      ])
+      // Set chart type and options
+      const chartAction = buildChartConfigAction(
+        result.sectionRef,
+        widget.chartType,
+        widget.chart_options ?? undefined
+      )
+      await client.post(`/docs/${docId}/apply`, [chartAction])
+
+      // Configure chart axes if specified
+      if (widget.x_axis || (widget.y_axis && widget.y_axis.length > 0)) {
+        const axisActions = await configureChartAxes(
+          client,
+          docId,
+          result.sectionRef,
+          widget.table,
+          widget.x_axis,
+          widget.y_axis
+        )
+        if (axisActions.length > 0) {
+          await client.post(`/docs/${docId}/apply`, axisActions)
+        }
+      }
     }
   }
 
@@ -321,15 +342,10 @@ export async function executeSetLayout(
   const finalLayoutSpec = replacePlaceholders(preliminarySpec, placeholderToSectionId)
   await client.post(`/docs/${docId}/apply`, [buildUpdateLayoutAction(viewId, finalLayoutSpec)])
 
-  // Phase 6: Configure links
-  for (const { sectionId, link } of existingWidgetLinks) {
-    const info = existingWidgets.get(sectionId)
-    if (info) {
-      registry.queueLink(sectionId, link, info.tableId)
-    }
-  }
-
-  await configureLinks(client, docId, registry, viewId)
+  // Note: Phase 6 (link configuration) removed in Architecture B
+  // Use link_widgets operation to configure widget links after layout changes
+  // Ignore existingWidgetLinks - links are handled separately
+  void existingWidgetLinks // Suppress unused variable warning
 
   return {
     success: true,
@@ -419,77 +435,6 @@ export async function executeGetLayout(
   return formatGetLayoutResult(layoutSpec, widgetsMap)
 }
 
-// =============================================================================
-// Link Configuration Helper
-// =============================================================================
-
-async function configureLinks(
-  client: GristClient,
-  docId: string,
-  registry: WidgetRegistry,
-  _viewId: number
-): Promise<void> {
-  const pendingLinks = registry.getPendingLinks()
-  if (pendingLinks.length === 0) return
-
-  const resolvedLinks: Array<{ sectionId: number; resolved: ResolvedLink }> = []
-
-  // Helper to get widget info
-  const getWidgetInfo = async (sectionId: number): Promise<WidgetInfo> => {
-    const response = await client.post<{ records: Array<{ fields: Record<string, unknown> }> }>(
-      `/docs/${docId}/sql`,
-      {
-        sql: `
-          SELECT
-            vs.id as sectionId,
-            t.tableId,
-            vs.tableRef,
-            vs.parentKey as widgetType
-          FROM _grist_Views_section vs
-          JOIN _grist_Tables t ON vs.tableRef = t.id
-          WHERE vs.id = ?
-        `,
-        args: [sectionId]
-      }
-    )
-
-    const record = response.records[0]
-    if (!record) {
-      throw new Error(`Widget ${sectionId} not found`)
-    }
-
-    const f = record.fields
-    const tableId = f.tableId as string
-    const summaryCheck = await isSummaryTable(client, docId, f.tableRef as number)
-
-    return {
-      sectionId: f.sectionId as number,
-      tableId,
-      tableRef: f.tableRef as number,
-      widgetType: f.widgetType as string,
-      isSummaryTable: summaryCheck
-    }
-  }
-
-  // Resolve all links
-  for (const { sectionId, link, tableId } of pendingLinks) {
-    const resolved = await resolveLink(
-      client,
-      docId,
-      sectionId,
-      tableId,
-      link,
-      registry,
-      getWidgetInfo
-    )
-    resolvedLinks.push({ sectionId, resolved })
-  }
-
-  // Build and execute actions
-  const actions = buildLinkActions(resolvedLinks)
-  if (actions.length > 0) {
-    await client.post(`/docs/${docId}/apply`, actions)
-  }
-
-  registry.clearPendingLinks()
-}
+// NOTE: Link configuration helper was removed in Architecture B.
+// Widget linking is now done via the separate `link_widgets` operation in manage-pages.ts
+// which uses the link-resolver.ts module directly.

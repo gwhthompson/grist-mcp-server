@@ -249,6 +249,19 @@ export const NewPaneSchema = z
     message: 'chartType is required when widget is "chart"',
     path: ['chartType']
   })
+  .refine(
+    (data) => {
+      // Scatter charts require at least one y_axis column
+      if (data.widget === 'chart' && data.chartType === 'scatter') {
+        return data.y_axis && data.y_axis.length > 0
+      }
+      return true
+    },
+    {
+      message: 'Scatter charts require at least one y_axis column',
+      path: ['y_axis']
+    }
+  )
 
 export type NewPane = z.infer<typeof NewPaneSchema>
 

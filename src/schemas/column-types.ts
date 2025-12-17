@@ -332,15 +332,21 @@ export function extractWidgetOptions(
 
 /**
  * Extract rulesOptions from a column definition for conditional formatting.
- * Returns the array of {formula, style} rule definitions, or undefined if not present.
+ * Returns the array of {formula, style, sectionId?} rule definitions, or undefined if not present.
+ * When sectionId is provided, the rule applies to that specific widget (field scope).
+ * When sectionId is omitted, the rule applies across all views (column scope).
  */
 export function extractRulesOptions(
   column: ColumnDefinition | Record<string, unknown>
-): Array<{ formula: string; style: Record<string, unknown> }> | undefined {
+): Array<{ formula: string; style: Record<string, unknown>; sectionId?: number }> | undefined {
   if ('style' in column && column.style && typeof column.style === 'object') {
     const style = column.style as Record<string, unknown>
     if ('rulesOptions' in style && Array.isArray(style.rulesOptions)) {
-      return style.rulesOptions as Array<{ formula: string; style: Record<string, unknown> }>
+      return style.rulesOptions as Array<{
+        formula: string
+        style: Record<string, unknown>
+        sectionId?: number
+      }>
     }
   }
   return undefined

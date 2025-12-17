@@ -40,6 +40,25 @@ interface SqlResponseData {
   hasMore: boolean
   nextOffset: number | null
   records: Array<Record<string, CellValue>>
+  nextSteps?: string[]
+}
+
+/**
+ * Check if any record values look like Unix timestamps (seconds since epoch).
+ * Range: Jan 1, 2000 to Jan 1, 2100 (~946684800 to ~4102444800)
+ */
+function hasLikelyTimestamps(records: Array<Record<string, CellValue>>): boolean {
+  const MIN_TIMESTAMP = 946684800 // 2000-01-01
+  const MAX_TIMESTAMP = 4102444800 // 2100-01-01
+
+  for (const record of records) {
+    for (const value of Object.values(record)) {
+      if (typeof value === 'number' && value >= MIN_TIMESTAMP && value <= MAX_TIMESTAMP) {
+        return true
+      }
+    }
+  }
+  return false
 }
 
 interface GetRecordsResponseData {
@@ -57,6 +76,7 @@ interface GetRecordsResponseData {
     recordsWithErrors: number
     affectedColumns: string[]
   }
+  nextSteps?: string[]
 }
 
 export const QuerySQLSchema = z.strictObject({
@@ -160,6 +180,29 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, unknown> {
     }
   }
 
+  protected async afterExecute(
+    result: SqlResponseData,
+    _params: QuerySQLInput
+  ): Promise<SqlResponseData> {
+    const nextSteps: string[] = []
+
+    if (result.hasMore) {
+      nextSteps.push(`Use offset=${result.nextOffset} to get more results`)
+    }
+
+    if (result.records.length > 0) {
+      nextSteps.push(`Use grist_manage_records to modify data based on query results`)
+
+      if (hasLikelyTimestamps(result.records)) {
+        nextSteps.push(
+          `Dates appear as Unix timestamps. Convert: new Date(timestamp * 1000).toISOString()`
+        )
+      }
+    }
+
+    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
+  }
+
   protected formatResponse(data: SqlResponseData, format: 'json' | 'markdown') {
     const { data: truncatedData } = truncateIfNeeded(data.records, format, {
       total: data.total,
@@ -176,7 +219,8 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, unknown> {
     const { items, ...rest } = truncatedData as TruncatedDataWithItems
     const responseData = {
       ...rest,
-      records: items
+      records: items,
+      nextSteps: data.nextSteps
     }
 
     return super.formatResponse(responseData, format)
@@ -273,6 +317,29 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
     }
   }
 
+  protected async afterExecute(
+    result: GetRecordsResponseData,
+    _params: GetRecordsInput
+  ): Promise<GetRecordsResponseData> {
+    const nextSteps: string[] = []
+
+    if (result.hasMore) {
+      nextSteps.push(`Use offset=${result.nextOffset} to get more records`)
+    }
+
+    if (result.items.length > 0) {
+      nextSteps.push(`Use grist_manage_records to modify these records`)
+    }
+
+    if (result.formulaErrors && result.formulaErrors.recordsWithErrors > 0) {
+      nextSteps.push(
+        `Fix formula errors in columns: ${result.formulaErrors.affectedColumns.join(', ')}`
+      )
+    }
+
+    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
+  }
+
   protected formatResponse(data: GetRecordsResponseData, format: 'json' | 'markdown') {
     const { data: truncatedData } = truncateIfNeeded(data.items, format, {
       docId: data.docId,
@@ -283,7 +350,8 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
       hasMore: data.hasMore,
       nextOffset: data.nextOffset,
       filters: data.filters,
-      columns: data.columns
+      columns: data.columns,
+      nextSteps: data.nextSteps
     })
 
     return super.formatResponse(truncatedData, format)
@@ -369,7 +437,7 @@ export const READING_TOOLS: ReadonlyArray<ToolDefinition> = [
     handler: querySql,
     docs: {
       overview:
-        'Execute SQL queries for JOINs, aggregations, and complex filters. Use grist_get_records for single-table queries without SQL. Supports parameterized queries with ? placeholders (requires Grist v1.1.0+). **Output format:** SQL returns raw SQLite format: `{records: [{fields: {...}}]}`. Booleans are 0/1 (not true/false). Row IDs must be explicitly selected. For flat object format with decoded values, use grist_get_records instead.',
+        'Execute SQL queries for JOINs, aggregations, and complex filters. Use grist_get_records for single-table queries without SQL. Supports parameterized queries with ? placeholders (requires Grist v1.1.0+). **Output format:** SQL returns raw SQLite types: dates are Unix timestamps (seconds), booleans are 0/1. For ISO dates and decoded values, use grist_get_records instead.',
       examples: [
         {
           desc: 'JOIN query',
@@ -407,6 +475,10 @@ export const READING_TOOLS: ReadonlyArray<ToolDefinition> = [
         {
           error: 'Unexpected boolean format (0/1 vs true/false)',
           solution: 'SQL returns raw SQLite types. Compare with 0/1, not true/false'
+        },
+        {
+          error: 'Dates appear as numbers (Unix timestamps)',
+          solution: 'SQL returns raw timestamps. Convert: new Date(timestamp * 1000).toISOString()'
         }
       ]
     }

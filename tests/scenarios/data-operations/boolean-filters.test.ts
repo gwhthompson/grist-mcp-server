@@ -75,7 +75,7 @@ describe('Boolean Column Filtering', () => {
         }
       }
     ])
-  })
+  }, 60000) // 60s timeout - setup creates workspace, document, table, and records
 
   afterAll(async () => {
     if (context) {

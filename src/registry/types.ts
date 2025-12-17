@@ -109,8 +109,8 @@ export interface ToolDefinition<
   readonly docs: ToolDocumentation
   /**
    * Core tool flag for progressive disclosure.
-   * Core tools are shown by default in grist_discover_tools.
-   * Non-core tools are available but require explicit discovery.
+   * Core tools represent essential functionality.
+   * Non-core tools are available but may be less commonly used.
    */
   readonly core?: boolean
 }

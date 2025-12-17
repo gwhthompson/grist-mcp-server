@@ -92,6 +92,18 @@ export class GetHelpTool extends GristTool<typeof HelpSchema, HelpOutput> {
     }
   }
 
+  protected async afterExecute(result: HelpOutput, params: HelpInput): Promise<HelpOutput> {
+    const nextSteps: string[] = []
+
+    nextSteps.push(`Try using ${params.tool_name} with the examples shown`)
+
+    if (result.topic !== 'full') {
+      nextSteps.push(`Use topic='full' for complete documentation`)
+    }
+
+    return { ...result, nextSteps }
+  }
+
   protected formatResponse(data: HelpOutput, format: ResponseFormat): MCPToolResponse {
     if (format === 'json') {
       return {

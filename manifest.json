@@ -1,9 +1,9 @@
 {
   "manifest_version": "0.3",
   "name": "grist-mcp-server",
-  "version": "2.0.14",
+  "version": "2.0.18",
   "display_name": "Grist Database Integration",
-  "description": "12 tools for managing Grist documents with AI",
+  "description": "11 tools for managing Grist documents with AI",
   "long_description": "Read and write tables, records, pages, and widgets. Works with Grist Cloud or self-hosted instances.",
   "author": {
     "name": "George Thompson"
@@ -85,10 +85,6 @@
     }
   },
   "tools": [
-    {
-      "name": "grist_discover_tools",
-      "description": "Discover tool schemas on demand to reduce token usage"
-    },
     {
       "name": "grist_get_workspaces",
       "description": "List and filter workspaces"

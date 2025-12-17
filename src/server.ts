@@ -20,12 +20,12 @@ import { sharedLogger } from './utils/shared-logger.js'
  */
 const SERVER_INSTRUCTIONS = `## Grist MCP Server
 
-Grist is a modern relational spreadsheet with database features. This server provides 12 tools organized into discovery, reading, and management categories.
+Grist is a modern relational spreadsheet with database features. This server provides 11 tools organized into discovery, reading, and management categories.
 
 ### Workflow Prerequisites
 - Call grist_get_workspaces before grist_get_documents (to get workspaceId)
 - Call grist_get_tables before grist_manage_records (to understand schema)
-- Use grist_discover_tools to get full schemas for specific tools on demand
+- Use grist_help to get detailed documentation and examples for any tool
 
 ### Tool Categories
 - **Discovery**: grist_get_workspaces → grist_get_documents → grist_get_tables (follow this order)
@@ -46,7 +46,6 @@ Grist is a modern relational spreadsheet with database features. This server pro
 
 ### Token Efficiency
 - Use response_format="json" for programmatic processing, "markdown" for display
-- Use grist_discover_tools with detail_level="names" for quick discovery
 - Paginate large record sets with limit/offset instead of fetching all
 - Use grist_help with topic="overview" (~500B) before "full" documentation
 

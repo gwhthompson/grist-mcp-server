@@ -12,14 +12,13 @@ import { HELP_TOPICS, HelpSchema, TOOL_NAMES } from '../../../src/schemas/help.j
 
 describe('Help Tool - Schema Validation', () => {
   describe('TOOL_NAMES constant', () => {
-    it('should contain all 12 Grist tool names', () => {
-      // 12 tools (v2.0 consolidated architecture, auto-generated from ALL_TOOLS)
-      // Discovery: 4, Reading: 2, Management: 3, Utility: 3
-      expect(TOOL_NAMES.length).toBe(12)
+    it('should contain all 11 Grist tool names', () => {
+      // 11 tools (v2.0 consolidated architecture, auto-generated from ALL_TOOLS)
+      // Discovery: 3, Reading: 2, Management: 3, Utility: 3
+      expect(TOOL_NAMES.length).toBe(11)
     })
 
     it('should contain all discovery tools', () => {
-      expect(TOOL_NAMES).toContain('grist_discover_tools')
       expect(TOOL_NAMES).toContain('grist_get_workspaces')
       expect(TOOL_NAMES).toContain('grist_get_documents')
       expect(TOOL_NAMES).toContain('grist_get_tables')

@@ -201,6 +201,7 @@ interface ManageRecordsResponse {
     error: string
     completedOperations: number
   }
+  nextSteps?: string[]
 }
 
 // =============================================================================
@@ -277,6 +278,45 @@ export class ManageRecordsTool extends GristTool<
       results,
       message: `Successfully completed ${params.operations.length} operation(s) affecting ${totalAffected} record(s) across ${tableCount} ${tableText}`
     }
+  }
+
+  protected async afterExecute(
+    result: ManageRecordsResponse,
+    params: ManageRecordsInput
+  ): Promise<ManageRecordsResponse> {
+    const nextSteps: string[] = []
+
+    if (result.partialFailure) {
+      // Guide recovery from partial failure
+      nextSteps.push(
+        `Fix error in ${result.partialFailure.tableId}: ${result.partialFailure.error}`
+      )
+      nextSteps.push(`Resume from operation index ${result.partialFailure.operationIndex}`)
+    } else if (result.success) {
+      // Generate contextual next steps based on operations performed
+      const addResults = result.results.filter((r) => r.action === 'add' && r.recordIds?.length)
+      const updateResults = result.results.filter((r) => r.action === 'update')
+
+      if (addResults.length > 0) {
+        const firstAdd = addResults[0]
+        if (firstAdd?.recordIds && firstAdd.recordIds.length > 0) {
+          nextSteps.push(
+            `Use grist_get_records with docId="${params.docId}" and tableId="${firstAdd.tableId}" to verify added records`
+          )
+        }
+      }
+
+      if (updateResults.length > 0) {
+        nextSteps.push(`Use grist_get_records to verify updated data`)
+      }
+
+      // Suggest page creation if data was added
+      if (addResults.length > 0 && result.totalRecordsAffected > 0) {
+        nextSteps.push(`Use grist_manage_pages action='create_page' to create a view for the data`)
+      }
+    }
+
+    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
   }
 
   private async executeOperation(
@@ -628,7 +668,8 @@ export const ManageRecordsOutputSchema = z.object({
       completedOperations: z.number().describe('Operations that succeeded before failure')
     })
     .optional()
-    .describe('Present if operations stopped mid-batch')
+    .describe('Present if operations stopped mid-batch'),
+  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
 })
 
 // =============================================================================
@@ -645,12 +686,31 @@ export const MANAGE_RECORDS_TOOL: ToolDefinition = {
   category: 'records',
   inputSchema: ManageRecordsSchema,
   outputSchema: ManageRecordsOutputSchema,
-  annotations: { ...WRITE_SAFE_ANNOTATIONS, ...DESTRUCTIVE_ANNOTATIONS },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true, // Can delete records
+    idempotentHint: false, // add operations create new records each time
+    openWorldHint: true
+  },
   handler: manageRecords,
   docs: {
     overview:
       'Record operations: add, update, delete, upsert. Single records or batches. ' +
-      'Operations execute sequentially, enabling cross-table dependencies.',
+      'Operations execute sequentially, enabling cross-table dependencies.\n\n' +
+      'DATA FORMAT BY COLUMN TYPE:\n' +
+      '- Text: "string value"\n' +
+      '- Numeric/Int: 42 or 3.14 (number, not string)\n' +
+      '- Bool: true or false (not "true"/"false" strings)\n' +
+      '- Date: "2024-03-15" (ISO format string)\n' +
+      '- DateTime: "2024-03-15T14:30:00Z" (ISO format)\n' +
+      '- Choice: "Option1" (must match defined choice exactly)\n' +
+      '- ChoiceList: ["Option1", "Option2"] (array of strings)\n' +
+      '- Ref: 42 (row ID number of referenced record)\n' +
+      '- RefList: [1, 2, 3] (array of row ID numbers)\n\n' +
+      'IMPORTANT - List formats:\n' +
+      '- ChoiceList: ["a", "b"] NOT ["L", "a", "b"]\n' +
+      '- RefList: [1, 2] NOT ["L", 1, 2]\n' +
+      '- The "L" prefix is internal Grist format - never use it in API calls',
     examples: [
       {
         desc: 'Add a single record',

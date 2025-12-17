@@ -71,7 +71,7 @@ export class CreateDocumentTool extends GristTool<
         : `Successfully created new document "${params.name}"`,
       nextSteps: [
         `Use grist_get_tables with docId="${docId}" to see table structure`,
-        `Use grist_create_table to add tables`,
+        `Use grist_manage_schema with action='create_table' to add tables`,
         `Access document at: ${docUrl}`
       ]
     }

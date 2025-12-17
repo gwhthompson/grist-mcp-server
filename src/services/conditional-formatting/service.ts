@@ -254,6 +254,36 @@ export class ConditionalFormattingService {
   }
 
   /**
+   * Replace all conditional formatting rules with a new set.
+   * Clears existing rules first, then adds new ones.
+   * Used for entity-level CRUD where users provide the complete rules array.
+   */
+  async replaceAllRules(
+    docId: string,
+    tableId: string,
+    ownerParams: OwnerLookupParams,
+    rules: Array<{ formula: string; style: Record<string, unknown> }>
+  ): Promise<RuleOperationResult> {
+    const ownerRef = await this.ruleOwner.getOwnerRef(this.client, docId, ownerParams)
+    const currentState = await this.ruleOwner.getRulesAndStyles(this.client, docId, ownerRef)
+
+    // Clear existing rules if any
+    if (currentState.helperColRefs.length > 0) {
+      await this.ruleOwner.updateRulesAndStyles(this.client, docId, ownerRef, {
+        helperColRefs: [],
+        styles: []
+      })
+    }
+
+    // Add new rules one by one (addRule handles helper column creation)
+    for (const rule of rules) {
+      await this.addRule(docId, tableId, ownerParams, rule)
+    }
+
+    return this.listRules(docId, tableId, ownerParams)
+  }
+
+  /**
    * List all conditional formatting rules.
    */
   async listRules(

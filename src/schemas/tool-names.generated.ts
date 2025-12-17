@@ -6,7 +6,6 @@
  * Generated from ALL_TOOLS at build time.
  */
 export const TOOL_NAMES = [
-  'grist_discover_tools',
   'grist_get_workspaces',
   'grist_get_documents',
   'grist_get_tables',

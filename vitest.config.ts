@@ -24,7 +24,6 @@ export default defineConfig({
         'tests/**/*',
         'dist/**/*'
       ],
-      all: true,
       clean: true,
       thresholds: {
         lines: 80,
@@ -63,14 +62,6 @@ export default defineConfig({
         return false
       }
       return true // Allow other console output
-    },
-
-    // Parallel execution
-    poolOptions: {
-      threads: {
-        singleThread: false,
-        useAtomics: true
-      }
     },
 
     // Setup files

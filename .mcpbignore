@@ -4,8 +4,12 @@ tests/
 test-*.mjs
 evaluations/
 
+# Build scripts
+scripts/
+
 # TypeScript configuration
 tsconfig.json
+tsconfig.tsbuildinfo
 
 # Test and coverage configuration
 vitest.config.ts
@@ -21,19 +25,33 @@ biome.json
 .github/
 .git/
 .gitignore
-.DS_Store
+.husky/
 
-# Documentation (keep only essential)
+# Local configuration (secrets!)
+.env
+.mcp.json
+inspector-config.json
+
+# Build artifacts
+*.mcpb
+*.tgz
+
+# Data files
+*.grist
+logs/
+temp/
+
+# Test utilities
+check-*.mjs
+
+# Documentation (not needed in bundle)
 docs/
+CLAUDE.md
+CHANGELOG.md
+COMPATIBILITY.md
+*FEEDBACK*.md
+MCP_TEST_REPORT.md
 TEST_SUMMARY.md
-
-# Build artifacts (optional - uncomment to exclude)
-# dist/**/*.d.ts
-# dist/**/*.d.ts.map
-# dist/**/*.js.map
-
-# Node modules will be included but dev dependencies excluded
-# This is handled by npm ci --omit=dev
 
 # Editor and IDE files
 .vscode/

@@ -36,6 +36,7 @@ import {
   VisibleColSchema
 } from '../schemas/column-types.js'
 import { ColIdSchema, DocIdSchema, ResponseFormatSchema, TableIdSchema } from '../schemas/common.js'
+import { BaseConditionalRuleSchema } from '../schemas/conditional-rules.js'
 import {
   buildAddColumnAction,
   buildAddTableAction,
@@ -95,6 +96,20 @@ const DeleteTableOperationSchema = z
     tableId: TableIdSchema
   })
   .describe('Delete a table and all its data (DESTRUCTIVE)')
+
+const UpdateTableOperationSchema = z
+  .object({
+    action: z.literal('update_table'),
+    tableId: TableIdSchema,
+    rowRules: z
+      .array(BaseConditionalRuleSchema)
+      .optional()
+      .describe(
+        'Conditional formatting for entire rows. Replaces all existing row rules. ' +
+          'Rules apply to Raw Data view. Each rule: {formula: "$Status == \\"Overdue\\"", style: {fillColor: "#FFCCCC"}}'
+      )
+  })
+  .describe('Update table properties including row conditional formatting')
 
 // =============================================================================
 // Column Operation Schemas
@@ -187,6 +202,7 @@ const CreateSummaryOperationSchema = z
 
 const SchemaOperationSchema = z.discriminatedUnion('action', [
   CreateTableOperationSchema,
+  UpdateTableOperationSchema,
   RenameTableOperationSchema,
   DeleteTableOperationSchema,
   AddColumnOperationSchema,
@@ -231,6 +247,7 @@ interface ManageSchemaResponse {
     error: string
     completed_operations: number
   }
+  nextSteps?: string[]
 }
 
 // =============================================================================
@@ -277,10 +294,51 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     }
   }
 
+  protected async afterExecute(
+    result: ManageSchemaResponse,
+    _params: ManageSchemaInput
+  ): Promise<ManageSchemaResponse> {
+    const nextSteps: string[] = []
+
+    if (result.partial_failure) {
+      // Guide recovery from partial failure
+      nextSteps.push(`Fix error: ${result.partial_failure.error}`)
+      nextSteps.push(`Resume from operation index ${result.partial_failure.operation_index}`)
+    } else if (result.success) {
+      // Generate contextual next steps based on operations performed
+      const tableCreates = result.results.filter((r) => r.action === 'create_table')
+      const columnAdds = result.results.filter((r) => r.action === 'add_column')
+      const summaryCreates = result.results.filter((r) => r.action === 'create_summary')
+
+      if (tableCreates.length > 0) {
+        const firstTable = tableCreates[0]
+        const tableId = firstTable?.details.tableId as string
+        nextSteps.push(`Use grist_manage_records with action='add' to add data to "${tableId}"`)
+        nextSteps.push(`Use grist_manage_pages action='create_page' to create a view`)
+      }
+
+      if (columnAdds.length > 0 && tableCreates.length === 0) {
+        nextSteps.push(
+          `Use grist_get_tables with detail_level='full_schema' to verify column configuration`
+        )
+      }
+
+      if (summaryCreates.length > 0) {
+        const firstSummary = summaryCreates[0]
+        const summaryId = firstSummary?.details.summaryTableId as string
+        nextSteps.push(`Use grist_get_records with tableId="${summaryId}" to query aggregated data`)
+      }
+    }
+
+    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
+  }
+
   private async executeOperation(docId: string, op: SchemaOperation): Promise<OperationResult> {
     switch (op.action) {
       case 'create_table':
         return this.executeCreateTable(docId, op)
+      case 'update_table':
+        return this.executeUpdateTable(docId, op)
       case 'rename_table':
         return this.executeRenameTable(docId, op)
       case 'delete_table':
@@ -333,13 +391,26 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     await this.setupVisibleColForTable(docId, tableId, resolvedColumns)
 
     // Process conditional formatting rules for each column (rulesOptions)
+    // Rules with sectionId go to field scope, others go to column scope
     let totalRulesApplied = 0
     for (const column of resolvedColumns) {
       const rules = extractRulesOptions(column)
       if (rules && rules.length > 0) {
-        const cfService = new ConditionalFormattingService(this.client, 'column')
         for (const rule of rules) {
-          await cfService.addRule(docId, tableId, { tableId, colId: column.colId }, rule)
+          if (rule.sectionId) {
+            // Field-scoped rule (applies to specific widget only)
+            const fieldService = new ConditionalFormattingService(this.client, 'field')
+            await fieldService.addRule(
+              docId,
+              tableId,
+              { tableId, sectionId: rule.sectionId, fieldColId: column.colId },
+              { formula: rule.formula, style: rule.style }
+            )
+          } else {
+            // Column-scoped rule (applies across all views)
+            const colService = new ConditionalFormattingService(this.client, 'column')
+            await colService.addRule(docId, tableId, { tableId, colId: column.colId }, rule)
+          }
           totalRulesApplied++
         }
       }
@@ -348,6 +419,9 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     // Invalidate cache
     this.schemaCache.invalidateDocument(toDocId(docId))
 
+    // Auto-delete empty Table1 if this is a fresh document
+    await this.maybeDeleteEmptyTable1(docId)
+
     return {
       action: 'create_table',
       success: true,
@@ -355,6 +429,30 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
         tableId: tableId,
         columnsCreated: op.columns.length,
         ...(totalRulesApplied > 0 && { conditional_formatting_rules: totalRulesApplied })
+      }
+    }
+  }
+
+  private async executeUpdateTable(
+    docId: string,
+    op: Extract<SchemaOperation, { action: 'update_table' }>
+  ): Promise<OperationResult> {
+    const tableId = toTableId(op.tableId)
+    let rowRulesUpdated = 0
+
+    // Handle row rules if provided
+    if (op.rowRules !== undefined) {
+      const cfService = new ConditionalFormattingService(this.client, 'row')
+      await cfService.replaceAllRules(docId, tableId, { tableId }, op.rowRules)
+      rowRulesUpdated = op.rowRules.length
+    }
+
+    return {
+      action: 'update_table',
+      success: true,
+      details: {
+        tableId: op.tableId,
+        ...(rowRulesUpdated > 0 && { rowRulesUpdated })
       }
     }
   }
@@ -464,17 +562,30 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     }
 
     // Process conditional formatting rules (rulesOptions with formula+style pairs)
+    // Rules with sectionId go to field scope, others go to column scope
     const rules = extractRulesOptions(column)
     let rulesAdded = 0
     if (rules && rules.length > 0) {
-      const cfService = new ConditionalFormattingService(this.client, 'column')
       for (const rule of rules) {
-        await cfService.addRule(
-          docId,
-          op.tableId,
-          { tableId: op.tableId, colId: column.colId },
-          rule
-        )
+        if (rule.sectionId) {
+          // Field-scoped rule (applies to specific widget only)
+          const fieldService = new ConditionalFormattingService(this.client, 'field')
+          await fieldService.addRule(
+            docId,
+            op.tableId,
+            { tableId: op.tableId, sectionId: rule.sectionId, fieldColId: column.colId },
+            { formula: rule.formula, style: rule.style }
+          )
+        } else {
+          // Column-scoped rule (applies across all views)
+          const colService = new ConditionalFormattingService(this.client, 'column')
+          await colService.addRule(
+            docId,
+            op.tableId,
+            { tableId: op.tableId, colId: column.colId },
+            rule
+          )
+        }
         rulesAdded++
       }
     }
@@ -572,13 +683,31 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     }
 
     // Process conditional formatting rules from style.rulesOptions
+    // Rules with sectionId go to field scope, others go to column scope
     let rulesAdded = 0
     if (op.updates.style) {
       const rules = extractRulesOptions({ style: op.updates.style })
       if (rules && rules.length > 0) {
-        const cfService = new ConditionalFormattingService(this.client, 'column')
         for (const rule of rules) {
-          await cfService.addRule(docId, op.tableId, { tableId: op.tableId, colId: op.colId }, rule)
+          if (rule.sectionId) {
+            // Field-scoped rule (applies to specific widget only)
+            const fieldService = new ConditionalFormattingService(this.client, 'field')
+            await fieldService.addRule(
+              docId,
+              op.tableId,
+              { tableId: op.tableId, sectionId: rule.sectionId, fieldColId: op.colId },
+              { formula: rule.formula, style: rule.style }
+            )
+          } else {
+            // Column-scoped rule (applies across all views)
+            const colService = new ConditionalFormattingService(this.client, 'column')
+            await colService.addRule(
+              docId,
+              op.tableId,
+              { tableId: op.tableId, colId: op.colId },
+              rule
+            )
+          }
           rulesAdded++
         }
       }
@@ -922,6 +1051,45 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
       }
     )
   }
+
+  /**
+   * Auto-delete the default Table1 when creating a new table in a fresh document.
+   * Only deletes if Table1 exists, has no records, and no custom columns.
+   * This is a convenience feature - failures are silently ignored.
+   */
+  private async maybeDeleteEmptyTable1(docId: string): Promise<void> {
+    try {
+      // Check if Table1 exists
+      const tablesResp = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+        sql: `SELECT tableId FROM _grist_Tables WHERE tableId = 'Table1'`
+      })
+      if (tablesResp.records.length === 0) return
+
+      // Check for records
+      const recordsResp = await this.client.get<{ records: unknown[] }>(
+        `/docs/${docId}/tables/Table1/records?limit=1`
+      )
+      if (recordsResp.records.length > 0) return
+
+      // Check for custom columns (beyond default A, B, C)
+      const columnsResp = await this.client.get<{ columns: Array<{ id: string }> }>(
+        `/docs/${docId}/tables/Table1/columns`
+      )
+      const defaultCols = new Set(['A', 'B', 'C'])
+      const hasCustomCols = columnsResp.columns.some(
+        (c) => !c.id.startsWith('gristHelper_') && !defaultCols.has(c.id)
+      )
+      if (hasCustomCols) return
+
+      // Safe to delete - use RemoveTable UserAction
+      await this.client.post<ApplyResponse>(`/docs/${docId}/apply`, [['RemoveTable', 'Table1']], {
+        schema: ApplyResponseSchema,
+        context: 'Auto-removing empty Table1'
+      })
+    } catch {
+      // Silently ignore - this is a convenience feature
+    }
+  }
 }
 
 export async function manageSchema(context: ToolContext, params: ManageSchemaInput) {
@@ -952,7 +1120,8 @@ export const ManageSchemaOutputSchema = z.object({
       error: z.string(),
       completed_operations: z.number()
     })
-    .optional()
+    .optional(),
+  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
 })
 
 // =============================================================================
@@ -976,6 +1145,21 @@ export const MANAGE_SCHEMA_TOOL: ToolDefinition = {
       '**Ref columns:** Use `type: "Ref"` with `refTable: "TableName"`.\n\n' +
       '**Summary tables:** Named `{SourceTable}_summary_{GroupByColumns}` ' +
       '(e.g., Tasks_summary_Status for Tasks grouped by Status).\n\n' +
+      'FORMULA SYNTAX (Python expressions):\n' +
+      '- Column references: $ColumnName (e.g., $Price * $Quantity)\n' +
+      '- Cross-table lookups: $RefColumn.FieldName (e.g., $Company.Name)\n' +
+      '- Conditionals: "High" if $Amount > 1000 else "Low"\n' +
+      '- Date math: $DueDate - TODAY() (returns timedelta)\n' +
+      '- String ops: $Name.upper(), $Email.split("@")[0]\n' +
+      '- Aggregations in summary: SUM($group.Amount), COUNT($group)\n' +
+      '- Common functions: ROUND(), MAX(), MIN(), LEN(), NOW(), TODAY()\n' +
+      '- Set isFormula:true for dynamic formulas, isFormula:false for defaults\n\n' +
+      'FORMULA EXAMPLES:\n' +
+      '- Total: "$Quantity * $UnitPrice"\n' +
+      '- Full name: "$FirstName + \\" \\" + $LastName"\n' +
+      '- Days until: "($DueDate - TODAY()).days if $DueDate else None"\n' +
+      '- Status color: "\\"red\\" if $Overdue else \\"green\\""\n' +
+      '- Lookup: "$Customer.Email if $Customer else \\"\\""\n\n' +
       'RELATED TOOLS:\n' +
       '- Conditional formatting: grist_manage_conditional_rules (column/row/field scope)\n' +
       '- Page layouts: grist_manage_pages (widget arrangement and linking)',

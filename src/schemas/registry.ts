@@ -24,6 +24,7 @@ import {
   VisibleColSchema
 } from './column-types.js'
 import { ColIdSchema, HexColorSchema, TableIdSchema } from './common.js'
+import { BaseConditionalRuleSchema } from './conditional-rules.js'
 import { UserWidgetTypeSchema } from './pages-widgets.js'
 import {
   WebhookColumnIdSchema,
@@ -46,6 +47,7 @@ export function registerSchemas(): void {
   ChoiceOptionsSchema.register(z.globalRegistry, { id: 'choiceOptions' }) // 2x in ModifyColumn
   HexColorSchema.register(z.globalRegistry, { id: 'hexColor' }) // 12x in styles
   VisibleColSchema.register(z.globalRegistry, { id: 'visibleCol' }) // 2x
+  BaseConditionalRuleSchema.register(z.globalRegistry, { id: 'conditionalRule' }) // 2x in update_table + rulesOptions
 
   // grist_manage_records - reused in add/update/upsert operations
   RecordDataSchema.register(z.globalRegistry, { id: 'recordData' }) // 4x

@@ -37,5 +37,6 @@ export interface HelpOutput {
   topic: HelpTopic
   documentation: string
   availableTopics: readonly string[]
+  nextSteps?: string[]
   [key: string]: unknown // Index signature for compatibility with MCPToolResponse
 }

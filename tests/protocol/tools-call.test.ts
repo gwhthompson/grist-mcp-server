@@ -20,23 +20,6 @@ describe('MCP Protocol - tools/call', () => {
   })
 
   describe('discovery tools', () => {
-    it('should call grist_discover_tools successfully', async () => {
-      const result = await ctx.client.callTool({
-        name: 'grist_discover_tools',
-        arguments: { detail_level: 'descriptions' }
-      })
-
-      expect(result.isError).toBeFalsy()
-      expect(result.content).toBeDefined()
-      expect(result.content.length).toBeGreaterThan(0)
-      expect(result.content[0].type).toBe('text')
-
-      // Should return list of tools
-      const text = (result.content[0] as { text: string }).text
-      expect(text).toContain('grist_get_workspaces')
-      expect(text).toContain('grist_manage_records')
-    })
-
     it('should call grist_get_workspaces successfully', async () => {
       const result = await ctx.client.callTool({
         name: 'grist_get_workspaces',
@@ -53,28 +36,6 @@ describe('MCP Protocol - tools/call', () => {
 
       expect(parsed.items).toBeDefined()
       expect(Array.isArray(parsed.items)).toBe(true)
-    })
-
-    it('should call grist_discover_tools with different detail levels', async () => {
-      // names only
-      const namesResult = await ctx.client.callTool({
-        name: 'grist_discover_tools',
-        arguments: { detail_level: 'names' }
-      })
-      expect(namesResult.isError).toBeFalsy()
-
-      // full
-      const fullResult = await ctx.client.callTool({
-        name: 'grist_discover_tools',
-        arguments: { detail_level: 'full', tool_name: 'grist_get_workspaces' }
-      })
-      expect(fullResult.isError).toBeFalsy()
-
-      // Full should contain more detail
-      const fullText = (fullResult.content[0] as { text: string }).text
-      expect(fullText.length).toBeGreaterThan(
-        (namesResult.content[0] as { text: string }).text.length
-      )
     })
   })
 
@@ -154,8 +115,8 @@ describe('MCP Protocol - tools/call', () => {
 
     it('should include structuredContent in response', async () => {
       const result = await ctx.client.callTool({
-        name: 'grist_discover_tools',
-        arguments: { detail_level: 'descriptions', response_format: 'json' }
+        name: 'grist_get_workspaces',
+        arguments: { response_format: 'json' }
       })
 
       expect(result.isError).toBeFalsy()
@@ -165,8 +126,8 @@ describe('MCP Protocol - tools/call', () => {
       const text = (result.content[0] as { text: string }).text
       const parsed = JSON.parse(text)
 
-      expect(parsed.tools).toBeDefined()
-      expect(Array.isArray(parsed.tools)).toBe(true)
+      expect(parsed.items).toBeDefined()
+      expect(Array.isArray(parsed.items)).toBe(true)
     })
   })
 
@@ -198,26 +159,6 @@ describe('MCP Protocol - tools/call', () => {
       const parsed = JSON.parse(text)
 
       expect(parsed.offset).toBe(0)
-    })
-  })
-
-  describe('category filtering', () => {
-    it('should filter tools by category', async () => {
-      const result = await ctx.client.callTool({
-        name: 'grist_discover_tools',
-        arguments: { category: 'reading', response_format: 'json' }
-      })
-
-      expect(result.isError).toBeFalsy()
-
-      const text = (result.content[0] as { text: string }).text
-      const parsed = JSON.parse(text)
-
-      // Should only contain reading tools
-      const toolNames = parsed.tools.map((t: { name: string }) => t.name)
-      expect(toolNames).toContain('grist_get_records')
-      expect(toolNames).toContain('grist_query_sql')
-      expect(toolNames).not.toContain('grist_manage_records')
     })
   })
 })

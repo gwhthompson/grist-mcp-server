@@ -31,7 +31,15 @@ export type ConditionalFormatOptions = z.infer<typeof ConditionalFormatOptionsSc
 
 export const BaseConditionalRuleSchema = z.strictObject({
   formula: RuleFormulaSchema,
-  style: ConditionalFormatOptionsSchema
+  style: ConditionalFormatOptionsSchema,
+  sectionId: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe(
+      'Optional: Scope rule to specific widget section. If omitted, rule applies across all views.'
+    )
 })
 
 export type BaseConditionalRule = z.infer<typeof BaseConditionalRuleSchema>

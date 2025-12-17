@@ -204,6 +204,7 @@ interface ManagePagesResponse {
     error: string
     completed_operations: number
   }
+  nextSteps?: string[]
 }
 
 // =============================================================================
@@ -256,6 +257,46 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
       results,
       message: `Successfully completed ${params.operations.length} page operation(s)`
     }
+  }
+
+  protected async afterExecute(
+    result: ManagePagesResponse,
+    _params: ManagePagesInput
+  ): Promise<ManagePagesResponse> {
+    const nextSteps: string[] = []
+
+    if (result.partial_failure) {
+      nextSteps.push(`Fix error: ${result.partial_failure.error}`)
+      nextSteps.push(`Resume from operation index ${result.partial_failure.operation_index}`)
+    } else if (result.success) {
+      const pageCreates = result.results.filter((r) => r.action === 'create_page')
+      const linkOps = result.results.filter((r) => r.action === 'link_widgets')
+      const getLayouts = result.results.filter((r) => r.action === 'get_layout')
+
+      // After create_page, suggest linking widgets
+      if (pageCreates.length > 0 && linkOps.length === 0) {
+        const firstCreate = pageCreates[0]
+        const viewId = firstCreate?.details.viewId as number
+        const sectionIds = firstCreate?.details.sectionIds as number[]
+        if (viewId && sectionIds && sectionIds.length > 1) {
+          nextSteps.push(
+            `Use link_widgets with viewId=${viewId} and sectionIds=[${sectionIds.join(', ')}] to connect widgets`
+          )
+        }
+      }
+
+      // After link_widgets, suggest verifying
+      if (linkOps.length > 0) {
+        nextSteps.push(`Use grist_manage_records to add test data and verify links work correctly`)
+      }
+
+      // After get_layout, suggest modifications
+      if (getLayouts.length > 0) {
+        nextSteps.push(`Use set_layout to modify the layout, or configure_widget to adjust sorting`)
+      }
+    }
+
+    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
   }
 
   private async executeOperation(docId: string, op: PageOperation): Promise<OperationResult> {
@@ -802,7 +843,8 @@ export const ManagePagesOutputSchema = z.object({
       error: z.string(),
       completed_operations: z.number()
     })
-    .optional()
+    .optional(),
+  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
 })
 
 // =============================================================================
@@ -829,25 +871,45 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
       'ARCHITECTURE B (Two-Step Flow):\n' +
       '1. create_page returns sectionIds: { viewId: 42, sectionIds: [101, 102] }\n' +
       '2. link_widgets uses those sectionIds to establish links\n\n' +
-      'LINK TYPES (7 types, defined on the target widget):\n' +
-      '- child_of: Master-detail filter - target_column is Ref to source table\n' +
-      '- matched_by: Column matching - filter by matching column values\n' +
-      '- detail_of: Summary-to-detail - show records grouped in selected summary row\n' +
-      '- breakdown_of: Summary drill - more detailed breakdown of source summary\n' +
-      "- listed_in: RefList display - show records listed in source's RefList column\n" +
-      '- synced_with: Cursor sync - sync cursor position (same table)\n' +
-      '- referenced_by: Reference follow - cursor jumps to referenced record\n\n' +
-      'LINK TYPE CONSTRAINTS:\n' +
-      '- child_of: target_column must be Ref pointing to source table\n' +
-      '- matched_by: Both columns typically reference same third table\n' +
-      '- detail_of: Source MUST be a summary table\n' +
-      '- breakdown_of: BOTH widgets MUST be summary tables (source less detailed)\n' +
-      '- listed_in: source_column MUST be RefList type\n' +
-      '- synced_with: BOTH widgets MUST show the same table\n' +
-      '- referenced_by: source_column MUST be Ref pointing to target table\n\n' +
+      'LINK TYPE DECISION TABLE - Choose based on your data relationship:\n' +
+      '┌─────────────┬──────────────────────────────────────────────────────────┐\n' +
+      '│ Relationship│ Use This Link Type                                       │\n' +
+      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
+      '│ Foreign key │ child_of - Target has Ref column to source table         │\n' +
+      '│             │ Example: Contacts.Company → Companies                    │\n' +
+      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
+      '│ Same lookup │ matched_by - Both reference same third table             │\n' +
+      '│             │ Example: Both have Project column referencing Projects   │\n' +
+      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
+      '│ Summary→Raw │ detail_of - Click summary row, see grouped records       │\n' +
+      '│             │ Source MUST be summary table                             │\n' +
+      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
+      '│ Summary→Sum │ breakdown_of - Drill into more detailed summary          │\n' +
+      '│             │ BOTH must be summary tables (source less granular)       │\n' +
+      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
+      '│ RefList     │ listed_in - Show records in source RefList column        │\n' +
+      '│             │ Source column MUST be RefList type                       │\n' +
+      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
+      '│ Same table  │ synced_with - Sync cursor position between widgets       │\n' +
+      '│             │ BOTH widgets must show the same table                    │\n' +
+      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
+      '│ Follow ref  │ referenced_by - Cursor jumps to referenced record        │\n' +
+      '│             │ Source column MUST be Ref pointing to target table       │\n' +
+      '└─────────────┴──────────────────────────────────────────────────────────┘\n\n' +
+      'LAYOUT CONSTRAINTS:\n' +
+      '- cols/rows arrays need 2+ items (use weights for single-widget full-width)\n' +
+      '- weight: controls relative size (default 1). weight:2 = twice as wide/tall\n' +
+      '- set_layout: ALL existing widgets must appear in layout OR remove array\n' +
+      '- Nesting: cols can contain rows, rows can contain cols (max 3 levels)\n\n' +
+      'CHART CONFIGURATION:\n' +
+      '- chartType: "bar", "pie", "line", "area", "kaplan_meier", "donut"\n' +
+      '- x_axis: Column name for X-axis (categories)\n' +
+      '- y_axis: Array of column names for Y-axis values\n' +
+      '- For pie/donut: x_axis=labels, y_axis=[values]\n' +
+      '- For bar/line: x_axis=categories, y_axis=series columns\n\n' +
       'RELATED TOOLS:\n' +
-      '- Row/column formatting: grist_manage_conditional_rules (scope: row|column|field)\n' +
-      '- Chart configuration: Use x_axis/y_axis parameters in widget definition',
+      '- Row rules: grist_manage_schema update_table with rowRules\n' +
+      '- Column rules: grist_manage_schema modify_column with style.rulesOptions',
     examples: [
       {
         desc: 'Create page then link widgets (master-detail)',

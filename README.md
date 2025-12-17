@@ -4,7 +4,7 @@
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-1.0-purple.svg)](https://modelcontextprotocol.io)
 
-Model Context Protocol server with 12 tools for the Grist API.
+Model Context Protocol server with 11 tools for the Grist API.
 
 ## Quick Start
 
@@ -70,7 +70,6 @@ Add to your MCP config:
 <!-- TOOLS_TABLE_START -->
 | Tool | Purpose |
 |------|---------|
-| `grist_discover_tools` | Discover tool schemas on demand to reduce token usage |
 | `grist_get_workspaces` | List and filter workspaces |
 | `grist_get_documents` | Find documents by ID, name, or workspace |
 | `grist_get_tables` | Get table structure and schema |

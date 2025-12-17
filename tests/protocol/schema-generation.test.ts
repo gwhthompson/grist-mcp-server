@@ -204,22 +204,6 @@ describe('MCP Protocol - Schema Generation', () => {
   })
 
   describe('schema structure validation', () => {
-    it('should have valid structure for grist_discover_tools schema', async () => {
-      const result = await ctx.client.listTools()
-
-      const discoverTool = result.tools.find((t) => t.name === 'grist_discover_tools')
-      expect(discoverTool).toBeDefined()
-
-      const schema = discoverTool?.inputSchema as Record<string, unknown>
-      const properties = schema.properties as Record<string, Record<string, unknown>>
-
-      // Should have detail_level, category, tool_name, response_format properties
-      expect(properties.detail_level).toBeDefined()
-      expect(properties.category).toBeDefined()
-      expect(properties.tool_name).toBeDefined()
-      expect(properties.response_format).toBeDefined()
-    })
-
     it('should have valid structure for grist_get_records schema', async () => {
       const result = await ctx.client.listTools()
 

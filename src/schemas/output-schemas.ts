@@ -63,7 +63,8 @@ export const GetWorkspacesOutputSchema = z.object({
   offset: z.number(),
   limit: z.number(),
   hasMore: z.boolean(),
-  nextOffset: z.number().nullable()
+  nextOffset: z.number().nullable(),
+  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
 })
 
 /** grist_get_documents output */
@@ -89,7 +90,8 @@ export const GetDocumentsOutputSchema = z.object({
   offset: z.number(),
   limit: z.number(),
   hasMore: z.boolean(),
-  nextOffset: z.number().nullable()
+  nextOffset: z.number().nullable(),
+  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
 })
 
 /** Column schema for full_schema detail level */
@@ -133,7 +135,8 @@ export const GetTablesOutputSchema = z.object({
   nextOffset: z.number().nullable(),
   pageNumber: z.number(),
   totalPages: z.number(),
-  itemsInPage: z.number()
+  itemsInPage: z.number(),
+  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
 })
 
 // ============================================================================
@@ -170,7 +173,8 @@ export const GetRecordsOutputSchema = z.object({
       affectedColumns: z.array(z.string()).describe('Columns with errors')
     })
     .optional()
-    .describe('Formula error summary if any')
+    .describe('Formula error summary if any'),
+  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
 })
 
 /** grist_query_sql output */
@@ -180,7 +184,8 @@ export const QuerySqlOutputSchema = z.object({
   offset: z.number(),
   limit: z.number(),
   hasMore: z.boolean(),
-  nextOffset: z.number().nullable()
+  nextOffset: z.number().nullable(),
+  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
 })
 
 // ============================================================================
@@ -544,5 +549,6 @@ export const HelpOutputSchema = z.object({
   toolName: z.string().describe('Tool name'),
   topic: z.string().describe('Documentation topic'),
   documentation: z.string().describe('Documentation content'),
-  availableTopics: z.array(z.string()).describe('Available help topics')
+  availableTopics: z.array(z.string()).describe('Available help topics'),
+  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
 })

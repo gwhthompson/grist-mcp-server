@@ -21,9 +21,9 @@ describe('MCP Protocol - tools/list', () => {
   })
 
   describe('tool count and names', () => {
-    it('should return all 12 registered tools', async () => {
+    it('should return all 11 registered tools', async () => {
       const result = await ctx.client.listTools()
-      expect(result.tools).toHaveLength(12)
+      expect(result.tools).toHaveLength(11)
     })
 
     it('should return tools with correct names', async () => {
@@ -32,14 +32,6 @@ describe('MCP Protocol - tools/list', () => {
 
       const expectedNames = ALL_TOOLS.map((t) => t.name).sort()
       expect(toolNames).toEqual(expectedNames)
-    })
-
-    it('should include grist_discover_tools for progressive disclosure', async () => {
-      const result = await ctx.client.listTools()
-      const discoverTool = result.tools.find((t) => t.name === 'grist_discover_tools')
-
-      expect(discoverTool).toBeDefined()
-      expect(discoverTool?.description).toContain('progressive')
     })
   })
 
@@ -81,7 +73,6 @@ describe('MCP Protocol - tools/list', () => {
 
   describe('read-only tool annotations', () => {
     const readOnlyTools = [
-      'grist_discover_tools',
       'grist_get_workspaces',
       'grist_get_documents',
       'grist_get_tables',
@@ -163,7 +154,6 @@ describe('MCP Protocol - tools/list', () => {
 
       // These tools should have outputSchema based on tool definitions
       const toolsWithOutputSchema = [
-        'grist_discover_tools',
         'grist_get_workspaces',
         'grist_get_documents',
         'grist_get_tables',

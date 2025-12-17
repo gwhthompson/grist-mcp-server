@@ -1,5 +1,11 @@
 /**
- * Unified Conditional Formatting Tool
+ * Conditional Formatting Tool (INTERNAL - NOT REGISTERED)
+ *
+ * @deprecated This tool is NOT registered in ALL_TOOLS and is kept only for testing purposes.
+ * Production code should use grist_manage_schema instead:
+ * - Row rules: update_table operation with rowRules
+ * - Column rules: modify_column with style.rulesOptions
+ * - Field rules: modify_column with style.rulesOptions[].sectionId
  *
  * Manages conditional formatting rules across all three Grist scopes:
  * - row: Format entire rows in the Raw Data view

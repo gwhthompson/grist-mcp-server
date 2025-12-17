@@ -14,7 +14,7 @@ This MCP server is tested against various Grist versions. The table below shows 
 
 | Grist Version | Test Date | Status |
 |---------------|-----------|--------|
-| 1.7.x | 2024-12-05 | ✅ Passed (development) |
+| 1.7.x | 2025-12-05 | ✅ Passed (development) |
 
 ## Testing
 

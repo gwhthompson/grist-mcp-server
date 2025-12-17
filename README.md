@@ -1,10 +1,12 @@
 # Grist MCP Server
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/gwhthompson/grist-mcp-server)
+[![CI](https://github.com/gwhthompson/grist-mcp-server/actions/workflows/ci.yml/badge.svg)](https://github.com/gwhthompson/grist-mcp-server/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/gwhthompson/grist-mcp-server/graph/badge.svg)](https://codecov.io/gh/gwhthompson/grist-mcp-server)
+[![npm](https://img.shields.io/npm/v/grist-mcp-server)](https://www.npmjs.com/package/grist-mcp-server)
 [![License](https://img.shields.io/badge/license-Apache--2.0-green.svg)](LICENSE)
 [![MCP](https://img.shields.io/badge/MCP-1.0-purple.svg)](https://modelcontextprotocol.io)
 
-Model Context Protocol server with 11 tools for the Grist API.
+MCP server for Grist. 11 tools for documents, records, SQL, and pages.
 
 ## Quick Start
 
@@ -126,10 +128,10 @@ npm test  # Docker required - container lifecycle is automatic
 
 ## Documentation
 
-This server uses [progressive disclosure](https://www.anthropic.com/engineering/code-execution-with-mcp) to reduce context usage. Tool descriptions are kept concise, with full documentation available via `grist_help`:
+Tool descriptions are concise. Use `grist_help` for details:
 
-- `grist_help tool_name="grist_add_records" topic="examples"` - usage examples
-- `grist_help tool_name="grist_upsert_records" topic="errors"` - troubleshooting
+- `grist_help tool_name="grist_manage_records" topic="examples"`
+- `grist_help tool_name="grist_query_sql" topic="errors"`
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 

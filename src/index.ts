@@ -19,7 +19,6 @@ import {
   validateToolNames
 } from './registry/tool-registry.js'
 import type { ToolContext } from './registry/types.js'
-import { registerResources } from './resources/index.js'
 import { createGristMcpServer, type ServerConfig, type ServerInstance } from './server.js'
 import { initSessionAnalytics } from './services/session-analytics.js'
 import { sharedLogger } from './utils/shared-logger.js'
@@ -122,7 +121,6 @@ async function main(): Promise<void> {
   // This is the single source of truth - same function used by tests
   setupToolsListHandler(serverInstance.server, ALL_TOOLS)
 
-  registerResources(serverInstance.server, serverInstance.context)
   await connectServer(serverInstance.server)
   logStartupInfo(config)
 }

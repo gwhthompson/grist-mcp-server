@@ -13,7 +13,6 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { inject } from 'vitest'
 import { ALL_TOOLS } from '../../src/registry/tool-definitions.js'
 import { registerToolsBatch, silentStrategy } from '../../src/registry/tool-registry.js'
-import { registerResources } from '../../src/resources/index.js'
 import { registerSchemas } from '../../src/schemas/registry.js'
 import { setupToolsListHandler } from '../../src/schemas/schema-utils.js'
 import { createGristMcpServer, type ServerInstance } from '../../src/server.js'
@@ -41,8 +40,6 @@ export interface MCPTestClientOptions {
   gristBaseUrl?: string
   /** Override Grist API key (default: from globalSetup) */
   gristApiKey?: string
-  /** Skip resource registration (default: false) */
-  skipResources?: boolean
 }
 
 /**
@@ -103,11 +100,6 @@ export async function createMCPTestClient(
 
   // Setup tools/list handler - uses SAME function as production (no duplication)
   setupToolsListHandler(serverInstance.server, ALL_TOOLS)
-
-  // Register resources (unless skipped)
-  if (!options.skipResources) {
-    registerResources(serverInstance.server, serverInstance.context)
-  }
 
   // Connect server to transport
   await serverInstance.server.connect(serverTransport)

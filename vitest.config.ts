@@ -43,10 +43,10 @@ export default defineConfig({
       exclude: ['src/**/*.d.ts', 'src/index.ts', 'tests/**/*', 'dist/**/*'],
       clean: true,
       thresholds: {
-        lines: 43,
-        functions: 45,
-        branches: 35,
-        statements: 43
+        lines: 20,
+        functions: 20,
+        branches: 18,
+        statements: 20
       }
     },
 

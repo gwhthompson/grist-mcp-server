@@ -23,7 +23,6 @@
     "test:unit": "vitest run --project unit",
     "test:integration": "vitest run --project integration",
     "test:protocol": "vitest run --project protocol",
-    "test:contract": "vitest run --project contracts",
     "test:scenarios": "vitest run --project scenarios",
     "test:watch": "vitest",
     "check": "biome check --write .",

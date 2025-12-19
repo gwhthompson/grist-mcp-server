@@ -27,6 +27,9 @@ export interface RuleOwnerConfig {
 
   /** Helper column prefix for this scope */
   helperColumnPrefix: 'gristHelper_ConditionalRule' | 'gristHelper_RowConditionalRule'
+
+  /** Human-readable scope name for error messages */
+  scopeName: 'row' | 'column' | 'field'
 }
 
 /**

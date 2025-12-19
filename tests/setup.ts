@@ -8,7 +8,7 @@
  */
 
 import { afterAll, beforeAll, inject, vi } from 'vitest'
-import { log } from '../src/utils/logger.js'
+import { log } from '../src/utils/shared-logger.js'
 
 // Register custom matchers
 import './helpers/custom-matchers.js'

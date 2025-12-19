@@ -39,7 +39,6 @@ import {
  */
 export function registerSchemas(): void {
   // grist_manage_schema - reused across multiple operations
-  // Note: TableIdSchema and ColIdSchema use .meta() in common.ts for auto-registration
   ColumnDefinitionSchema.register(z.globalRegistry, { id: 'ColumnDefinition' }) // 2x
   ColumnTypeLiteralSchema.register(z.globalRegistry, { id: 'columnType' }) // 3x
   ColumnStyleSchema.register(z.globalRegistry, { id: 'columnStyle' }) // 2x in ModifyColumn

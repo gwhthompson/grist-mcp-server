@@ -123,7 +123,6 @@ export const DocIdSchema = z
       'Document ID must be Base58 format (22 chars, excludes 0OIl which are visually ambiguous)'
   })
   .describe('Document ID (from grist_get_documents)')
-  .meta({ id: 'docId' })
   .brand<'DocId'>()
 
 /** Branded DocId type - use DocIdSchema.parse() to create */
@@ -142,7 +141,6 @@ export const TableIdSchema = z
       'Table ID cannot be a Python keyword (for, class, if, def, etc.) because Grist uses Python for formulas'
   })
   .describe('Table name (from grist_get_tables)')
-  .meta({ id: 'tableId' })
   .brand<'TableId'>()
 
 /** Branded TableId type - use TableIdSchema.parse() to create */
@@ -170,7 +168,6 @@ export const ColIdSchema = z
     error: 'Column ID cannot start with gristHelper_ (reserved prefix for Grist internal columns)'
   })
   .describe('Column ID')
-  .meta({ id: 'colId' })
   .brand<'ColId'>()
 
 /** Branded ColId type - use ColIdSchema.parse() to create */

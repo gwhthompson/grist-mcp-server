@@ -28,6 +28,16 @@ import { WidgetRegistry } from './widget-registry.js'
 // Types
 // =============================================================================
 
+interface NewWidgetConfig {
+  table: string
+  widget: string
+  title?: string
+  chartType?: string
+  chart_options?: Record<string, unknown>
+  x_axis?: string
+  y_axis?: string[]
+}
+
 export interface CreatePageResult {
   success: boolean
   viewId: number
@@ -51,6 +61,54 @@ export interface GetLayoutResult {
     widget: string
     title?: string
   }>
+}
+
+// =============================================================================
+// Widget Configuration Helper
+// =============================================================================
+
+/**
+ * Configure a newly created widget with title and chart settings.
+ * Consolidates duplicated logic from executeCreatePage and executeSetLayout.
+ */
+async function configureNewWidget(
+  client: GristClient,
+  docId: string,
+  sectionRef: number,
+  widget: NewWidgetConfig
+): Promise<void> {
+  // Set title if specified
+  if (widget.title) {
+    await client.post(`/docs/${docId}/apply`, [
+      ['UpdateRecord', '_grist_Views_section', sectionRef, { title: widget.title }]
+    ])
+  }
+
+  // Configure chart widget (type, options, axes)
+  if (widget.widget === 'chart' && widget.chartType) {
+    // Set chart type and options
+    const chartAction = buildChartConfigAction(
+      sectionRef,
+      widget.chartType,
+      widget.chart_options ?? undefined
+    )
+    await client.post(`/docs/${docId}/apply`, [chartAction])
+
+    // Configure chart axes if specified
+    if (widget.x_axis || (widget.y_axis && widget.y_axis.length > 0)) {
+      const axisActions = await configureChartAxes(
+        client,
+        docId,
+        sectionRef,
+        widget.table,
+        widget.x_axis,
+        widget.y_axis
+      )
+      if (axisActions.length > 0) {
+        await client.post(`/docs/${docId}/apply`, axisActions)
+      }
+    }
+  }
 }
 
 // =============================================================================
@@ -146,38 +204,8 @@ export async function executeCreatePage(
 
     // Note: link handling removed in Architecture B - use link_widgets operation
 
-    // Set title if specified
-    if (widget.title) {
-      await client.post(`/docs/${docId}/apply`, [
-        ['UpdateRecord', '_grist_Views_section', result.sectionRef, { title: widget.title }]
-      ])
-    }
-
-    // Configure chart widget (type, options, axes)
-    if (widget.widget === 'chart' && widget.chartType) {
-      // Set chart type and options
-      const chartAction = buildChartConfigAction(
-        result.sectionRef,
-        widget.chartType,
-        widget.chart_options ?? undefined
-      )
-      await client.post(`/docs/${docId}/apply`, [chartAction])
-
-      // Configure chart axes if specified
-      if (widget.x_axis || (widget.y_axis && widget.y_axis.length > 0)) {
-        const axisActions = await configureChartAxes(
-          client,
-          docId,
-          result.sectionRef,
-          widget.table,
-          widget.x_axis,
-          widget.y_axis
-        )
-        if (axisActions.length > 0) {
-          await client.post(`/docs/${docId}/apply`, axisActions)
-        }
-      }
-    }
+    // Configure widget title and chart settings
+    await configureNewWidget(client, docId, result.sectionRef, widget)
   }
 
   // Phase 4: Apply layout
@@ -305,37 +333,8 @@ export async function executeSetLayout(
 
     // Note: link handling removed in Architecture B - use link_widgets operation
 
-    if (widget.title) {
-      await client.post(`/docs/${docId}/apply`, [
-        ['UpdateRecord', '_grist_Views_section', result.sectionRef, { title: widget.title }]
-      ])
-    }
-
-    // Configure chart widget (type, options, axes)
-    if (widget.widget === 'chart' && widget.chartType) {
-      // Set chart type and options
-      const chartAction = buildChartConfigAction(
-        result.sectionRef,
-        widget.chartType,
-        widget.chart_options ?? undefined
-      )
-      await client.post(`/docs/${docId}/apply`, [chartAction])
-
-      // Configure chart axes if specified
-      if (widget.x_axis || (widget.y_axis && widget.y_axis.length > 0)) {
-        const axisActions = await configureChartAxes(
-          client,
-          docId,
-          result.sectionRef,
-          widget.table,
-          widget.x_axis,
-          widget.y_axis
-        )
-        if (axisActions.length > 0) {
-          await client.post(`/docs/${docId}/apply`, axisActions)
-        }
-      }
-    }
+    // Configure widget title and chart settings
+    await configureNewWidget(client, docId, result.sectionRef, widget)
   }
 
   // Phase 5: Apply layout

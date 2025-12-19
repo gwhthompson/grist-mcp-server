@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { getCurrencyCodeError, isValidCurrency } from '../constants/iso-4217-currencies.js'
 import { log } from '../utils/shared-logger.js'
+import { AlignmentSchema as BaseAlignmentSchema } from './common.js'
 import { HeaderStyleSchema, type WidgetStyle, WidgetStyleSchema } from './styles.js'
 
 // Re-export for backward compatibility (many files import StylePropertiesSchema from here)
@@ -10,7 +11,8 @@ export type StyleProperties = WidgetStyle
 // Alias for header style
 const HeaderStylePropertiesSchema = HeaderStyleSchema
 
-const AlignmentSchema = z.enum(['left', 'center', 'right']).optional()
+// Optional alignment schema for widget options (base schema is non-optional)
+const AlignmentSchema = BaseAlignmentSchema.optional()
 
 const TextWidgetTypeSchema = z.enum(['TextBox', 'Markdown', 'HyperLink']).optional()
 const NumericWidgetTypeSchema = z.enum(['Spinner']).optional()
@@ -207,7 +209,7 @@ export const RefWidgetOptionsSchema = z.strictObject({
 
 export type RefWidgetOptions = z.infer<typeof RefWidgetOptionsSchema>
 
-export const RefListWidgetOptionsSchema = RefWidgetOptionsSchema.extend({})
+export const RefListWidgetOptionsSchema = RefWidgetOptionsSchema
 
 export type RefListWidgetOptions = z.infer<typeof RefListWidgetOptionsSchema>
 

@@ -1,21 +1,5 @@
 import type { GristClient } from '../../services/grist-client.js'
-import type { LayoutSpec, SQLQueryResponse } from '../../types.js'
-
-/**
- * Gets the first section ID from a layout specification.
- * Recursively traverses split layouts to find the leftmost/topmost leaf.
- */
-export function getFirstSectionId(layout: LayoutSpec): number {
-  if (layout.type === 'leaf') {
-    return layout.leaf
-  }
-  // For split layouts, get the first child's section
-  if (layout.children && layout.children.length > 0) {
-    // Safe: length check guarantees children[0] exists
-    return getFirstSectionId(layout.children[0] as LayoutSpec)
-  }
-  return 0
-}
+import type { SQLQueryResponse } from '../../types.js'
 
 /**
  * Fetches table metadata for a list of widget section IDs.

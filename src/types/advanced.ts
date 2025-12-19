@@ -227,18 +227,3 @@ export interface PaginatedResponse<T> {
  * Result type for operations that can succeed or fail
  */
 export type Result<T, E = Error> = { success: true; data: T } | { success: false; error: E }
-
-// ============================================================================
-// Exhaustiveness Checking
-// ============================================================================
-
-/**
- * Exhaustiveness check for switch/if-else statements
- * Ensures all cases in a discriminated union are handled
- *
- * @param value - Should be `never` if all cases are handled
- * @throws Error if called (indicates missing case)
- */
-export function assertNever(value: never): never {
-  throw new Error(`Unexpected value: ${JSON.stringify(value)}. This should never happen.`)
-}

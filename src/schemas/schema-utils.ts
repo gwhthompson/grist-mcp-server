@@ -115,9 +115,13 @@ export function cleanAndValidateSchema(
  * Used by both production code (src/index.ts) and tests.
  *
  * Features:
- * - Generates JSON Schema with $defs for shared schema references
+ * - Generates JSON Schema with inlined definitions (no $ref/$defs)
  * - Cleans redundant fields for token optimization
  * - Validates all schemas are properly registered (no __schema* names)
+ *
+ * Note: Uses 'inline' instead of 'ref' because some MCP clients (including
+ * claude.ai) may not properly dereference $ref pointers, causing type
+ * information to be lost. Inlining ensures all type constraints are visible.
  */
 export function setupToolsListHandler(server: McpServer, tools: readonly ToolDefinition[]): void {
   server.server.setRequestHandler(ListToolsRequestSchema, () => ({
@@ -126,12 +130,12 @@ export function setupToolsListHandler(server: McpServer, tools: readonly ToolDef
       title: tool.title,
       description: tool.description,
       inputSchema: cleanAndValidateSchema(
-        z.toJSONSchema(tool.inputSchema, { reused: 'ref', io: 'input' }),
+        z.toJSONSchema(tool.inputSchema, { reused: 'inline', io: 'input' }),
         `${tool.name} inputSchema`
       ),
       ...(tool.outputSchema && {
         outputSchema: cleanAndValidateSchema(
-          z.toJSONSchema(tool.outputSchema, { reused: 'ref', io: 'output' }),
+          z.toJSONSchema(tool.outputSchema, { reused: 'inline', io: 'output' }),
           `${tool.name} outputSchema`
         )
       }),

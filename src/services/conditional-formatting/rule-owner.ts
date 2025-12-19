@@ -5,7 +5,13 @@
  * row, column, and field conditional formatting scopes.
  */
 
+import { ApplyResponseSchema } from '../../schemas/api-responses.js'
+import type { ApplyResponse, SQLQueryResponse } from '../../types.js'
+import { first } from '../../utils/array-helpers.js'
+import { extractFields } from '../../utils/grist-field-extractor.js'
+import { validateRetValues } from '../../validators/apply-response.js'
 import type { GristClient } from '../grist-client.js'
+import { encodeGristList, parseGristJson, parseGristList } from '../rule-utilities.js'
 import type {
   OwnerLookupParams,
   RuleContext,
@@ -56,31 +62,106 @@ export abstract class RuleOwner {
   /**
    * Get current rules and styles from the owner record.
    *
+   * Uses config.metadataTable and config.styleProperty for the query.
+   *
    * @param client Grist API client
    * @param docId Document ID
    * @param ownerRef Owner reference ID
    * @returns Object with helperColRefs array and styles array
    */
-  abstract getRulesAndStyles(
+  async getRulesAndStyles(
     client: GristClient,
     docId: string,
     ownerRef: number
-  ): Promise<RulesAndStyles>
+  ): Promise<RulesAndStyles> {
+    const { metadataTable, styleProperty } = this.config
+
+    const response = await client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+      sql: `SELECT rules, ${styleProperty} FROM ${metadataTable} WHERE id = ?`,
+      args: [ownerRef]
+    })
+
+    if (response.records.length === 0) {
+      return { helperColRefs: [], styles: [] }
+    }
+
+    const fields = extractFields(first(response.records, `${metadataTable} rules query`))
+
+    // Parse rules RefList (handles SQL string or REST array)
+    const helperColRefs = parseGristList(fields.rules)
+
+    // Parse styleProperty.rulesOptions (handles SQL string or REST object)
+    const options = parseGristJson<{ rulesOptions?: Array<Record<string, unknown>> }>(
+      fields[styleProperty],
+      {}
+    )
+    const styles = options.rulesOptions ?? []
+
+    return { helperColRefs, styles }
+  }
 
   /**
    * Update the owner's rules and styles.
+   *
+   * Uses config.metadataTable and config.styleProperty for the update.
    *
    * @param client Grist API client
    * @param docId Document ID
    * @param ownerRef Owner reference ID
    * @param update New rules and styles to set
    */
-  abstract updateRulesAndStyles(
+  async updateRulesAndStyles(
     client: GristClient,
     docId: string,
     ownerRef: number,
     update: RulesAndStylesUpdate
-  ): Promise<void>
+  ): Promise<void> {
+    const { metadataTable, styleProperty, scopeName } = this.config
+
+    // Get current options to preserve other settings
+    const fullOptionsResp = await client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+      sql: `SELECT ${styleProperty} FROM ${metadataTable} WHERE id = ?`,
+      args: [ownerRef]
+    })
+
+    const currentOptions =
+      fullOptionsResp.records.length > 0
+        ? parseGristJson<Record<string, unknown>>(
+            extractFields(first(fullOptionsResp.records, `${scopeName} options query`))[
+              styleProperty
+            ],
+            {}
+          )
+        : {}
+
+    // Merge updated rulesOptions
+    const updatedOptions = {
+      ...currentOptions,
+      rulesOptions: update.styles
+    }
+
+    // Update metadata
+    const response = await client.post<ApplyResponse>(
+      `/docs/${docId}/apply`,
+      [
+        [
+          'UpdateRecord',
+          metadataTable,
+          ownerRef,
+          {
+            rules: encodeGristList(update.helperColRefs),
+            [styleProperty]: JSON.stringify(updatedOptions)
+          }
+        ]
+      ],
+      {
+        schema: ApplyResponseSchema,
+        context: `Updating ${scopeName} conditional rules`
+      }
+    )
+
+    validateRetValues(response, { context: `Updating ${scopeName} conditional rules` })
+  }
 
   /**
    * Predict the next helper column name using Grist's naming logic.

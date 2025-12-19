@@ -6,21 +6,13 @@
  * Styles are stored in _grist_Tables_column.widgetOptions.rulesOptions
  */
 
-import { ApplyResponseSchema } from '../../schemas/api-responses.js'
-import type { ApplyResponse, SQLQueryResponse } from '../../types.js'
+import type { SQLQueryResponse } from '../../types.js'
 import { first } from '../../utils/array-helpers.js'
 import { extractFields } from '../../utils/grist-field-extractor.js'
-import { validateRetValues } from '../../validators/apply-response.js'
 import type { GristClient } from '../grist-client.js'
-import { encodeGristList, parseGristJson, parseGristList } from '../rule-utilities.js'
+import { parseGristJson } from '../rule-utilities.js'
 import { RuleOwner } from './rule-owner.js'
-import type {
-  OwnerLookupParams,
-  RuleContext,
-  RuleOwnerConfig,
-  RulesAndStyles,
-  RulesAndStylesUpdate
-} from './types.js'
+import type { OwnerLookupParams, RuleContext, RuleOwnerConfig } from './types.js'
 
 export class ColumnRuleOwner extends RuleOwner {
   readonly config: RuleOwnerConfig = {
@@ -28,7 +20,8 @@ export class ColumnRuleOwner extends RuleOwner {
     rulesProperty: 'rules',
     styleProperty: 'widgetOptions',
     stylesInWidgetOptions: true,
-    helperColumnPrefix: 'gristHelper_ConditionalRule'
+    helperColumnPrefix: 'gristHelper_ConditionalRule',
+    scopeName: 'column'
   }
 
   /**
@@ -64,94 +57,6 @@ export class ColumnRuleOwner extends RuleOwner {
     }
 
     return column.fields.colRef
-  }
-
-  /**
-   * Get rules and styles from column metadata
-   */
-  async getRulesAndStyles(
-    client: GristClient,
-    docId: string,
-    ownerRef: number
-  ): Promise<RulesAndStyles> {
-    // Query column metadata directly
-    const response = await client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
-      sql: `SELECT rules, widgetOptions
-            FROM _grist_Tables_column
-            WHERE id = ?`,
-      args: [ownerRef]
-    })
-
-    if (response.records.length === 0) {
-      return { helperColRefs: [], styles: [] }
-    }
-
-    const fields = extractFields(first(response.records, 'Column rules query'))
-
-    // Parse rules RefList (handles SQL string or REST array)
-    const helperColRefs = parseGristList(fields.rules)
-
-    // Parse widgetOptions.rulesOptions (handles SQL string or REST object)
-    const widgetOptions = parseGristJson<{ rulesOptions?: Array<Record<string, unknown>> }>(
-      fields.widgetOptions,
-      {}
-    )
-    const styles = widgetOptions.rulesOptions ?? []
-
-    return { helperColRefs, styles }
-  }
-
-  /**
-   * Update rules and styles on column metadata
-   */
-  async updateRulesAndStyles(
-    client: GristClient,
-    docId: string,
-    ownerRef: number,
-    update: RulesAndStylesUpdate
-  ): Promise<void> {
-    // Get full widgetOptions
-    const fullOptionsResp = await client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
-      sql: `SELECT widgetOptions FROM _grist_Tables_column WHERE id = ?`,
-      args: [ownerRef]
-    })
-
-    const currentWidgetOptions =
-      fullOptionsResp.records.length > 0
-        ? parseGristJson<Record<string, unknown>>(
-            extractFields(first(fullOptionsResp.records, 'Column widgetOptions query'))
-              .widgetOptions,
-            {}
-          )
-        : {}
-
-    // Merge updated rulesOptions
-    const updatedWidgetOptions = {
-      ...currentWidgetOptions,
-      rulesOptions: update.styles
-    }
-
-    // Update column metadata
-    const response = await client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [
-        [
-          'UpdateRecord',
-          '_grist_Tables_column',
-          ownerRef,
-          {
-            rules: encodeGristList(update.helperColRefs),
-            widgetOptions: JSON.stringify(updatedWidgetOptions)
-          }
-        ]
-      ],
-      {
-        schema: ApplyResponseSchema,
-        context: 'Updating column conditional rules'
-      }
-    )
-
-    validateRetValues(response, { context: 'Updating column conditional rules' })
   }
 
   /**

@@ -402,9 +402,6 @@ export function columnToGristFormat(column: ColumnDefinition): {
   }
 }
 
-// Legacy alias
-export const flatColumnToLegacy = columnToGristFormat
-
 // =============================================================================
 // Grist Type Conversion
 // =============================================================================

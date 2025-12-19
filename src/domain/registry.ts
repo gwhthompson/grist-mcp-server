@@ -84,28 +84,3 @@ export function getSchemaMetadata<T extends z.ZodType>(schema: T): GristEntityMe
 export function isSchemaRegistered<T extends z.ZodType>(schema: T): boolean {
   return gristRegistry.has(schema)
 }
-
-/**
- * Interpolate endpoint template with actual values.
- *
- * @example
- * ```typescript
- * interpolateEndpoint('/docs/{docId}/tables/{tableId}/records', {
- *   docId: 'abc123',
- *   tableId: 'Users'
- * })
- * // => '/docs/abc123/tables/Users/records'
- * ```
- */
-export function interpolateEndpoint(
-  template: string,
-  params: Record<string, string | number>
-): string {
-  return template.replace(/\{(\w+)\}/g, (_, key) => {
-    const value = params[key]
-    if (value === undefined) {
-      throw new Error(`Missing endpoint parameter: ${key}`)
-    }
-    return String(value)
-  })
-}

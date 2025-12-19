@@ -7,7 +7,13 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ColumnsApiResponse } from '../../../src/services/column-resolver.js'
-import { resolveVisibleCol } from '../../../src/services/column-resolver.js'
+import {
+  extractForeignTable,
+  getColumnNameFromId,
+  getColumnRef,
+  isReferenceType,
+  resolveVisibleCol
+} from '../../../src/services/column-resolver.js'
 import type { GristClient } from '../../../src/services/grist-client.js'
 
 describe('Column Resolver Service', () => {
@@ -371,5 +377,181 @@ describe('Column Resolver Service', () => {
       expect(mockClient.get).not.toHaveBeenCalled()
       // This is a performance optimization - avoids unnecessary API round trip
     })
+  })
+})
+
+describe('extractForeignTable', () => {
+  it('should extract table name from Ref type', () => {
+    expect(extractForeignTable('Ref:Customers')).toBe('Customers')
+    expect(extractForeignTable('Ref:People')).toBe('People')
+    expect(extractForeignTable('Ref:Sales_2024')).toBe('Sales_2024')
+  })
+
+  it('should extract table name from RefList type', () => {
+    expect(extractForeignTable('RefList:Tags')).toBe('Tags')
+    expect(extractForeignTable('RefList:Categories')).toBe('Categories')
+  })
+
+  it('should return null for non-reference types', () => {
+    expect(extractForeignTable('Text')).toBeNull()
+    expect(extractForeignTable('Numeric')).toBeNull()
+    expect(extractForeignTable('Int')).toBeNull()
+    expect(extractForeignTable('Bool')).toBeNull()
+    expect(extractForeignTable('Date')).toBeNull()
+    expect(extractForeignTable('DateTime')).toBeNull()
+    expect(extractForeignTable('Choice')).toBeNull()
+    expect(extractForeignTable('ChoiceList')).toBeNull()
+  })
+
+  it('should return null for malformed reference types', () => {
+    expect(extractForeignTable('Ref:')).toBeNull()
+    expect(extractForeignTable('RefList:')).toBeNull()
+    expect(extractForeignTable(':Customers')).toBeNull()
+    expect(extractForeignTable('')).toBeNull()
+  })
+})
+
+describe('isReferenceType', () => {
+  it('should return true for Ref types', () => {
+    expect(isReferenceType('Ref:Customers')).toBe(true)
+    expect(isReferenceType('Ref:People')).toBe(true)
+    expect(isReferenceType('Ref:Sales_2024')).toBe(true)
+  })
+
+  it('should return true for RefList types', () => {
+    expect(isReferenceType('RefList:Tags')).toBe(true)
+    expect(isReferenceType('RefList:Categories')).toBe(true)
+  })
+
+  it('should return false for non-reference types', () => {
+    expect(isReferenceType('Text')).toBe(false)
+    expect(isReferenceType('Numeric')).toBe(false)
+    expect(isReferenceType('Int')).toBe(false)
+    expect(isReferenceType('Bool')).toBe(false)
+    expect(isReferenceType('Date')).toBe(false)
+    expect(isReferenceType('DateTime')).toBe(false)
+    expect(isReferenceType('Choice')).toBe(false)
+    expect(isReferenceType('ChoiceList')).toBe(false)
+  })
+
+  it('should handle edge cases', () => {
+    expect(isReferenceType('')).toBe(false)
+    expect(isReferenceType('Ref')).toBe(false)
+    expect(isReferenceType('RefList')).toBe(false)
+    expect(isReferenceType('Reference:Table')).toBe(false)
+  })
+})
+
+describe('getColumnNameFromId', () => {
+  let mockClient: GristClient
+
+  beforeEach(() => {
+    mockClient = {
+      get: vi.fn()
+    } as unknown as GristClient
+  })
+
+  it('should resolve numeric ID to column name', async () => {
+    const mockResponse: ColumnsApiResponse = {
+      columns: [
+        { id: 'Name', fields: { colRef: 123, type: 'Text' } },
+        { id: 'Email', fields: { colRef: 456, type: 'Text' } }
+      ]
+    }
+
+    vi.mocked(mockClient.get).mockResolvedValue(mockResponse)
+
+    const result = await getColumnNameFromId(mockClient, 'doc123', 'Users', 456)
+
+    expect(result).toBe('Email')
+    expect(mockClient.get).toHaveBeenCalledWith('/docs/doc123/tables/Users/columns')
+  })
+
+  it('should throw when column ID not found', async () => {
+    const mockResponse: ColumnsApiResponse = {
+      columns: [{ id: 'Name', fields: { colRef: 123, type: 'Text' } }]
+    }
+
+    vi.mocked(mockClient.get).mockResolvedValue(mockResponse)
+
+    await expect(getColumnNameFromId(mockClient, 'doc123', 'Users', 999)).rejects.toThrow(
+      /Column with ID 999 not found in table 'Users'/
+    )
+  })
+
+  it('should handle API errors', async () => {
+    vi.mocked(mockClient.get).mockRejectedValue(new Error('Network error'))
+
+    await expect(getColumnNameFromId(mockClient, 'doc123', 'Users', 123)).rejects.toThrow(
+      /Failed to resolve column ID 123 in table 'Users'/
+    )
+  })
+
+  it('should handle empty columns response', async () => {
+    vi.mocked(mockClient.get).mockResolvedValue({ columns: [] })
+
+    await expect(getColumnNameFromId(mockClient, 'doc123', 'Users', 123)).rejects.toThrow(
+      /Column with ID 123 not found/
+    )
+  })
+})
+
+describe('getColumnRef', () => {
+  let mockClient: GristClient
+
+  beforeEach(() => {
+    mockClient = {
+      get: vi.fn()
+    } as unknown as GristClient
+  })
+
+  it('should resolve column name to colRef', async () => {
+    const mockResponse: ColumnsApiResponse = {
+      columns: [
+        { id: 'Name', fields: { colRef: 123, type: 'Text' } },
+        { id: 'Email', fields: { colRef: 456, type: 'Text' } }
+      ]
+    }
+
+    vi.mocked(mockClient.get).mockResolvedValue(mockResponse)
+
+    const result = await getColumnRef(mockClient, 'doc123', 'Users', 'Email')
+
+    expect(result).toBe(456)
+    expect(mockClient.get).toHaveBeenCalledWith('/docs/doc123/tables/Users/columns')
+  })
+
+  it('should throw when column not found with available columns', async () => {
+    const mockResponse: ColumnsApiResponse = {
+      columns: [
+        { id: 'Name', fields: { colRef: 123, type: 'Text' } },
+        { id: 'Email', fields: { colRef: 456, type: 'Text' } }
+      ]
+    }
+
+    vi.mocked(mockClient.get).mockResolvedValue(mockResponse)
+
+    await expect(getColumnRef(mockClient, 'doc123', 'Users', 'Phone')).rejects.toThrow(
+      /Column 'Phone' not found in table 'Users'/
+    )
+    await expect(getColumnRef(mockClient, 'doc123', 'Users', 'Phone')).rejects.toThrow(
+      /Available columns: Name, Email/
+    )
+  })
+
+  it('should handle API errors', async () => {
+    vi.mocked(mockClient.get).mockRejectedValue(new Error('Network timeout'))
+
+    await expect(getColumnRef(mockClient, 'doc123', 'Users', 'Name')).rejects.toThrow(
+      /Failed to get column reference for 'Name' in table 'Users'/
+    )
+  })
+
+  it('should handle empty columns list', async () => {
+    vi.mocked(mockClient.get).mockResolvedValue({ columns: [] })
+
+    await expect(getColumnRef(mockClient, 'doc123', 'Users', 'Name')).rejects.toThrow(
+      /Available columns: none/
+    )
   })
 })

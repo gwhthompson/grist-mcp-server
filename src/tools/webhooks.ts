@@ -8,6 +8,8 @@ import {
 import type { WebhookId } from '../types/advanced.js'
 import type { MCPToolResponse } from '../types.js'
 import { GristTool } from './base/GristTool.js'
+import { nextSteps } from './utils/next-steps.js'
+import { paginate } from './utils/pagination.js'
 
 // Re-export schema and types for backward compatibility
 export { ManageWebhooksSchema, type ManageWebhooksInput, type WebhookOperation }
@@ -202,52 +204,49 @@ export class ManageWebhooksTool extends GristTool<
     result: ManageWebhooksResponse,
     params: ManageWebhooksInput
   ): Promise<ManageWebhooksResponse> {
-    const nextSteps: string[] = []
+    const operations = params.operations
+    const hasCreate = operations.some((op) => op.action === 'create')
+    const hasDelete = operations.some((op) => op.action === 'delete')
+    const hasUpdate = operations.some((op) => op.action === 'update')
+    const hasList = operations.some((op) => op.action === 'list')
+    const hasClearQueue = operations.some((op) => op.action === 'clear_queue')
 
+    const builder = nextSteps()
+
+    // Partial failure hints
     if (result.partialFailure) {
-      nextSteps.push(
-        `Fix error in operation ${result.partialFailure.operationIndex}: ${result.partialFailure.error}`
-      )
-      nextSteps.push(`Resume from operation index ${result.partialFailure.operationIndex}`)
+      builder
+        .add(
+          `Fix error in operation ${result.partialFailure.operationIndex}: ${result.partialFailure.error}`
+        )
+        .add(`Resume from operation index ${result.partialFailure.operationIndex}`)
     } else if (result.success) {
-      // Generate contextual next steps based on operations performed
-      const operations = params.operations
-      const hasCreate = operations.some((op) => op.action === 'create')
-      const hasDelete = operations.some((op) => op.action === 'delete')
-      const hasUpdate = operations.some((op) => op.action === 'update')
-      const hasList = operations.some((op) => op.action === 'list')
-      const hasClearQueue = operations.some((op) => op.action === 'clear_queue')
-
-      if (hasList && result.results.length > 0) {
+      // Empty list hint
+      builder.addIfFn(hasList && result.results.length > 0, () => {
         const listResult = result.results.find((r) => r.operation === 'list')
         if (listResult && 'webhooks' in listResult && listResult.webhooks.length === 0) {
-          nextSteps.push(`No webhooks found. Use action="create" to set up webhook notifications`)
+          return 'No webhooks found. Use action="create" to set up webhook notifications'
         }
-      }
+        return ''
+      })
 
+      // Create hints - one per created webhook
       if (hasCreate) {
         const createResults = result.results.filter((r) => r.operation === 'create')
         for (const cr of createResults) {
           if ('tableId' in cr) {
-            nextSteps.push(`Test webhook by adding/updating records in "${cr.tableId}" table`)
+            builder.add(`Test webhook by adding/updating records in "${cr.tableId}" table`)
           }
         }
       }
 
-      if (hasUpdate) {
-        nextSteps.push(`Use action="list" to verify webhook configuration changes`)
-      }
-
-      if (hasDelete) {
-        nextSteps.push(`Verify webhook removed from receiving service`)
-      }
-
-      if (hasClearQueue) {
-        nextSteps.push(`Monitor webhook queue with action="list" to verify delivery`)
-      }
+      builder
+        .addIf(hasUpdate, 'Use action="list" to verify webhook configuration changes')
+        .addIf(hasDelete, 'Verify webhook removed from receiving service')
+        .addIf(hasClearQueue, 'Monitor webhook queue with action="list" to verify delivery')
     }
 
-    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
+    return { ...result, nextSteps: builder.build() }
   }
 
   private async executeOperation(
@@ -277,28 +276,22 @@ export class ManageWebhooksTool extends GristTool<
     const response = await this.client.get<ListWebhooksResponse>(`/docs/${docId}/webhooks`)
     const allWebhooks = response.webhooks || []
 
-    const offset = operation.offset ?? 0
-    const limit = operation.limit ?? 100
-    const total = allWebhooks.length
-    const paginatedWebhooks = allWebhooks.slice(offset, offset + limit)
-    const hasMore = offset + limit < total
-    const nextOffset = hasMore ? offset + limit : null
-    const itemsInPage = paginatedWebhooks.length
-    const pageNumber = Math.floor(offset / limit) + 1
-    const totalPages = Math.ceil(total / limit)
+    const paginated = paginate(allWebhooks, operation)
+    const pageNumber = Math.floor(paginated.offset / paginated.limit) + 1
+    const totalPages = Math.ceil(paginated.total / paginated.limit)
 
     return {
       operation: 'list',
-      webhookCount: itemsInPage,
-      total,
-      offset,
-      limit,
-      hasMore,
-      nextOffset,
+      webhookCount: paginated.items.length,
+      total: paginated.total,
+      offset: paginated.offset,
+      limit: paginated.limit,
+      hasMore: paginated.hasMore,
+      nextOffset: paginated.nextOffset,
       pageNumber,
       totalPages,
-      itemsInPage,
-      webhooks: paginatedWebhooks.map((w) => ({
+      itemsInPage: paginated.items.length,
+      webhooks: paginated.items.map((w) => ({
         id: w.id,
         name: w.fields.name,
         url: w.fields.url,

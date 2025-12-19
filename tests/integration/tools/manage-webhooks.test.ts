@@ -326,6 +326,51 @@ describe('grist_manage_webhooks', () => {
   })
 
   // =========================================================================
+  // Action: clear_queue
+  // =========================================================================
+
+  describe('action: clear_queue', () => {
+    it('clears webhook queue successfully', async () => {
+      if (!testDocId) return
+
+      // clear_queue is a document-level operation (no webhookId needed)
+      // It clears all pending payloads for all webhooks in the document
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_webhooks',
+        arguments: {
+          docId: testDocId,
+          operations: [{ action: 'clear_queue' }],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(true)
+    })
+
+    it('rejects clear_queue with other operations', async () => {
+      if (!testDocId) return
+
+      // clear_queue must be the only operation (schema constraint)
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_webhooks',
+        arguments: {
+          docId: testDocId,
+          operations: [{ action: 'clear_queue' }, { action: 'list' }],
+          response_format: 'json'
+        }
+      })
+
+      // Schema validation should reject this combination
+      expect(result.isError).toBe(true)
+    })
+  })
+
+  // =========================================================================
   // Response Format
   // =========================================================================
 

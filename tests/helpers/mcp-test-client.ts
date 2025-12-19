@@ -129,3 +129,155 @@ export interface ToolCallResult {
   structuredContent?: unknown
   isError?: boolean
 }
+
+// =============================================================================
+// Standardized Test Harness for Data-Driven Tests
+// =============================================================================
+
+/**
+ * Test case definition for MCP tool tests.
+ * Designed to work with Vitest's describe.each/it.each.
+ */
+export interface MCPToolTestCase<TArgs = Record<string, unknown>> {
+  /** Descriptive label for the test case (shown in test name) */
+  desc: string
+  /** Tool arguments (docId will be injected by harness) */
+  args: TArgs
+  /** Expected behavior - 'success' or 'error' or specific field check */
+  expect: 'success' | 'error' | { field: string; value: unknown }
+  /** Optional: additional assertions on the parsed response */
+  assertions?: (parsed: Record<string, unknown>) => void
+}
+
+/**
+ * Result of calling an MCP tool through the test harness.
+ */
+export interface MCPToolCallResult {
+  /** Whether the MCP call itself errored (schema validation failure) */
+  isError: boolean
+  /** Raw text content from the response */
+  text: string
+  /** Parsed JSON response (or null if not JSON) */
+  parsed: Record<string, unknown> | null
+  /** Success status from parsed response */
+  success: boolean | null
+}
+
+/**
+ * Call an MCP tool and return a structured result for assertions.
+ *
+ * This helper standardizes the common pattern:
+ * 1. Call tool via MCP
+ * 2. Extract text content
+ * 3. Parse JSON
+ * 4. Return structured result
+ *
+ * @example
+ * ```typescript
+ * const result = await callMCPTool(ctx, 'grist_manage_schema', {
+ *   docId: testDocId,
+ *   operations: [{ action: 'create_table', name: 'Test', columns: [] }],
+ *   response_format: 'json'
+ * })
+ *
+ * expect(result.success).toBe(true)
+ * ```
+ */
+export async function callMCPTool(
+  ctx: MCPTestContext,
+  toolName: string,
+  args: Record<string, unknown>
+): Promise<MCPToolCallResult> {
+  const result = await ctx.client.callTool({ name: toolName, arguments: args })
+
+  const isError = result.isError ?? false
+  const text = (result.content[0] as { text?: string })?.text ?? ''
+
+  let parsed: Record<string, unknown> | null = null
+  let success: boolean | null = null
+
+  if (!isError && text) {
+    try {
+      parsed = JSON.parse(text) as Record<string, unknown>
+      success = parsed.success as boolean | null
+    } catch {
+      // Not JSON - that's okay for markdown format
+    }
+  }
+
+  return { isError, text, parsed, success }
+}
+
+/**
+ * Factory to create a test runner for a specific tool.
+ *
+ * Returns a function that can be used in it.each callbacks.
+ * Handles common boilerplate: null docId check, calling tool, parsing response.
+ *
+ * @example
+ * ```typescript
+ * const runSchemaTest = createToolTestRunner(ctx, 'grist_manage_schema', () => testDocId)
+ *
+ * it.each(COLUMN_TYPE_CASES)(
+ *   'creates column type: $type',
+ *   async (testCase) => {
+ *     const result = await runSchemaTest({
+ *       operations: [{ action: 'add_column', tableId: 'Test', column: testCase }],
+ *       response_format: 'json'
+ *     })
+ *     expect(result.success).toBe(true)
+ *   }
+ * )
+ * ```
+ */
+export function createToolTestRunner(
+  ctx: MCPTestContext,
+  toolName: string,
+  getDocId: () => string | null
+): (args: Omit<Record<string, unknown>, 'docId'>) => Promise<MCPToolCallResult> {
+  return async (args) => {
+    const docId = getDocId()
+    if (!docId) {
+      return { isError: true, text: 'No docId available', parsed: null, success: null }
+    }
+    return callMCPTool(ctx, toolName, { docId, ...args })
+  }
+}
+
+/**
+ * Create test cases from a dataset for use with it.each.
+ *
+ * This is the most DRY approach - define your test data as simple objects,
+ * then let this helper generate the full test cases.
+ *
+ * @example
+ * ```typescript
+ * // Define data (minimal, focused on what varies)
+ * const COLUMN_TYPES = [
+ *   { type: 'Text', colId: 'Name' },
+ *   { type: 'Numeric', colId: 'Price' },
+ *   { type: 'Bool', colId: 'Active' },
+ * ]
+ *
+ * // Generate test cases with the operation shape
+ * const cases = createTestCasesFromData(COLUMN_TYPES, (data) => ({
+ *   desc: `column type: ${data.type}`,
+ *   args: {
+ *     operations: [{ action: 'add_column', tableId: 'Test', column: data }],
+ *     response_format: 'json'
+ *   },
+ *   expect: 'success'
+ * }))
+ *
+ * it.each(cases)('$desc', async ({ args, expect: expected }) => {
+ *   const result = await runTest(args)
+ *   if (expected === 'success') expect(result.success).toBe(true)
+ * })
+ * ```
+ */
+export function createTestCasesFromData<TData, TArgs>(
+  data: readonly TData[],
+  mapper: (item: TData) => MCPToolTestCase<TArgs>
+): MCPToolTestCase<TArgs>[] {
+  return data.map(mapper)
+}

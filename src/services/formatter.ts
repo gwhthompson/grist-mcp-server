@@ -32,7 +32,11 @@ export function formatToolResponse<T>(
   const normalized = normalizeForSerialization(data)
 
   const text =
-    format === 'markdown' ? formatAsMarkdown(normalized) : JSON.stringify(normalized, null, 2)
+    format === 'concise'
+      ? formatConcise(normalized)
+      : format === 'markdown'
+        ? formatAsMarkdown(normalized)
+        : JSON.stringify(normalized, null, 2)
 
   return {
     content: [
@@ -96,6 +100,48 @@ export function formatAsMarkdown<T>(data: T): string {
 
   if (typeof data === 'object') {
     return formatObjectAsMarkdown(data as Record<string, unknown>)
+  }
+
+  return String(data)
+}
+
+/**
+ * Format data in concise mode - minimal output with counts and IDs only.
+ * Optimized for token efficiency when full details aren't needed.
+ */
+function formatConcise(data: unknown): string {
+  if (data === null || data === undefined) {
+    return 'No data'
+  }
+
+  if (Array.isArray(data)) {
+    return `${data.length} items`
+  }
+
+  if (typeof data === 'object' && 'items' in data) {
+    const obj = data as Record<string, unknown>
+    const items = Array.isArray(obj.items) ? obj.items : []
+    const total = typeof obj.total === 'number' ? obj.total : items.length
+    const ids = items
+      .slice(0, 10)
+      .map((item) =>
+        typeof item === 'object' && item && 'id' in item ? (item as { id: unknown }).id : null
+      )
+      .filter(Boolean)
+
+    let result = `${items.length} of ${total} items`
+    if (ids.length > 0) {
+      result += `\nIDs: ${ids.join(', ')}${items.length > 10 ? '...' : ''}`
+    }
+    if (obj.hasMore) {
+      result += '\nMore available'
+    }
+    return result
+  }
+
+  if (typeof data === 'object') {
+    const keys = Object.keys(data as object)
+    return `Object with ${keys.length} properties: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '...' : ''}`
   }
 
   return String(data)

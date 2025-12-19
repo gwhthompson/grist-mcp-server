@@ -15,7 +15,67 @@ import {
   getFirstOrg,
   type TestContext
 } from '../../helpers/grist-api.js'
-import { createMCPTestClient, type MCPTestContext } from '../../helpers/mcp-test-client.js'
+import {
+  callMCPTool,
+  createMCPTestClient,
+  type MCPTestContext
+} from '../../helpers/mcp-test-client.js'
+
+// =============================================================================
+// Datasets for link types (covers link-resolver.ts)
+// =============================================================================
+
+/**
+ * Dataset for all 7 link types in declarative layout.
+ * Each link type exercises different code paths in link-resolver.ts.
+ * Pre-requisite: Tables with Ref columns must be created in beforeAll.
+ */
+const LINK_TYPE_CASES = [
+  {
+    type: 'child_of' as const,
+    desc: 'Master-detail filter (Row→Col)',
+    sourceTable: 'Categories',
+    targetTable: 'Products',
+    linkConfig: (sourceId: number) => ({
+      type: 'child_of' as const,
+      source_widget: sourceId,
+      target_column: 'Category' // Ref column in Products pointing to Categories
+    })
+  },
+  {
+    type: 'matched_by' as const,
+    desc: 'Column matching filter (Col→Col)',
+    sourceTable: 'Orders',
+    targetTable: 'Payments',
+    linkConfig: (sourceId: number) => ({
+      type: 'matched_by' as const,
+      source_widget: sourceId,
+      source_column: 'Customer',
+      target_column: 'Customer' // Both reference same Customers table
+    })
+  },
+  {
+    type: 'synced_with' as const,
+    desc: 'Cursor sync (Same-Table)',
+    sourceTable: 'PageTestData',
+    targetTable: 'PageTestData',
+    linkConfig: (sourceId: number) => ({
+      type: 'synced_with' as const,
+      source_widget: sourceId
+    })
+  },
+  {
+    type: 'referenced_by' as const,
+    desc: 'Reference follow (Cursor via Ref)',
+    sourceTable: 'Products',
+    targetTable: 'Categories',
+    linkConfig: (sourceId: number) => ({
+      type: 'referenced_by' as const,
+      source_widget: sourceId,
+      source_column: 'Category' // Ref column in Products
+    })
+  }
+] as const
 
 describe('grist_manage_pages', () => {
   let ctx: MCPTestContext
@@ -41,18 +101,66 @@ describe('grist_manage_pages', () => {
     testDocId = await createTestDocument(client, testWorkspaceId)
     apiContext.docId = testDocId
 
-    // Create a test table
+    // Create test tables for link type testing
+    // Need: Categories, Products (with Ref:Categories), Customers, Orders, Payments
     const tableResult = await ctx.client.callTool({
       name: 'grist_manage_schema',
       arguments: {
         docId: testDocId,
         operations: [
+          // Basic test table
           {
             action: 'create_table',
             name: 'PageTestData',
             columns: [
               { colId: 'Name', type: 'Text' },
               { colId: 'Value', type: 'Numeric' }
+            ]
+          },
+          // Categories (master table for child_of and referenced_by tests)
+          {
+            action: 'create_table',
+            name: 'Categories',
+            columns: [
+              { colId: 'Name', type: 'Text' },
+              { colId: 'Description', type: 'Text' }
+            ]
+          },
+          // Products (child table with Ref to Categories)
+          {
+            action: 'create_table',
+            name: 'Products',
+            columns: [
+              { colId: 'Name', type: 'Text' },
+              { colId: 'Price', type: 'Numeric' },
+              { colId: 'Category', type: 'Ref', refTable: 'Categories', visibleCol: 'Name' }
+            ]
+          },
+          // Customers (shared reference target for matched_by tests)
+          {
+            action: 'create_table',
+            name: 'Customers',
+            columns: [
+              { colId: 'Name', type: 'Text' },
+              { colId: 'Email', type: 'Text' }
+            ]
+          },
+          // Orders (for matched_by tests - references Customers)
+          {
+            action: 'create_table',
+            name: 'Orders',
+            columns: [
+              { colId: 'OrderNum', type: 'Text' },
+              { colId: 'Customer', type: 'Ref', refTable: 'Customers', visibleCol: 'Name' }
+            ]
+          },
+          // Payments (for matched_by tests - also references Customers)
+          {
+            action: 'create_table',
+            name: 'Payments',
+            columns: [
+              { colId: 'Amount', type: 'Numeric' },
+              { colId: 'Customer', type: 'Ref', refTable: 'Customers', visibleCol: 'Name' }
             ]
           }
         ],
@@ -61,7 +169,7 @@ describe('grist_manage_pages', () => {
     })
 
     if (tableResult.isError) {
-      console.log('Failed to create table:', JSON.stringify(tableResult.content))
+      console.log('Failed to create tables:', JSON.stringify(tableResult.content))
     }
   }, 120000)
 
@@ -445,6 +553,525 @@ describe('grist_manage_pages', () => {
 
       const text = (result.content[0] as { text: string }).text
       expect(text).toMatch(/[#*-]|page|widget/i)
+    })
+  })
+
+  // =========================================================================
+  // Declarative Layout Features
+  // =========================================================================
+
+  describe('declarative layout', () => {
+    it('creates page with chart widget', async () => {
+      if (!testDocId) return
+
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_page',
+              name: 'Chart Page',
+              layout: {
+                table: 'PageTestData',
+                widget: 'chart',
+                chartType: 'bar',
+                x_axis: 'Name',
+                y_axis: ['Value']
+              }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(true)
+      expect(parsed.results[0].details.widgetsCreated).toBe(1)
+    })
+
+    it('creates page with nested row/col layout', async () => {
+      if (!testDocId) return
+
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_page',
+              name: 'Nested Layout Page',
+              layout: {
+                cols: [
+                  { table: 'PageTestData', widget: 'grid' },
+                  {
+                    rows: [
+                      { table: 'PageTestData', widget: 'card' },
+                      { table: 'PageTestData', widget: 'card_list' }
+                    ]
+                  }
+                ]
+              }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(true)
+      // Should create 3 widgets: grid, card, card_list
+      expect(parsed.results[0].details.widgetsCreated).toBe(3)
+    })
+
+    it('creates page with card_list widget', async () => {
+      if (!testDocId) return
+
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_page',
+              name: 'Card List Page',
+              layout: {
+                table: 'PageTestData',
+                widget: 'card_list',
+                title: 'Data Cards'
+              }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(true)
+    })
+
+    it('creates chart with display options', async () => {
+      if (!testDocId) return
+
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_page',
+              name: 'Stacked Chart Page',
+              layout: {
+                table: 'PageTestData',
+                widget: 'chart',
+                chartType: 'bar',
+                x_axis: 'Name',
+                y_axis: ['Value'],
+                chart_options: {
+                  stacked: true,
+                  orientation: 'h'
+                }
+              }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(true)
+    })
+  })
+
+  // =========================================================================
+  // Action: set_layout
+  // =========================================================================
+
+  describe('action: set_layout', () => {
+    it('updates layout with existing widgets only', async () => {
+      if (!testDocId) return
+
+      // First create a page with two widgets
+      const createResult = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_page',
+              name: 'SetLayout Test Page',
+              layout: {
+                cols: [
+                  { table: 'PageTestData', widget: 'grid', title: 'Widget A' },
+                  { table: 'PageTestData', widget: 'card', title: 'Widget B' }
+                ]
+              }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(createResult.isError).toBeFalsy()
+      const createText = (createResult.content[0] as { text: string }).text
+      const createParsed = JSON.parse(createText)
+      const viewId = createParsed.results[0].details.viewId as number
+      const sectionIds = createParsed.results[0].details.sectionIds as number[]
+
+      // Now change the layout to rows instead of cols
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'set_layout',
+              page: viewId,
+              layout: {
+                rows: [sectionIds[0], sectionIds[1]]
+              }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+      expect(parsed.success).toBe(true)
+    })
+
+    it('removes widget via remove parameter', async () => {
+      if (!testDocId) return
+
+      // Create a page with two widgets
+      const createResult = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_page',
+              name: 'Remove Widget Test',
+              layout: {
+                cols: [
+                  { table: 'PageTestData', widget: 'grid', title: 'Keep' },
+                  { table: 'PageTestData', widget: 'card', title: 'Remove' }
+                ]
+              }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(createResult.isError).toBeFalsy()
+      const createText = (createResult.content[0] as { text: string }).text
+      const createParsed = JSON.parse(createText)
+      const viewId = createParsed.results[0].details.viewId as number
+      const sectionIds = createParsed.results[0].details.sectionIds as number[]
+
+      // Remove the second widget
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'set_layout',
+              page: viewId,
+              layout: sectionIds[0] as number, // Just keep the first widget
+              remove: [sectionIds[1] as number]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+      expect(parsed.success).toBe(true)
+      expect(parsed.results[0].details.widgetsRemoved).toBe(1)
+    })
+  })
+
+  // =========================================================================
+  // Action: link_widgets
+  // =========================================================================
+
+  describe('action: link_widgets', () => {
+    it('links two widgets with synced_with (same table)', async () => {
+      if (!testDocId) return
+
+      // Create a page with two widgets showing the same table
+      const createResult = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_page',
+              name: 'Link Sync Test',
+              layout: {
+                cols: [
+                  { table: 'PageTestData', widget: 'grid', title: 'Grid' },
+                  { table: 'PageTestData', widget: 'card', title: 'Card' }
+                ]
+              }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(createResult.isError).toBeFalsy()
+      const createText = (createResult.content[0] as { text: string }).text
+      const createParsed = JSON.parse(createText)
+      const viewId = createParsed.results[0].details.viewId as number
+      const sectionIds = createParsed.results[0].details.sectionIds as number[]
+
+      // Link card to sync with grid
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'link_widgets',
+              viewId,
+              links: [
+                {
+                  source: sectionIds[0] as number,
+                  target: sectionIds[1] as number,
+                  link: {
+                    type: 'synced_with',
+                    source_widget: sectionIds[0] as number
+                  }
+                }
+              ]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+      expect(parsed.success).toBe(true)
+    })
+
+    it('validates non-existent sectionId', async () => {
+      if (!testDocId) return
+
+      // Create a page first to get a valid viewId
+      const createResult = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_page',
+              name: 'Invalid Link Test',
+              layout: { table: 'PageTestData', widget: 'grid' }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      const createText = (createResult.content[0] as { text: string }).text
+      const createParsed = JSON.parse(createText)
+      const viewId = createParsed.results[0].details.viewId as number
+
+      // Try to link with non-existent sectionId
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'link_widgets',
+              viewId,
+              links: [
+                {
+                  source: 99999,
+                  target: 99998,
+                  link: {
+                    type: 'synced_with',
+                    source_widget: 99999
+                  }
+                }
+              ]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      // Should fail validation
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+      expect(parsed.success).toBe(false)
+    })
+  })
+
+  // =========================================================================
+  // Dataset: Link Types (covers link-resolver.ts)
+  // Uses callMCPTool harness for cleaner assertions
+  // =========================================================================
+
+  describe('link types dataset', () => {
+    it.each(LINK_TYPE_CASES)('creates link with $type ($desc)', async ({
+      type,
+      sourceTable,
+      targetTable,
+      linkConfig
+    }) => {
+      if (!testDocId) return
+
+      // Step 1: Create page with two widgets using the harness
+      const createResult = await callMCPTool(ctx, 'grist_manage_pages', {
+        docId: testDocId,
+        operations: [
+          {
+            action: 'create_page',
+            name: `Link Test ${type}`,
+            layout: {
+              cols: [
+                { table: sourceTable, widget: 'grid', title: `Source ${type}` },
+                { table: targetTable, widget: 'grid', title: `Target ${type}` }
+              ]
+            }
+          }
+        ],
+        response_format: 'json'
+      })
+
+      expect(createResult.isError).toBe(false)
+      expect(createResult.success).toBe(true)
+
+      // Extract IDs from the standardized result
+      const details = (
+        createResult.parsed?.results as Array<{ details: Record<string, unknown> }>
+      )?.[0]?.details
+      const viewId = details?.viewId as number
+      const sectionIds = details?.sectionIds as number[]
+
+      // Step 2: Link widgets using the link type
+      const linkResult = await callMCPTool(ctx, 'grist_manage_pages', {
+        docId: testDocId,
+        operations: [
+          {
+            action: 'link_widgets',
+            viewId,
+            links: [
+              {
+                source: sectionIds[0],
+                target: sectionIds[1],
+                link: linkConfig(sectionIds[0])
+              }
+            ]
+          }
+        ],
+        response_format: 'json'
+      })
+
+      expect(linkResult.isError).toBe(false)
+      expect(linkResult.success).toBe(true)
+    })
+  })
+
+  // =========================================================================
+  // Action: reorder_pages
+  // =========================================================================
+
+  describe('action: reorder_pages', () => {
+    it('reorders pages by name', async () => {
+      if (!testDocId) return
+
+      // Create two pages to reorder
+      await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_page',
+              name: 'Reorder Page A',
+              layout: { table: 'PageTestData', widget: 'grid' }
+            },
+            {
+              action: 'create_page',
+              name: 'Reorder Page B',
+              layout: { table: 'PageTestData', widget: 'grid' }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      // Reorder: B before A
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'reorder_pages',
+              order: ['Reorder Page B', 'Reorder Page A']
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+      expect(parsed.success).toBe(true)
+      expect(parsed.results[0].verified).toBe(true)
+    })
+
+    it('handles non-existent page name', async () => {
+      if (!testDocId) return
+
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_pages',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'reorder_pages',
+              order: ['NonExistent Page', 'Another Missing']
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      // Should fail with page not found
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+      expect(parsed.success).toBe(false)
     })
   })
 

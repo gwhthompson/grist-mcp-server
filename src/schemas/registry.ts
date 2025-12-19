@@ -23,7 +23,7 @@ import {
   ColumnTypeLiteralSchema,
   VisibleColSchema
 } from './column-types.js'
-import { ColIdSchema, HexColorSchema, TableIdSchema } from './common.js'
+import { HexColorSchema } from './common.js'
 import { BaseConditionalRuleSchema } from './conditional-rules.js'
 import { UserWidgetTypeSchema } from './pages-widgets.js'
 import {
@@ -39,8 +39,7 @@ import {
  */
 export function registerSchemas(): void {
   // grist_manage_schema - reused across multiple operations
-  TableIdSchema.register(z.globalRegistry, { id: 'tableId' }) // 6x
-  ColIdSchema.register(z.globalRegistry, { id: 'colId' }) // 3x
+  // Note: TableIdSchema and ColIdSchema use .meta() in common.ts for auto-registration
   ColumnDefinitionSchema.register(z.globalRegistry, { id: 'ColumnDefinition' }) // 2x
   ColumnTypeLiteralSchema.register(z.globalRegistry, { id: 'columnType' }) // 3x
   ColumnStyleSchema.register(z.globalRegistry, { id: 'columnStyle' }) // 2x in ModifyColumn

@@ -75,20 +75,7 @@ export async function registerTool<TSchema extends z.ZodType<any, any>>(
         })
       }
 
-      if (process.env.DEBUG_MCP_PARAMS === 'true') {
-        console.warn(`[MCP] Tool called: ${definition.name}`)
-        console.warn('[MCP] Raw parameters:', JSON.stringify(params, null, 2))
-
-        const paramsRecord = params as Record<string, unknown>
-        if (paramsRecord?.widgetOptions !== undefined) {
-          console.warn('[MCP] widgetOptions detected:', {
-            type: typeof paramsRecord.widgetOptions,
-            value: paramsRecord.widgetOptions,
-            isString: typeof paramsRecord.widgetOptions === 'string',
-            isObject: typeof paramsRecord.widgetOptions === 'object'
-          })
-        }
-      }
+      log.debug(`Tool called: ${definition.name}`, { params })
 
       try {
         const result = await definition.handler(context, params as z.infer<TSchema>)

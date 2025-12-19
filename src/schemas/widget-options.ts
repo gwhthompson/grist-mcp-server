@@ -1,32 +1,14 @@
 import { z } from 'zod'
 import { getCurrencyCodeError, isValidCurrency } from '../constants/iso-4217-currencies.js'
 import { log } from '../utils/shared-logger.js'
-import { HexColorSchema } from './common.js'
+import { HeaderStyleSchema, type WidgetStyle, WidgetStyleSchema } from './styles.js'
 
-// Base schemas - .partial() makes all properties optional
-const StylePropertiesBase = z.strictObject({
-  textColor: HexColorSchema,
-  fillColor: HexColorSchema,
-  fontBold: z.boolean(),
-  fontItalic: z.boolean(),
-  fontUnderline: z.boolean(),
-  fontStrikethrough: z.boolean()
-})
+// Re-export for backward compatibility (many files import StylePropertiesSchema from here)
+export const StylePropertiesSchema = WidgetStyleSchema
+export type StyleProperties = WidgetStyle
 
-export const StylePropertiesSchema = StylePropertiesBase.partial()
-
-export type StyleProperties = z.infer<typeof StylePropertiesSchema>
-
-const HeaderStylePropertiesBase = z.strictObject({
-  headerTextColor: HexColorSchema,
-  headerFillColor: HexColorSchema,
-  headerFontBold: z.boolean(),
-  headerFontUnderline: z.boolean(),
-  headerFontItalic: z.boolean(),
-  headerFontStrikethrough: z.boolean()
-})
-
-const HeaderStylePropertiesSchema = HeaderStylePropertiesBase.partial()
+// Alias for header style
+const HeaderStylePropertiesSchema = HeaderStyleSchema
 
 const AlignmentSchema = z.enum(['left', 'center', 'right']).optional()
 

@@ -111,6 +111,7 @@ describe('grist_manage_records', () => {
       const parsed = JSON.parse(text)
 
       expect(parsed.success).toBe(true)
+      expect(parsed.results[0].verified).toBe(true)
       expect(parsed.totalRecordsAffected).toBeGreaterThan(0)
     })
 
@@ -142,6 +143,7 @@ describe('grist_manage_records', () => {
       const parsed = JSON.parse(text)
 
       expect(parsed.success).toBe(true)
+      expect(parsed.results[0].verified).toBe(true)
       expect(parsed.totalRecordsAffected).toBe(3)
     })
 
@@ -254,6 +256,7 @@ describe('grist_manage_records', () => {
       const parsed = JSON.parse(text)
 
       expect(parsed.success).toBe(true)
+      expect(parsed.results[0].verified).toBe(true)
     })
 
     it('handles non-existent row ID gracefully', async () => {
@@ -340,6 +343,7 @@ describe('grist_manage_records', () => {
       const parsed = JSON.parse(text)
 
       expect(parsed.success).toBe(true)
+      expect(parsed.results[0].verified).toBe(true)
     })
 
     it('deletes records by filter', async () => {
@@ -385,6 +389,7 @@ describe('grist_manage_records', () => {
       const parsed = JSON.parse(text)
 
       expect(parsed.success).toBe(true)
+      expect(parsed.results[0].verified).toBe(true)
     })
 
     it('handles non-existent row ID gracefully', async () => {
@@ -450,6 +455,7 @@ describe('grist_manage_records', () => {
       const parsed = JSON.parse(text)
 
       expect(parsed.success).toBe(true)
+      // Note: upsert doesn't use domain verification yet
     })
 
     it('updates existing record when key exists', async () => {
@@ -505,6 +511,7 @@ describe('grist_manage_records', () => {
       const parsed = JSON.parse(text)
 
       expect(parsed.success).toBe(true)
+      // Note: upsert doesn't use domain verification yet
     })
   })
 
@@ -543,6 +550,8 @@ describe('grist_manage_records', () => {
 
       expect(parsed.success).toBe(true)
       expect(parsed.results.length).toBe(2)
+      expect(parsed.results[0].verified).toBe(true)
+      expect(parsed.results[1].verified).toBe(true)
     })
   })
 
@@ -599,6 +608,234 @@ describe('grist_manage_records', () => {
       const text = (result.content[0] as { text: string }).text
       // Markdown should contain formatting
       expect(text).toMatch(/[#*-]|success|record/i)
+    })
+  })
+
+  // =========================================================================
+  // Data-Driven: Record Values by Type
+  // =========================================================================
+
+  describe('data-driven: record values by type', () => {
+    // Setup: Create tables with all column types for testing record values
+    beforeAll(async () => {
+      if (!testDocId) return
+
+      // Create reference table for Ref/RefList tests
+      await ctx.client.callTool({
+        name: 'grist_manage_schema',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_table',
+              name: 'RefTarget',
+              columns: [{ colId: 'Label', type: 'Text' }]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      // Add reference rows
+      await ctx.client.callTool({
+        name: 'grist_manage_records',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'add',
+              tableId: 'RefTarget',
+              records: [{ Label: 'Target A' }, { Label: 'Target B' }]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      // Create AllTypesTable with all column types
+      await ctx.client.callTool({
+        name: 'grist_manage_schema',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_table',
+              name: 'AllTypesTable',
+              columns: [
+                { colId: 'BoolCol', type: 'Bool' },
+                { colId: 'DateCol', type: 'Date' },
+                { colId: 'DateTimeCol', type: 'DateTime' },
+                { colId: 'IntCol', type: 'Int' },
+                { colId: 'NumericCol', type: 'Numeric' },
+                { colId: 'TextCol', type: 'Text' },
+                { colId: 'ChoiceCol', type: 'Choice', choices: ['A', 'B', 'C'] },
+                { colId: 'ChoiceListCol', type: 'ChoiceList', choices: ['x', 'y', 'z'] },
+                { colId: 'RefCol', type: 'Ref', refTable: 'RefTarget', visibleCol: 'Label' },
+                { colId: 'RefListCol', type: 'RefList', refTable: 'RefTarget', visibleCol: 'Label' }
+              ]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+    })
+
+    // Dataset for adding records with different value types
+    const RECORD_VALUE_CASES = [
+      { colId: 'BoolCol', value: true, desc: 'Bool true' },
+      { colId: 'BoolCol', value: false, desc: 'Bool false' },
+      { colId: 'DateCol', value: '2024-12-25', desc: 'Date string' },
+      { colId: 'DateTimeCol', value: '2024-12-25T10:30:00Z', desc: 'DateTime ISO' },
+      { colId: 'IntCol', value: 42, desc: 'Int positive' },
+      { colId: 'IntCol', value: -10, desc: 'Int negative' },
+      { colId: 'NumericCol', value: 3.5, desc: 'Numeric float' },
+      { colId: 'TextCol', value: 'Hello World', desc: 'Text simple' },
+      { colId: 'ChoiceCol', value: 'A', desc: 'Choice valid' },
+      { colId: 'ChoiceListCol', value: ['x', 'y'], desc: 'ChoiceList array' },
+      { colId: 'RefCol', value: 1, desc: 'Ref ID' },
+      { colId: 'RefListCol', value: [1, 2], desc: 'RefList IDs' }
+    ]
+
+    it.each(RECORD_VALUE_CASES)('adds record with $desc', async ({ colId, value }) => {
+      if (!testDocId) return
+
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_records',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'add',
+              tableId: 'AllTypesTable',
+              records: [{ [colId]: value }]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+      expect(parsed.success).toBe(true)
+      expect(parsed.results[0].verified).toBe(true)
+    })
+  })
+
+  // =========================================================================
+  // Data-Driven: Validation Error Cases
+  // =========================================================================
+
+  describe('data-driven: validation errors', () => {
+    // Setup: Create tables for validation error testing
+    beforeAll(async () => {
+      if (!testDocId) return
+
+      // Create reference table
+      await ctx.client.callTool({
+        name: 'grist_manage_schema',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_table',
+              name: 'ErrorTestRef',
+              columns: [{ colId: 'Name', type: 'Text' }]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      // Add reference rows (only 2 rows with IDs 1 and 2)
+      await ctx.client.callTool({
+        name: 'grist_manage_records',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'add',
+              tableId: 'ErrorTestRef',
+              records: [{ Name: 'Valid1' }, { Name: 'Valid2' }]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      // Create table with constrained columns for error testing
+      await ctx.client.callTool({
+        name: 'grist_manage_schema',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_table',
+              name: 'ErrorTestTable',
+              columns: [
+                { colId: 'ChoiceCol', type: 'Choice', choices: ['Valid1', 'Valid2'] },
+                { colId: 'ChoiceListCol', type: 'ChoiceList', choices: ['x', 'y', 'z'] },
+                { colId: 'RefCol', type: 'Ref', refTable: 'ErrorTestRef', visibleCol: 'Name' },
+                {
+                  colId: 'RefListCol',
+                  type: 'RefList',
+                  refTable: 'ErrorTestRef',
+                  visibleCol: 'Name'
+                }
+              ]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+    })
+
+    // Dataset for error scenarios - expected to fail validation
+    const VALIDATION_ERROR_CASES = [
+      {
+        desc: 'invalid Ref ID (non-existent row)',
+        colId: 'RefCol',
+        value: 99999
+      },
+      {
+        desc: 'invalid Choice value (not in choices)',
+        colId: 'ChoiceCol',
+        value: 'NotAValidChoice'
+      },
+      {
+        desc: 'invalid RefList ID (mixed valid/invalid)',
+        colId: 'RefListCol',
+        value: [1, 99999]
+      },
+      {
+        desc: 'invalid ChoiceList value (not in choices)',
+        colId: 'ChoiceListCol',
+        value: ['x', 'invalid']
+      }
+    ]
+
+    it.each(VALIDATION_ERROR_CASES)('rejects $desc', async ({ colId, value }) => {
+      if (!testDocId) return
+
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_records',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'add',
+              tableId: 'ErrorTestTable',
+              records: [{ [colId]: value }]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      // These should fail validation and return success: false
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+      expect(parsed.success).toBe(false)
     })
   })
 

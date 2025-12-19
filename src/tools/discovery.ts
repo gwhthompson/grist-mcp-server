@@ -24,6 +24,8 @@ import { truncateIfNeeded } from '../services/formatter.js'
 import type { DocumentInfo, WorkspaceInfo } from '../types.js'
 import { GristTool } from './base/GristTool.js'
 import { PaginatedGristTool, type PaginatedResponse } from './base/PaginatedGristTool.js'
+import { nextSteps } from './utils/next-steps.js'
+import { paginate } from './utils/pagination.js'
 
 export const GetWorkspacesSchema = z.strictObject({
   name_contains: z
@@ -121,20 +123,18 @@ export class GetWorkspacesTool extends PaginatedGristTool<
     result: PaginatedResponse<FormattedWorkspace>,
     _params: GetWorkspacesInput
   ): Promise<PaginatedResponse<FormattedWorkspace> & { nextSteps?: string[] }> {
-    const nextSteps: string[] = []
-
     const firstWs = result.items[0]
-    if (firstWs) {
-      nextSteps.push(
-        `Use grist_get_documents with workspaceId=${firstWs.id} to list documents in "${firstWs.name}"`
-      )
-    }
 
-    if (result.pagination.hasMore) {
-      nextSteps.push(`Use offset=${result.pagination.nextOffset} to get more workspaces`)
+    return {
+      ...result,
+      nextSteps: nextSteps()
+        .addIf(
+          !!firstWs,
+          `Use grist_get_documents with workspaceId=${firstWs?.id} to list documents in "${firstWs?.name}"`
+        )
+        .addPaginationHint(result.pagination, 'workspaces')
+        .build()
     }
-
-    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
   }
 
   protected formatResponse(
@@ -304,23 +304,22 @@ export class GetDocumentsTool extends PaginatedGristTool<
     result: PaginatedResponse<FormattedDocument>,
     params: GetDocumentsInput
   ): Promise<PaginatedResponse<FormattedDocument> & { nextSteps?: string[] }> {
-    const nextSteps: string[] = []
-
     const firstDoc = result.items[0]
-    if (firstDoc) {
-      nextSteps.push(`Use grist_get_tables with docId="${firstDoc.docId}" to see table schema`)
-    }
 
-    // If fetched a specific document, suggest data operations
-    if (params.docId && result.items.length === 1) {
-      nextSteps.push(`Use grist_get_records to query data from tables`)
+    return {
+      ...result,
+      nextSteps: nextSteps()
+        .addIf(
+          !!firstDoc,
+          `Use grist_get_tables with docId="${firstDoc?.docId}" to see table schema`
+        )
+        .addIf(
+          !!params.docId && result.items.length === 1,
+          'Use grist_get_records to query data from tables'
+        )
+        .addPaginationHint(result.pagination, 'documents')
+        .build()
     }
-
-    if (result.pagination.hasMore) {
-      nextSteps.push(`Use offset=${result.pagination.nextOffset} to get more documents`)
-    }
-
-    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
   }
 
   protected formatResponse(
@@ -416,29 +415,22 @@ export class GetTablesTool extends GristTool<
     }
 
     const formattedTables = await this.formatTables(tableList, params)
-
-    const offset = params.offset ?? 0
-    const limit = params.limit ?? 100
-    const total = formattedTables.length
-    const paginatedTables = formattedTables.slice(offset, offset + limit)
-    const hasMore = offset + limit < total
-    const nextOffset = hasMore ? offset + limit : null
-    const itemsInPage = paginatedTables.length
-    const pageNumber = Math.floor(offset / limit) + 1
-    const totalPages = Math.ceil(total / limit)
+    const paginated = paginate(formattedTables, params)
+    const pageNumber = Math.floor(paginated.offset / paginated.limit) + 1
+    const totalPages = Math.ceil(paginated.total / paginated.limit)
 
     return {
       docId: params.docId,
-      tableCount: itemsInPage,
-      items: paginatedTables,
-      total,
-      offset,
-      limit,
-      hasMore,
-      nextOffset,
+      tableCount: paginated.items.length,
+      items: paginated.items,
+      total: paginated.total,
+      offset: paginated.offset,
+      limit: paginated.limit,
+      hasMore: paginated.hasMore,
+      nextOffset: paginated.nextOffset,
       pageNumber,
       totalPages,
-      itemsInPage
+      itemsInPage: paginated.items.length
     }
   }
 
@@ -458,21 +450,19 @@ export class GetTablesTool extends GristTool<
     },
     params: GetTablesInput
   ) {
-    const nextSteps: string[] = []
-
     const firstTable = result.items[0]
-    if (firstTable) {
-      nextSteps.push(
-        `Use grist_get_records with docId="${params.docId}" and tableId="${firstTable.id}" to query data`
-      )
-      nextSteps.push(`Use grist_manage_records to add, update, or delete records`)
-    }
 
-    if (result.hasMore) {
-      nextSteps.push(`Use offset=${result.nextOffset} to get more tables`)
+    return {
+      ...result,
+      nextSteps: nextSteps()
+        .addIf(
+          !!firstTable,
+          `Use grist_get_records with docId="${params.docId}" and tableId="${firstTable?.id}" to query data`
+        )
+        .addIf(!!firstTable, 'Use grist_manage_records to add, update, or delete records')
+        .addPaginationHint(result, 'tables')
+        .build()
     }
-
-    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
   }
 
   private async formatTables(

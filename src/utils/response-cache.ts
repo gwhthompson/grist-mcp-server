@@ -1,4 +1,5 @@
 // TTL-based cache for read operations with automatic expiration
+import { sharedLogger } from './shared-logger.js'
 
 interface CacheEntry<T> {
   value: T
@@ -127,7 +128,7 @@ export class ResponseCache<T = unknown> {
     this.cleanupTimer = setInterval(() => {
       const removed = this.cleanup()
       if (removed > 0) {
-        console.error(`[ResponseCache] Cleaned up ${removed} expired entries`)
+        sharedLogger.debug(`ResponseCache cleaned up ${removed} expired entries`)
       }
     }, this.config.cleanupInterval)
 
@@ -168,10 +169,4 @@ export class ResponseCache<T = unknown> {
   get size(): number {
     return this.cache.size
   }
-}
-
-export function createResponseCache<T = unknown>(
-  config?: Partial<ResponseCacheConfig>
-): ResponseCache<T> {
-  return new ResponseCache<T>(config)
 }

@@ -18,11 +18,21 @@
 import { z } from 'zod'
 import { MAX_COLUMN_OPERATIONS } from '../constants.js'
 import {
+  deleteTable as deleteTableOp,
+  removeColumn as removeColumnOp,
+  renameColumn as renameColumnOp,
+  renameTable as renameTableOp
+} from '../domain/operations/schema.js'
+import {
   type ToolContext,
   type ToolDefinition,
   WRITE_IDEMPOTENT_ANNOTATIONS
 } from '../registry/types.js'
 import { ApplyResponseSchema } from '../schemas/api-responses.js'
+import {
+  createBatchOutputSchema,
+  GenericOperationResultSchema
+} from '../schemas/batch-operation-schemas.js'
 import {
   buildGristType,
   ChoiceOptionsSchema,
@@ -40,11 +50,7 @@ import { BaseConditionalRuleSchema } from '../schemas/conditional-rules.js'
 import {
   buildAddColumnAction,
   buildAddTableAction,
-  buildModifyColumnAction,
-  buildRemoveColumnAction,
-  buildRemoveTableAction,
-  buildRenameColumnAction,
-  buildRenameTableAction
+  buildModifyColumnAction
 } from '../services/action-builder.js'
 import { getColumnRef, resolveVisibleCol } from '../services/column-resolver.js'
 import { ConditionalFormattingService } from '../services/conditional-formatting/service.js'
@@ -56,14 +62,12 @@ import type { ApplyResponse, SQLQueryResponse, UserAction } from '../types.js'
 import { first } from '../utils/array-helpers.js'
 import { extractFields } from '../utils/grist-field-extractor.js'
 import { validateRetValues } from '../validators/apply-response.js'
-import { GristTool } from './base/GristTool.js'
+import { BatchOperationTool } from './base/BatchOperationTool.js'
+import { nextSteps } from './utils/next-steps.js'
 
 // =============================================================================
 // Shared Schemas
 // =============================================================================
-
-// JsonObjectSchema for arbitrary JSON data in responses
-const JsonObjectSchema = z.record(z.string(), z.unknown())
 
 // =============================================================================
 // Table Operation Schemas
@@ -232,6 +236,7 @@ export type SchemaOperation = z.infer<typeof SchemaOperationSchema>
 interface OperationResult {
   action: string
   success: boolean
+  verified?: boolean
   details: Record<string, unknown>
   error?: string
 }
@@ -242,10 +247,10 @@ interface ManageSchemaResponse {
   operationsCompleted: number
   results: OperationResult[]
   message: string
-  partial_failure?: {
-    operation_index: number
+  partialFailure?: {
+    operationIndex: number
     error: string
-    completed_operations: number
+    completedOperations: number
   }
   nextSteps?: string[]
 }
@@ -254,43 +259,69 @@ interface ManageSchemaResponse {
 // Tool Implementation
 // =============================================================================
 
-export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, ManageSchemaResponse> {
+export class ManageSchemaTool extends BatchOperationTool<
+  typeof ManageSchemaSchema,
+  SchemaOperation,
+  OperationResult,
+  ManageSchemaResponse
+> {
   constructor(context: ToolContext) {
     super(context, ManageSchemaSchema)
   }
 
-  protected async executeInternal(params: ManageSchemaInput): Promise<ManageSchemaResponse> {
-    const results: OperationResult[] = []
+  protected getOperations(params: ManageSchemaInput): SchemaOperation[] {
+    return params.operations
+  }
 
-    for (let i = 0; i < params.operations.length; i++) {
-      const op = params.operations[i]
-      if (!op) continue
-      try {
-        const result = await this.executeOperation(params.docId, op)
-        results.push(result)
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        return {
-          success: false,
-          docId: params.docId,
-          operationsCompleted: i,
-          results,
-          message: `Operation ${i + 1} (${op.action}) failed: ${errorMessage}`,
-          partial_failure: {
-            operation_index: i,
-            error: errorMessage,
-            completed_operations: i
-          }
-        }
-      }
-    }
+  protected getDocId(params: ManageSchemaInput): string {
+    return params.docId
+  }
 
+  protected getActionName(operation: SchemaOperation): string {
+    return operation.action
+  }
+
+  protected async executeOperation(
+    docId: string,
+    operation: SchemaOperation,
+    _index: number
+  ): Promise<OperationResult> {
+    return this.executeSingleOperation(docId, operation)
+  }
+
+  protected buildSuccessResponse(
+    docId: string,
+    results: OperationResult[],
+    params: ManageSchemaInput
+  ): ManageSchemaResponse {
     return {
       success: true,
-      docId: params.docId,
+      docId,
       operationsCompleted: params.operations.length,
       results,
       message: `Successfully completed ${params.operations.length} schema operation(s)`
+    }
+  }
+
+  protected buildFailureResponse(
+    docId: string,
+    failedIndex: number,
+    failedOperation: SchemaOperation,
+    completedResults: OperationResult[],
+    errorMessage: string,
+    _params: ManageSchemaInput
+  ): ManageSchemaResponse {
+    return {
+      success: false,
+      docId,
+      operationsCompleted: failedIndex,
+      results: completedResults,
+      message: `Operation ${failedIndex + 1} (${failedOperation.action}) failed: ${errorMessage}`,
+      partialFailure: {
+        operationIndex: failedIndex,
+        error: errorMessage,
+        completedOperations: failedIndex
+      }
     }
   }
 
@@ -298,79 +329,88 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     result: ManageSchemaResponse,
     _params: ManageSchemaInput
   ): Promise<ManageSchemaResponse> {
-    const nextSteps: string[] = []
+    const tableCreates = result.results.filter((r) => r.action === 'create_table')
+    const tableDeletes = result.results.filter((r) => r.action === 'delete_table')
+    const tableRenames = result.results.filter((r) => r.action === 'rename_table')
+    const columnAdds = result.results.filter((r) => r.action === 'add_column')
+    const columnRemoves = result.results.filter((r) => r.action === 'remove_column')
+    const columnRenames = result.results.filter((r) => r.action === 'rename_column')
+    const columnModifies = result.results.filter((r) => r.action === 'modify_column')
+    const summaryCreates = result.results.filter((r) => r.action === 'create_summary')
 
-    if (result.partial_failure) {
-      // Guide recovery from partial failure
-      nextSteps.push(`Fix error: ${result.partial_failure.error}`)
-      nextSteps.push(`Resume from operation index ${result.partial_failure.operation_index}`)
+    const firstTableCreate = tableCreates[0]
+    const firstTableRename = tableRenames[0]
+    const firstColRename = columnRenames[0]
+    const firstSummary = summaryCreates[0]
+
+    const builder = nextSteps()
+
+    if (result.partialFailure) {
+      builder
+        .add(`Fix error: ${result.partialFailure.error}`)
+        .add(`Resume from operation index ${result.partialFailure.operationIndex}`)
     } else if (result.success) {
-      // Generate contextual next steps based on operations performed
-      const tableCreates = result.results.filter((r) => r.action === 'create_table')
-      const tableDeletes = result.results.filter((r) => r.action === 'delete_table')
-      const tableRenames = result.results.filter((r) => r.action === 'rename_table')
-      const columnAdds = result.results.filter((r) => r.action === 'add_column')
-      const columnRemoves = result.results.filter((r) => r.action === 'remove_column')
-      const columnRenames = result.results.filter((r) => r.action === 'rename_column')
-      const columnModifies = result.results.filter((r) => r.action === 'modify_column')
-      const summaryCreates = result.results.filter((r) => r.action === 'create_summary')
-
-      if (tableCreates.length > 0) {
-        const firstTable = tableCreates[0]
-        const tableId = firstTable?.details.tableId as string
-        nextSteps.push(`Use grist_manage_records with action='add' to add data to "${tableId}"`)
-        nextSteps.push(`Use grist_manage_pages action='create_page' to create a view`)
-      }
-
-      if (tableDeletes.length > 0) {
-        nextSteps.push(`Use grist_get_tables to verify table was deleted`)
-        nextSteps.push(`Update any formulas or pages that referenced the deleted table`)
-      }
-
-      if (tableRenames.length > 0) {
-        const firstRename = tableRenames[0]
-        const newTableId = firstRename?.details.new_tableId as string
-        nextSteps.push(`Use grist_get_tables to verify rename to "${newTableId}"`)
-        nextSteps.push(`Update any formulas or references using the old table name`)
-      }
-
-      if (columnAdds.length > 0 && tableCreates.length === 0) {
-        nextSteps.push(
-          `Use grist_get_tables with detail_level='full_schema' to verify column configuration`
+      builder
+        // Table creates
+        .addIf(
+          tableCreates.length > 0,
+          `Use grist_manage_records with action='add' to add data to "${firstTableCreate?.details.tableId}"`
         )
-      }
-
-      if (columnRemoves.length > 0) {
-        nextSteps.push(`Use grist_get_tables with detail_level='columns' to verify column removal`)
-        nextSteps.push(`Update any formulas that referenced the removed column`)
-      }
-
-      if (columnRenames.length > 0) {
-        const firstRename = columnRenames[0]
-        const newColId = firstRename?.details.new_colId as string
-        nextSteps.push(
-          `Use grist_get_tables with detail_level='columns' to verify rename to "${newColId}"`
+        .addIf(
+          tableCreates.length > 0,
+          "Use grist_manage_pages action='create_page' to create a view"
         )
-        nextSteps.push(`Update any formulas referencing the old column name`)
-      }
-
-      if (columnModifies.length > 0) {
-        nextSteps.push(
-          `Use grist_get_tables with detail_level='full_schema' to verify column changes`
+        // Table deletes
+        .addIf(tableDeletes.length > 0, 'Use grist_get_tables to verify table was deleted')
+        .addIf(
+          tableDeletes.length > 0,
+          'Update any formulas or pages that referenced the deleted table'
         )
-      }
-
-      if (summaryCreates.length > 0) {
-        const firstSummary = summaryCreates[0]
-        const summaryId = firstSummary?.details.summaryTableId as string
-        nextSteps.push(`Use grist_get_records with tableId="${summaryId}" to query aggregated data`)
-      }
+        // Table renames
+        .addIf(
+          tableRenames.length > 0,
+          `Use grist_get_tables to verify rename to "${firstTableRename?.details.new_tableId}"`
+        )
+        .addIf(
+          tableRenames.length > 0,
+          'Update any formulas or references using the old table name'
+        )
+        // Column adds (only if no table creates)
+        .addIf(
+          columnAdds.length > 0 && tableCreates.length === 0,
+          "Use grist_get_tables with detail_level='full_schema' to verify column configuration"
+        )
+        // Column removes
+        .addIf(
+          columnRemoves.length > 0,
+          "Use grist_get_tables with detail_level='columns' to verify column removal"
+        )
+        .addIf(columnRemoves.length > 0, 'Update any formulas that referenced the removed column')
+        // Column renames
+        .addIf(
+          columnRenames.length > 0,
+          `Use grist_get_tables with detail_level='columns' to verify rename to "${firstColRename?.details.new_colId}"`
+        )
+        .addIf(columnRenames.length > 0, 'Update any formulas referencing the old column name')
+        // Column modifies
+        .addIf(
+          columnModifies.length > 0,
+          "Use grist_get_tables with detail_level='full_schema' to verify column changes"
+        )
+        // Summary creates
+        .addIf(
+          summaryCreates.length > 0,
+          `Use grist_get_records with tableId="${firstSummary?.details.summaryTableId}" to query aggregated data`
+        )
     }
 
-    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
+    return { ...result, nextSteps: builder.build() }
   }
 
-  private async executeOperation(docId: string, op: SchemaOperation): Promise<OperationResult> {
+  private async executeSingleOperation(
+    docId: string,
+    op: SchemaOperation
+  ): Promise<OperationResult> {
     switch (op.action) {
       case 'create_table':
         return this.executeCreateTable(docId, op)
@@ -428,28 +468,11 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     await this.setupVisibleColForTable(docId, tableId, resolvedColumns)
 
     // Process conditional formatting rules for each column (rulesOptions)
-    // Rules with sectionId go to field scope, others go to column scope
     let totalRulesApplied = 0
     for (const column of resolvedColumns) {
       const rules = extractRulesOptions(column)
       if (rules && rules.length > 0) {
-        for (const rule of rules) {
-          if (rule.sectionId) {
-            // Field-scoped rule (applies to specific widget only)
-            const fieldService = new ConditionalFormattingService(this.client, 'field')
-            await fieldService.addRule(
-              docId,
-              tableId,
-              { tableId, sectionId: rule.sectionId, fieldColId: column.colId },
-              { formula: rule.formula, style: rule.style }
-            )
-          } else {
-            // Column-scoped rule (applies across all views)
-            const colService = new ConditionalFormattingService(this.client, 'column')
-            await colService.addRule(docId, tableId, { tableId, colId: column.colId }, rule)
-          }
-          totalRulesApplied++
-        }
+        totalRulesApplied += await this.applyColumnRules(docId, tableId, column.colId, rules)
       }
     }
 
@@ -498,25 +521,14 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     docId: string,
     op: Extract<SchemaOperation, { action: 'rename_table' }>
   ): Promise<OperationResult> {
-    const action = buildRenameTableAction(toTableId(op.tableId), toTableId(op.newTableId))
-    const response = await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [serializeUserAction(action)],
-      {
-        schema: ApplyResponseSchema,
-        context: `Renaming table ${op.tableId} to ${op.newTableId}`
-      }
-    )
-
-    validateRetValues(response, { context: `RenameTable ${op.tableId}` })
-    this.schemaCache.invalidateDocument(toDocId(docId))
-
+    const result = await renameTableOp(this.context, docId, op.tableId, op.newTableId)
     return {
       action: 'rename_table',
       success: true,
+      verified: result.verified,
       details: {
-        old_tableId: op.tableId,
-        new_tableId: op.newTableId
+        old_tableId: result.oldTableId,
+        new_tableId: result.entity.tableId
       }
     }
   }
@@ -525,22 +537,11 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     docId: string,
     op: Extract<SchemaOperation, { action: 'delete_table' }>
   ): Promise<OperationResult> {
-    const action = buildRemoveTableAction(toTableId(op.tableId))
-    const response = await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [serializeUserAction(action)],
-      {
-        schema: ApplyResponseSchema,
-        context: `Deleting table ${op.tableId}`
-      }
-    )
-
-    validateRetValues(response, { context: `RemoveTable ${op.tableId}` })
-    this.schemaCache.invalidateDocument(toDocId(docId))
-
+    const result = await deleteTableOp(this.context, docId, op.tableId)
     return {
       action: 'delete_table',
       success: true,
+      verified: result.verified,
       details: {
         tableId: op.tableId,
         warning: 'All data permanently deleted'
@@ -599,33 +600,11 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     }
 
     // Process conditional formatting rules (rulesOptions with formula+style pairs)
-    // Rules with sectionId go to field scope, others go to column scope
     const rules = extractRulesOptions(column)
-    let rulesAdded = 0
-    if (rules && rules.length > 0) {
-      for (const rule of rules) {
-        if (rule.sectionId) {
-          // Field-scoped rule (applies to specific widget only)
-          const fieldService = new ConditionalFormattingService(this.client, 'field')
-          await fieldService.addRule(
-            docId,
-            op.tableId,
-            { tableId: op.tableId, sectionId: rule.sectionId, fieldColId: column.colId },
-            { formula: rule.formula, style: rule.style }
-          )
-        } else {
-          // Column-scoped rule (applies across all views)
-          const colService = new ConditionalFormattingService(this.client, 'column')
-          await colService.addRule(
-            docId,
-            op.tableId,
-            { tableId: op.tableId, colId: column.colId },
-            rule
-          )
-        }
-        rulesAdded++
-      }
-    }
+    const rulesAdded =
+      rules && rules.length > 0
+        ? await this.applyColumnRules(docId, op.tableId, column.colId, rules)
+        : 0
 
     this.schemaCache.invalidateCache(toDocId(docId), toTableId(op.tableId))
 
@@ -720,33 +699,11 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     }
 
     // Process conditional formatting rules from style.rulesOptions
-    // Rules with sectionId go to field scope, others go to column scope
     let rulesAdded = 0
     if (op.updates.style) {
       const rules = extractRulesOptions({ style: op.updates.style })
       if (rules && rules.length > 0) {
-        for (const rule of rules) {
-          if (rule.sectionId) {
-            // Field-scoped rule (applies to specific widget only)
-            const fieldService = new ConditionalFormattingService(this.client, 'field')
-            await fieldService.addRule(
-              docId,
-              op.tableId,
-              { tableId: op.tableId, sectionId: rule.sectionId, fieldColId: op.colId },
-              { formula: rule.formula, style: rule.style }
-            )
-          } else {
-            // Column-scoped rule (applies across all views)
-            const colService = new ConditionalFormattingService(this.client, 'column')
-            await colService.addRule(
-              docId,
-              op.tableId,
-              { tableId: op.tableId, colId: op.colId },
-              rule
-            )
-          }
-          rulesAdded++
-        }
+        rulesAdded = await this.applyColumnRules(docId, op.tableId, op.colId, rules)
       }
     }
 
@@ -768,25 +725,14 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     docId: string,
     op: Extract<SchemaOperation, { action: 'remove_column' }>
   ): Promise<OperationResult> {
-    const action = buildRemoveColumnAction(toTableId(op.tableId), toColId(op.colId))
-    const response = await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [serializeUserAction(action)],
-      {
-        schema: ApplyResponseSchema,
-        context: `Removing column ${op.colId} from ${op.tableId}`
-      }
-    )
-
-    validateRetValues(response, { context: `RemoveColumn ${op.colId}` })
-    this.schemaCache.invalidateCache(toDocId(docId), toTableId(op.tableId))
-
+    const result = await removeColumnOp(this.context, docId, op.tableId, op.colId)
     return {
       action: 'remove_column',
       success: true,
+      verified: result.verified,
       details: {
-        tableId: op.tableId,
-        colId: op.colId
+        tableId: result.tableId,
+        colId: result.colId
       }
     }
   }
@@ -795,30 +741,15 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
     docId: string,
     op: Extract<SchemaOperation, { action: 'rename_column' }>
   ): Promise<OperationResult> {
-    const action = buildRenameColumnAction(
-      toTableId(op.tableId),
-      toColId(op.colId),
-      toColId(op.newColId)
-    )
-    const response = await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [serializeUserAction(action)],
-      {
-        schema: ApplyResponseSchema,
-        context: `Renaming column ${op.colId} to ${op.newColId}`
-      }
-    )
-
-    validateRetValues(response, { context: `RenameColumn ${op.colId}` })
-    this.schemaCache.invalidateCache(toDocId(docId), toTableId(op.tableId))
-
+    const result = await renameColumnOp(this.context, docId, op.tableId, op.colId, op.newColId)
     return {
       action: 'rename_column',
       success: true,
+      verified: result.verified,
       details: {
-        tableId: op.tableId,
-        old_colId: op.colId,
-        new_colId: op.newColId
+        tableId: result.entity.tableId,
+        old_colId: result.oldColId,
+        new_colId: result.entity.colId
       }
     }
   }
@@ -891,6 +822,38 @@ export class ManageSchemaTool extends GristTool<typeof ManageSchemaSchema, Manag
   // ---------------------------------------------------------------------------
   // Helper Methods
   // ---------------------------------------------------------------------------
+
+  /**
+   * Apply conditional formatting rules for a column.
+   * Handles both field-scoped and column-scoped rules.
+   * @returns Number of rules applied
+   */
+  private async applyColumnRules(
+    docId: string,
+    tableId: string,
+    colId: string,
+    rules: Array<{ formula: string; style: Record<string, unknown>; sectionId?: number }>
+  ): Promise<number> {
+    let rulesApplied = 0
+    for (const rule of rules) {
+      if (rule.sectionId) {
+        // Field-scoped rule (applies to specific widget only)
+        const fieldService = new ConditionalFormattingService(this.client, 'field')
+        await fieldService.addRule(
+          docId,
+          tableId,
+          { tableId, sectionId: rule.sectionId, fieldColId: colId },
+          { formula: rule.formula, style: rule.style }
+        )
+      } else {
+        // Column-scoped rule (applies across all views)
+        const colService = new ConditionalFormattingService(this.client, 'column')
+        await colService.addRule(docId, tableId, { tableId, colId }, rule)
+      }
+      rulesApplied++
+    }
+    return rulesApplied
+  }
 
   private async resolveVisibleColInColumns(
     docId: string,
@@ -1138,28 +1101,7 @@ export async function manageSchema(context: ToolContext, params: ManageSchemaInp
 // Output Schema
 // =============================================================================
 
-export const ManageSchemaOutputSchema = z.object({
-  success: z.boolean(),
-  docId: z.string(),
-  operationsCompleted: z.number(),
-  results: z.array(
-    z.object({
-      action: z.string(),
-      success: z.boolean(),
-      details: JsonObjectSchema,
-      error: z.string().optional()
-    })
-  ),
-  message: z.string(),
-  partial_failure: z
-    .object({
-      operation_index: z.number(),
-      error: z.string(),
-      completed_operations: z.number()
-    })
-    .optional(),
-  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
-})
+export const ManageSchemaOutputSchema = createBatchOutputSchema(GenericOperationResultSchema)
 
 // =============================================================================
 // Tool Definition
@@ -1271,7 +1213,7 @@ export const MANAGE_SCHEMA_TOOL: ToolDefinition = {
       { error: 'Table not found', solution: 'Use grist_get_tables to list tables' },
       { error: 'Column not found', solution: 'Use grist_get_tables with detail_level="columns"' },
       { error: 'Table already exists', solution: 'Use rename_table or choose different name' },
-      { error: 'Partial failure', solution: 'Check partial_failure.operation_index' }
+      { error: 'Partial failure', solution: 'Check partialFailure.operationIndex' }
     ]
   }
 }

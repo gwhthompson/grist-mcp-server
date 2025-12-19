@@ -364,6 +364,12 @@ describe('grist_manage_schema', () => {
       })
 
       expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(true)
+      expect(parsed.results[0].verified).toBe(true)
     })
   })
 
@@ -411,6 +417,12 @@ describe('grist_manage_schema', () => {
       })
 
       expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(true)
+      expect(parsed.results[0].verified).toBe(true)
     })
   })
 
@@ -455,6 +467,12 @@ describe('grist_manage_schema', () => {
       })
 
       expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(true)
+      expect(parsed.results[0].verified).toBe(true)
     })
   })
 
@@ -498,6 +516,12 @@ describe('grist_manage_schema', () => {
       })
 
       expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(true)
+      expect(parsed.results[0].verified).toBe(true)
     })
 
     it('returns failure for non-existent table', async () => {
@@ -627,6 +651,426 @@ describe('grist_manage_schema', () => {
 
       expect(parsed.success).toBe(true)
       expect(parsed.results.length).toBe(2)
+    })
+  })
+
+  // =========================================================================
+  // Conditional Formatting
+  // =========================================================================
+
+  describe('conditional formatting', () => {
+    it('creates table with column rules (rulesOptions)', async () => {
+      if (!testDocId) return
+
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_schema',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_table',
+              name: 'RulesTest',
+              columns: [
+                {
+                  colId: 'Status',
+                  type: 'Choice',
+                  choices: ['Active', 'Inactive', 'Pending'],
+                  style: {
+                    rulesOptions: [
+                      {
+                        formula: '$Status == "Active"',
+                        style: { textColor: '#00AA00', fontBold: true }
+                      },
+                      {
+                        formula: '$Status == "Inactive"',
+                        style: { textColor: '#AA0000' }
+                      }
+                    ]
+                  }
+                },
+                {
+                  colId: 'Amount',
+                  type: 'Numeric',
+                  style: {
+                    rulesOptions: [
+                      {
+                        formula: '$Amount > 1000',
+                        style: { fillColor: '#FFFFCC' }
+                      }
+                    ]
+                  }
+                }
+              ]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(true)
+      expect(parsed.results[0].details.conditional_formatting_rules).toBe(3)
+    })
+
+    it('updates table with row rules (rowRules)', async () => {
+      if (!testDocId) return
+
+      // First create a table to update
+      await ctx.client.callTool({
+        name: 'grist_manage_schema',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_table',
+              name: 'RowRulesTest',
+              columns: [
+                { colId: 'Priority', type: 'Choice', choices: ['High', 'Medium', 'Low'] },
+                { colId: 'Value', type: 'Numeric' }
+              ]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      // Now update with row rules
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_schema',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'update_table',
+              tableId: 'RowRulesTest',
+              rowRules: [
+                {
+                  formula: '$Priority == "High"',
+                  style: { fillColor: '#FFCCCC' }
+                },
+                {
+                  formula: '$Value > 500',
+                  style: { fontBold: true }
+                }
+              ]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(true)
+      expect(parsed.results[0].details.rowRulesUpdated).toBe(2)
+    })
+
+    it('adds column with conditional formatting rules', async () => {
+      if (!testDocId) return
+
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_schema',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'add_column',
+              tableId: 'RulesTest',
+              column: {
+                colId: 'Score',
+                type: 'Numeric',
+                style: {
+                  rulesOptions: [
+                    {
+                      formula: '$Score >= 90',
+                      style: { textColor: '#00AA00', fontBold: true }
+                    },
+                    {
+                      formula: '$Score < 60',
+                      style: { textColor: '#AA0000' }
+                    }
+                  ]
+                }
+              }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(true)
+    })
+  })
+
+  // =========================================================================
+  // Data-Driven: All Column Types (from schema columnType enum)
+  // =========================================================================
+
+  describe('data-driven: column types', () => {
+    // Setup: Create reference tables for Ref/RefList tests
+    beforeAll(async () => {
+      if (!testDocId) return
+
+      // Create People table for Ref/RefList columns
+      await ctx.client.callTool({
+        name: 'grist_manage_schema',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_table',
+              name: 'People',
+              columns: [
+                { colId: 'Name', type: 'Text' },
+                { colId: 'Email', type: 'Text' }
+              ]
+            },
+            {
+              action: 'create_table',
+              name: 'ColumnTypeTest',
+              columns: [{ colId: 'Id', type: 'Numeric' }]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      // Add reference rows for Ref column tests
+      await ctx.client.callTool({
+        name: 'grist_manage_records',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'add',
+              tableId: 'People',
+              records: [
+                { Name: 'Alice', Email: 'alice@example.com' },
+                { Name: 'Bob', Email: 'bob@example.com' }
+              ]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+    })
+
+    // Complete column type coverage from schema columnType enum:
+    // Any, Text, Numeric, Int, Bool, Date, DateTime, Choice, ChoiceList, Attachments, Ref, RefList
+    const COLUMN_TYPE_CASES = [
+      // Simple types
+      { type: 'Any', colId: 'AnyData' },
+      { type: 'Text', colId: 'Description' },
+      { type: 'Numeric', colId: 'Price' },
+      { type: 'Int', colId: 'Quantity' },
+      { type: 'Bool', colId: 'IsActive' },
+
+      // Date types with format options
+      { type: 'Date', colId: 'DueDate', options: { dateFormat: 'YYYY-MM-DD' } },
+      {
+        type: 'DateTime',
+        colId: 'CreatedAt',
+        options: { dateFormat: 'YYYY-MM-DD', timeFormat: 'HH:mm:ss' }
+      },
+
+      // Choice types (require choices array)
+      { type: 'Choice', colId: 'Status', options: { choices: ['Open', 'In Progress', 'Closed'] } },
+      {
+        type: 'ChoiceList',
+        colId: 'Tags',
+        options: { choices: ['urgent', 'bug', 'feature', 'docs'] }
+      },
+
+      // Attachments
+      { type: 'Attachments', colId: 'Files', options: { height: 100 } },
+
+      // Reference types (require refTable + visibleCol)
+      { type: 'Ref', colId: 'Owner', refTable: 'People', visibleCol: 'Name' },
+      { type: 'RefList', colId: 'Team', refTable: 'People', visibleCol: 'Name' }
+    ] as const
+
+    it.each(COLUMN_TYPE_CASES)('creates column type: $type', async ({
+      type,
+      colId,
+      options,
+      refTable,
+      visibleCol
+    }) => {
+      if (!testDocId) return
+
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_schema',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'add_column',
+              tableId: 'ColumnTypeTest',
+              column: { colId, type, refTable, visibleCol, ...options }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+      expect(parsed.success).toBe(true)
+    })
+  })
+
+  // =========================================================================
+  // Data-Driven: Widget Options (all options from schema)
+  // =========================================================================
+
+  describe('data-driven: widget options', () => {
+    // Setup: Create table for widget options testing
+    beforeAll(async () => {
+      if (!testDocId) return
+
+      await ctx.client.callTool({
+        name: 'grist_manage_schema',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'create_table',
+              name: 'WidgetOptionsTest',
+              columns: [{ colId: 'Id', type: 'Numeric' }]
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+    })
+
+    // Complete widget options coverage from schema
+    const WIDGET_OPTIONS_CASES = [
+      // Text widgets
+      { type: 'Text', colId: 'PlainText', options: { widget: 'TextBox' } },
+      { type: 'Text', colId: 'MarkdownCol', options: { widget: 'Markdown', wrap: true } },
+      { type: 'Text', colId: 'LinkCol', options: { widget: 'HyperLink' } },
+      { type: 'Text', colId: 'AlignedText', options: { style: { alignment: 'center' } } },
+
+      // Bool widgets
+      { type: 'Bool', colId: 'CheckboxBool', options: { widget: 'CheckBox' } },
+      { type: 'Bool', colId: 'SwitchBool', options: { widget: 'Switch' } },
+
+      // Numeric formatting - ALL numMode values
+      {
+        type: 'Numeric',
+        colId: 'CurrencyCol',
+        options: { numMode: 'currency', currency: 'USD', decimals: 2 }
+      },
+      {
+        type: 'Numeric',
+        colId: 'DecimalCol',
+        options: { numMode: 'decimal', decimals: 3, maxDecimals: 5 }
+      },
+      { type: 'Numeric', colId: 'PercentCol', options: { numMode: 'percent', decimals: 1 } },
+      { type: 'Numeric', colId: 'ScientificCol', options: { numMode: 'scientific' } },
+      {
+        type: 'Numeric',
+        colId: 'NegParens',
+        options: { numMode: 'currency', currency: 'EUR', numSign: 'parens' }
+      },
+      { type: 'Int', colId: 'SpinnerInt', options: { widget: 'Spinner' } },
+
+      // Date/DateTime formats
+      {
+        type: 'Date',
+        colId: 'ISODate',
+        options: { dateFormat: 'YYYY-MM-DD', isCustomDateFormat: true }
+      },
+      {
+        type: 'DateTime',
+        colId: 'FullDateTime',
+        options: { dateFormat: 'DD/MM/YYYY', timeFormat: 'HH:mm:ss', isCustomTimeFormat: true }
+      },
+
+      // Choice styling (choiceOptions)
+      {
+        type: 'Choice',
+        colId: 'StyledChoice',
+        options: {
+          choices: ['High', 'Medium', 'Low'],
+          choiceOptions: {
+            High: { fillColor: '#FF0000', textColor: '#FFFFFF', fontBold: true },
+            Low: { fillColor: '#00FF00' }
+          }
+        }
+      },
+
+      // Conditional formatting (rulesOptions)
+      {
+        type: 'Numeric',
+        colId: 'ConditionalNum',
+        options: {
+          style: {
+            rulesOptions: [
+              {
+                formula: '$ConditionalNum > 1000',
+                style: { fillColor: '#FFFF00', fontBold: true }
+              },
+              { formula: '$ConditionalNum < 0', style: { textColor: '#FF0000' } }
+            ]
+          }
+        }
+      },
+
+      // Column header styling
+      {
+        type: 'Text',
+        colId: 'StyledHeader',
+        options: {
+          style: {
+            headerFillColor: '#0000FF',
+            headerTextColor: '#FFFFFF',
+            headerFontBold: true
+          }
+        }
+      }
+    ] as const
+
+    it.each(WIDGET_OPTIONS_CASES)('creates $type column with $colId options', async ({
+      type,
+      colId,
+      options
+    }) => {
+      if (!testDocId) return
+
+      const result = await ctx.client.callTool({
+        name: 'grist_manage_schema',
+        arguments: {
+          docId: testDocId,
+          operations: [
+            {
+              action: 'add_column',
+              tableId: 'WidgetOptionsTest',
+              column: { colId, type, ...options }
+            }
+          ],
+          response_format: 'json'
+        }
+      })
+
+      expect(result.isError).toBeFalsy()
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+      expect(parsed.success).toBe(true)
     })
   })
 

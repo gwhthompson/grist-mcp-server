@@ -3,7 +3,12 @@ import { z } from 'zod'
 // Register shared schemas with meaningful IDs for JSON Schema refs
 // This replaces opaque names like __schema0 with docId, tableId, etc.
 
-export const ResponseFormatSchema = z.enum(['json', 'markdown']).default('json')
+export const ResponseFormatSchema = z
+  .enum(['json', 'markdown', 'concise'])
+  .default('json')
+  .describe(
+    'json: full structured data. markdown: formatted text. concise: minimal with counts/IDs only'
+  )
 
 export const DetailLevelWorkspaceSchema = z
   .enum(['summary', 'detailed'])
@@ -28,13 +33,46 @@ export const HexColorSchema = z
 
 export const AlignmentSchema = z.enum(['left', 'center', 'right']).describe('Text alignment')
 
-export const PaginationSchema = z.strictObject({
-  offset: z.number().int().min(0).default(0).describe('Start position'),
+/**
+ * Generic JSON object schema for arbitrary key-value data
+ */
+export const JsonObjectSchema = z.record(z.string(), z.unknown()).describe('Arbitrary JSON object')
 
-  limit: z.number().int().min(1).max(1000).default(100).describe('Max items to return')
-})
+/**
+ * Create a pagination schema with configurable max limit.
+ *
+ * @param options.maxLimit - Maximum allowed limit (default 1000)
+ * @param options.defaultLimit - Default limit if not specified (default 100)
+ *
+ * @example
+ * // For pages (smaller payloads)
+ * const PagesPaginationSchema = createPaginationSchema({ maxLimit: 100 })
+ *
+ * // For records (larger batches allowed)
+ * const RecordsPaginationSchema = createPaginationSchema({ maxLimit: 1000 })
+ */
+export function createPaginationSchema(options: { maxLimit?: number; defaultLimit?: number } = {}) {
+  const { maxLimit = 1000, defaultLimit = 100 } = options
 
+  return z.strictObject({
+    offset: z.number().int().min(0).default(0).describe('Start position'),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(maxLimit)
+      .default(defaultLimit)
+      .describe(`Max items to return (1-${maxLimit})`)
+  })
+}
+
+// Default pagination schema (backwards compatible)
+export const PaginationSchema = createPaginationSchema()
 export type PaginationInput = z.infer<typeof PaginationSchema>
+
+// Specialized variants for different contexts
+export const PagesPaginationSchema = createPaginationSchema({ maxLimit: 100, defaultLimit: 50 })
+export const RecordsPaginationSchema = createPaginationSchema({ maxLimit: 1000 })
 
 // Grist uses Python for formulas
 const PYTHON_KEYWORDS = new Set([
@@ -78,20 +116,25 @@ const PYTHON_KEYWORDS = new Set([
 export const DocIdSchema = z
   .string()
   .length(22, {
-    message: 'Document ID must be exactly 22 characters (Base58 format)'
+    error: 'Document ID must be exactly 22 characters (Base58 format)'
   })
   .regex(/^[1-9A-HJ-NP-Za-km-z]{22}$/, {
-    message:
+    error:
       'Document ID must be Base58 format (22 chars, excludes 0OIl which are visually ambiguous)'
   })
   .describe('Document ID (from grist_get_documents)')
+  .meta({ id: 'docId' })
+  .brand<'DocId'>()
+
+/** Branded DocId type - use DocIdSchema.parse() to create */
+export type DocId = z.infer<typeof DocIdSchema>
 
 export const TableIdSchema = z
   .string()
-  .min(1, { message: 'Table ID cannot be empty' })
-  .max(64, { message: 'Table ID cannot exceed 64 characters (Python identifier limit)' })
+  .min(1, { error: 'Table ID cannot be empty' })
+  .max(64, { error: 'Table ID cannot exceed 64 characters (Python identifier limit)' })
   .regex(/^[A-Z_][A-Za-z0-9_]*$/, {
-    message:
+    error:
       'Table ID must start with uppercase letter or underscore, followed by letters, numbers, or underscores'
   })
   .refine((id) => !PYTHON_KEYWORDS.has(id), {
@@ -99,6 +142,11 @@ export const TableIdSchema = z
       'Table ID cannot be a Python keyword (for, class, if, def, etc.) because Grist uses Python for formulas'
   })
   .describe('Table name (from grist_get_tables)')
+  .meta({ id: 'tableId' })
+  .brand<'TableId'>()
+
+/** Branded TableId type - use TableIdSchema.parse() to create */
+export type TableId = z.infer<typeof TableIdSchema>
 
 export const WorkspaceIdSchema = z.coerce
   .number()
@@ -108,10 +156,10 @@ export const WorkspaceIdSchema = z.coerce
 
 export const ColIdSchema = z
   .string()
-  .min(1, { message: 'Column ID cannot be empty' })
-  .max(64, { message: 'Column ID cannot exceed 64 characters (Python identifier limit)' })
+  .min(1, { error: 'Column ID cannot be empty' })
+  .max(64, { error: 'Column ID cannot exceed 64 characters (Python identifier limit)' })
   .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, {
-    message:
+    error:
       'Column ID must be a valid Python identifier (start with letter or underscore, followed by letters, numbers, or underscores)'
   })
   .refine((id) => !PYTHON_KEYWORDS.has(id), {
@@ -122,6 +170,11 @@ export const ColIdSchema = z
     error: 'Column ID cannot start with gristHelper_ (reserved prefix for Grist internal columns)'
   })
   .describe('Column ID')
+  .meta({ id: 'colId' })
+  .brand<'ColId'>()
+
+/** Branded ColId type - use ColIdSchema.parse() to create */
+export type ColId = z.infer<typeof ColIdSchema>
 
 // Note: Column type schemas are defined in column-types.ts
 // ColumnTypeLiteralSchema is registered as 'columnType' for JSON Schema $refs

@@ -24,11 +24,3 @@ export {
   isString,
   safeParse
 } from './type-guards.js'
-
-// Export value objects
-export {
-  ColumnSelection,
-  FilterCriteria,
-  OperationResult,
-  PaginationParams
-} from './value-objects.js'

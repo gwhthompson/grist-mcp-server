@@ -20,6 +20,7 @@ import { truncateIfNeeded } from '../services/formatter.js'
 import { toDocId, toTableId } from '../types/advanced.js'
 import type { CellValue, RecordsResponse, SQLQueryResponse } from '../types.js'
 import { GristTool } from './base/GristTool.js'
+import { nextSteps } from './utils/next-steps.js'
 
 interface GristRecord {
   id: number
@@ -184,23 +185,20 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, unknown> {
     result: SqlResponseData,
     _params: QuerySQLInput
   ): Promise<SqlResponseData> {
-    const nextSteps: string[] = []
-
-    if (result.hasMore) {
-      nextSteps.push(`Use offset=${result.nextOffset} to get more results`)
-    }
-
-    if (result.records.length > 0) {
-      nextSteps.push(`Use grist_manage_records to modify data based on query results`)
-
-      if (hasLikelyTimestamps(result.records)) {
-        nextSteps.push(
-          `Dates appear as Unix timestamps. Convert: new Date(timestamp * 1000).toISOString()`
+    return {
+      ...result,
+      nextSteps: nextSteps()
+        .addPaginationHint(result, 'results')
+        .addIf(
+          result.records.length > 0,
+          'Use grist_manage_records to modify data based on query results'
         )
-      }
+        .addIf(
+          result.records.length > 0 && hasLikelyTimestamps(result.records),
+          'Dates appear as Unix timestamps. Convert: new Date(timestamp * 1000).toISOString()'
+        )
+        .build()
     }
-
-    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
   }
 
   protected formatResponse(data: SqlResponseData, format: 'json' | 'markdown') {
@@ -321,23 +319,17 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
     result: GetRecordsResponseData,
     _params: GetRecordsInput
   ): Promise<GetRecordsResponseData> {
-    const nextSteps: string[] = []
-
-    if (result.hasMore) {
-      nextSteps.push(`Use offset=${result.nextOffset} to get more records`)
+    return {
+      ...result,
+      nextSteps: nextSteps()
+        .addPaginationHint(result, 'records')
+        .addIf(result.items.length > 0, 'Use grist_manage_records to modify these records')
+        .addIf(
+          !!result.formulaErrors && result.formulaErrors.recordsWithErrors > 0,
+          `Fix formula errors in columns: ${result.formulaErrors?.affectedColumns.join(', ')}`
+        )
+        .build()
     }
-
-    if (result.items.length > 0) {
-      nextSteps.push(`Use grist_manage_records to modify these records`)
-    }
-
-    if (result.formulaErrors && result.formulaErrors.recordsWithErrors > 0) {
-      nextSteps.push(
-        `Fix formula errors in columns: ${result.formulaErrors.affectedColumns.join(', ')}`
-      )
-    }
-
-    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
   }
 
   protected formatResponse(data: GetRecordsResponseData, format: 'json' | 'markdown') {

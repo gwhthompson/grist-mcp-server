@@ -1,23 +1,28 @@
+import {
+  type ColId,
+  ColIdSchema,
+  type DocId,
+  DocIdSchema,
+  type TableId,
+  TableIdSchema
+} from '../schemas/common.js'
 import type {
-  CellValue,
   DetailLevelTable,
   DetailLevelWorkspace,
-  DocumentInfo,
-  GristRecord,
   PaginationMetadata,
   TableInfo,
   WorkspaceInfo
 } from '../types.js'
 
-declare const brand: unique symbol
+// Re-export branded types from schemas (single source of truth)
+export type { ColId, DocId, TableId }
 
+// Brand helper for types that don't have Zod schemas
+declare const brand: unique symbol
 type Brand<T, TBrand extends string> = T & { [brand]: TBrand }
 
-export type DocId = Brand<string, 'DocId'>
-export type TableId = Brand<string, 'TableId'>
 export type WorkspaceId = Brand<number, 'WorkspaceId'>
 export type RowId = Brand<number, 'RowId'>
-export type ColId = Brand<string, 'ColId'>
 export type OrgId = Brand<number, 'OrgId'>
 export type WebhookId = Brand<string, 'WebhookId'>
 export type Timestamp = Brand<number, 'Timestamp'>
@@ -25,47 +30,32 @@ export type ViewId = Brand<number, 'ViewId'>
 export type SectionId = Brand<number, 'SectionId'>
 export type PageId = Brand<number, 'PageId'>
 
+/** Parse and validate a DocId - uses Zod schema for full validation */
 export function toDocId(raw: string): DocId {
-  if (!raw || raw.trim().length === 0) {
-    throw new TypeError('DocId cannot be empty')
-  }
-  return raw as DocId
+  return DocIdSchema.parse(raw)
 }
 
+/** Parse and validate a TableId - uses Zod schema for full validation */
 export function toTableId(raw: string): TableId {
-  if (!raw || raw.trim().length === 0) {
-    throw new TypeError('TableId cannot be empty')
-  }
-  if (!/^[A-Z_][A-Za-z0-9_]*$/.test(raw)) {
-    throw new TypeError(
-      `Invalid TableId format: "${raw}". Must start with uppercase letter or underscore, followed by letters, numbers, or underscores`
-    )
-  }
-  return raw as TableId
+  return TableIdSchema.parse(raw)
 }
 
+/** Safe DocId parse - returns null on invalid input */
 export function safeToDocId(raw: string): DocId | null {
-  try {
-    return toDocId(raw)
-  } catch {
-    return null
-  }
+  const result = DocIdSchema.safeParse(raw)
+  return result.success ? result.data : null
 }
 
+/** Safe TableId parse - returns null on invalid input */
 export function safeToTableId(raw: string): TableId | null {
-  try {
-    return toTableId(raw)
-  } catch {
-    return null
-  }
+  const result = TableIdSchema.safeParse(raw)
+  return result.success ? result.data : null
 }
 
+/** Safe ColId parse - returns null on invalid input */
 export function safeToColId(raw: string): ColId | null {
-  try {
-    return toColId(raw)
-  } catch {
-    return null
-  }
+  const result = ColIdSchema.safeParse(raw)
+  return result.success ? result.data : null
 }
 
 export function toWorkspaceId(raw: number): WorkspaceId {
@@ -76,22 +66,9 @@ export function toRowId(raw: number): RowId {
   return raw as RowId
 }
 
-// GOTCHA: Blocks gristHelper_ prefix - reserved for Grist internals
+/** Parse and validate a ColId - uses Zod schema for full validation (blocks gristHelper_ prefix) */
 export function toColId(raw: string): ColId {
-  if (!raw || raw.trim().length === 0) {
-    throw new TypeError('ColId cannot be empty')
-  }
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(raw)) {
-    throw new TypeError(
-      `Invalid ColId format: "${raw}". Must be a valid Python identifier (start with letter/underscore, followed by letters/numbers/underscores)`
-    )
-  }
-  if (raw.startsWith('gristHelper_')) {
-    throw new TypeError(
-      `ColId "${raw}" cannot start with gristHelper_ (reserved prefix for Grist internal columns)`
-    )
-  }
-  return raw as ColId
+  return ColIdSchema.parse(raw)
 }
 
 export function toOrgId(raw: number): OrgId {
@@ -176,10 +153,6 @@ export type TableFullSchema = TableInfo
 
 /**
  * Conditional type that returns different table types based on detail level
- *
- * @example
- * type Result = TableResult<'names'> // TableNames
- * type Result = TableResult<'columns'> // TableColumns
  */
 export type TableResult<D extends DetailLevelTable> = D extends 'full_schema'
   ? TableFullSchema
@@ -195,20 +168,14 @@ export type TableResult<D extends DetailLevelTable> = D extends 'full_schema'
 
 /**
  * Type-safe API path construction using template literal types
- * Prevents typos and ensures correct path structure
  */
 export type ApiPath =
-  // Organization endpoints
   | `/api/orgs/${number}`
   | `/api/orgs/${number}/workspaces`
   | `/api/orgs/${number}/access`
-
-  // Workspace endpoints
   | `/api/workspaces/${number}`
   | `/api/workspaces/${number}/docs`
   | `/api/workspaces/${number}/access`
-
-  // Document endpoints
   | `/api/docs/${string}`
   | `/api/docs/${string}/tables`
   | `/api/docs/${string}/tables/${string}`
@@ -220,8 +187,6 @@ export type ApiPath =
   | `/api/docs/${string}/sql`
   | `/api/docs/${string}/access`
   | `/api/docs/${string}/compare`
-
-  // Attachment endpoints
   | `/api/docs/${string}/attachments`
   | `/api/docs/${string}/attachments/${number}`
 
@@ -240,24 +205,18 @@ export type BuildPath<TBase extends string, TParam extends string | number = nev
 
 /**
  * Generic tool response wrapper
- * Provides consistent structure for all tool responses
- *
- * @template T - The type of structured content being returned
  */
 export interface ToolResponse<T> {
   content: Array<{
     type: 'text'
-    text: string // Markdown or JSON string based on response_format
+    text: string
   }>
-  structuredContent: T // Always include - machine-readable data
-  isError?: boolean // True for error responses
+  structuredContent: T
+  isError?: boolean
 }
 
 /**
  * Generic paginated response wrapper
- * Used for any endpoint that returns paginated data
- *
- * @template T - The type of items in the array
  */
 export interface PaginatedResponse<T> {
   items: T[]
@@ -265,265 +224,9 @@ export interface PaginatedResponse<T> {
 }
 
 /**
- * Generic async state wrapper for handling loading, success, and error states
- * Useful for client-side state management
- *
- * @template T - The type of data when successful
- * @template E - The type of error (defaults to Error)
- */
-export type AsyncState<T, E = Error> =
-  | { status: 'idle' }
-  | { status: 'loading' }
-  | { status: 'success'; data: T }
-  | { status: 'error'; error: E }
-
-/**
  * Result type for operations that can succeed or fail
- * Alternative to throwing exceptions
- *
- * @template T - The type of data when successful
- * @template E - The type of error (defaults to Error)
  */
 export type Result<T, E = Error> = { success: true; data: T } | { success: false; error: E }
-
-// ============================================================================
-// Advanced Type Utilities
-// ============================================================================
-
-/**
- * Deep readonly - makes all nested properties readonly
- * Prevents accidental mutations of nested objects
- */
-export type DeepReadonly<T> = {
-  readonly [P in keyof T]: T[P] extends object
-    ? T[P] extends (...args: readonly unknown[]) => unknown
-      ? T[P]
-      : DeepReadonly<T[P]>
-    : T[P]
-}
-
-/**
- * Deep partial - makes all nested properties optional
- * Useful for partial updates of nested structures
- */
-export type DeepPartial<T> = {
-  [P in keyof T]?: T[P] extends object
-    ? T[P] extends Array<infer U>
-      ? Array<DeepPartial<U>>
-      : DeepPartial<T[P]>
-    : T[P]
-}
-
-/**
- * Pick properties by type
- * Extract only properties of a certain type from an interface
- *
- * @example
- * interface User { id: number; name: string; age: number }
- * type Numbers = PickByType<User, number> // { id: number; age: number }
- */
-export type PickByType<T, U> = {
-  [K in keyof T as T[K] extends U ? K : never]: T[K]
-}
-
-/**
- * Required properties - makes all properties required (removes optional modifier)
- */
-export type RequiredProperties<T> = {
-  [K in keyof T]-?: T[K]
-}
-
-/**
- * Mutable - removes readonly modifier from all properties
- */
-export type Mutable<T> = {
-  -readonly [K in keyof T]: T[K]
-}
-
-// ============================================================================
-// Type Guards
-// ============================================================================
-
-/**
- * Type guard to check if a value is a valid CellValue
- */
-export function isCellValue(value: unknown): value is CellValue {
-  return (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'number' ||
-    typeof value === 'boolean' ||
-    (Array.isArray(value) && value.length > 0 && typeof value[0] === 'string')
-  )
-}
-
-/**
- * Helper for property checking with better inference
- * Eliminates the need for unsafe 'as any' casts in type guards
- */
-function hasProperty<K extends PropertyKey>(obj: unknown, key: K): obj is { [P in K]: unknown } {
-  return typeof obj === 'object' && obj !== null && key in obj
-}
-
-/**
- * Type guard to check if a value is a WorkspaceInfo object
- */
-export function isWorkspaceInfo(value: unknown): value is WorkspaceInfo {
-  return (
-    hasProperty(value, 'id') &&
-    typeof value.id === 'number' &&
-    hasProperty(value, 'name') &&
-    typeof value.name === 'string' &&
-    hasProperty(value, 'org') &&
-    typeof value.org === 'string' &&
-    hasProperty(value, 'access') &&
-    typeof value.access === 'string'
-  )
-}
-
-/**
- * Type guard to check if a value is a DocumentInfo object
- */
-export function isDocumentInfo(value: unknown): value is DocumentInfo {
-  return (
-    hasProperty(value, 'id') &&
-    typeof value.id === 'string' &&
-    hasProperty(value, 'name') &&
-    typeof value.name === 'string' &&
-    hasProperty(value, 'access') &&
-    typeof value.access === 'string'
-  )
-}
-
-/**
- * Type guard to check if a value is a TableInfo object
- */
-export function isTableInfo(value: unknown): value is TableInfo {
-  return (
-    hasProperty(value, 'id') &&
-    typeof value.id === 'string' &&
-    hasProperty(value, 'fields') &&
-    Array.isArray(value.fields)
-  )
-}
-
-/**
- * Type guard to check if a value is a GristRecord object
- */
-export function isGristRecord(value: unknown): value is GristRecord {
-  return (
-    hasProperty(value, 'id') &&
-    typeof value.id === 'number' &&
-    hasProperty(value, 'fields') &&
-    typeof value.fields === 'object'
-  )
-}
-
-/**
- * Generic type guard factory for array validation
- * Creates a type guard that validates all items in an array
- *
- * @example
- * const isWorkspaceArray = isArrayOf(isWorkspaceInfo)
- * if (isWorkspaceArray(data)) {
- *   // data is readonly WorkspaceInfo[]
- * }
- */
-export function isArrayOf<const T>(
-  guard: (value: unknown) => value is T
-): (value: unknown) => value is readonly T[] {
-  return (value: unknown): value is readonly T[] => {
-    return Array.isArray(value) && value.every(guard)
-  }
-}
-
-/**
- * Type guard to check if a value is a non-null object
- */
-export function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-/**
- * Assertion function that throws if value doesn't match the guard
- * Useful for validating external API responses
- *
- * @throws {TypeError} if the value doesn't match the type
- */
-export function assertType<T>(
-  value: unknown,
-  guard: (value: unknown) => value is T,
-  message?: string
-): asserts value is T {
-  if (!guard(value)) {
-    throw new TypeError(message || 'Type assertion failed')
-  }
-}
-
-// ============================================================================
-// Inference Helpers
-// ============================================================================
-
-/**
- * Extract element type from an array type
- */
-export type ElementType<T> = T extends (infer U)[] ? U : never
-
-/**
- * Extract promise type
- */
-export type PromiseType<T> = T extends Promise<infer U> ? U : never
-
-/**
- * Extract function return type
- */
-export type ReturnTypeOf<T> = T extends (...args: readonly unknown[]) => infer R ? R : never
-
-/**
- * Extract function parameters as tuple
- */
-export type ParametersOf<T> = T extends (...args: infer P) => unknown ? P : never
-
-// ============================================================================
-// Type Testing Utilities
-// ============================================================================
-
-/**
- * Assert that two types are equal
- * Used for compile-time type testing
- */
-export type AssertEqual<T, U> = [T] extends [U] ? ([U] extends [T] ? true : false) : false
-
-/**
- * Assert that T extends U
- */
-export type AssertExtends<T, U> = T extends U ? true : false
-
-/**
- * Assert that T does not extend U
- */
-export type AssertNotExtends<T, U> = T extends U ? false : true
-
-// ============================================================================
-// Array Utility Types
-// ============================================================================
-
-/**
- * Non-empty array type
- * Guarantees at least one element at compile-time
- *
- * @example
- * ```typescript
- * function processIds(ids: NonEmptyArray<number>) {
- *   const first = ids[0]  // Always safe - guaranteed to exist
- *   // ...
- * }
- *
- * processIds([1, 2, 3])  // ✅ OK
- * processIds([])         // ❌ Type error
- * ```
- */
-export type NonEmptyArray<T> = [T, ...T[]]
 
 // ============================================================================
 // Exhaustiveness Checking
@@ -535,43 +238,7 @@ export type NonEmptyArray<T> = [T, ...T[]]
  *
  * @param value - Should be `never` if all cases are handled
  * @throws Error if called (indicates missing case)
- *
- * @example
- * ```typescript
- * type Shape = { kind: 'circle' } | { kind: 'square' } | { kind: 'triangle' }
- *
- * function getArea(shape: Shape): number {
- *   switch (shape.kind) {
- *     case 'circle': return Math.PI * radius ** 2
- *     case 'square': return side ** 2
- *     // If we forget 'triangle', TypeScript will error on the default case
- *     default: return assertNever(shape)  // Type error if any case is missing
- *   }
- * }
- * ```
  */
 export function assertNever(value: never): never {
   throw new Error(`Unexpected value: ${JSON.stringify(value)}. This should never happen.`)
 }
-
-/**
- * Type-level exhaustiveness check without runtime overhead
- * Use in switch statements to ensure all cases are handled at compile-time
- *
- * @example
- * ```typescript
- * function handleOperation(op: ColumnOperation) {
- *   switch (op.action) {
- *     case 'add': return handleAdd(op)
- *     case 'modify': return handleModify(op)
- *     case 'delete': return handleDelete(op)
- *     case 'rename': return handleRename(op)
- *     default: {
- *       const _exhaustive: AssertExhaustive<typeof op> = op
- *       return assertNever(op)
- *     }
- *   }
- * }
- * ```
- */
-export type AssertExhaustive<T extends never> = T

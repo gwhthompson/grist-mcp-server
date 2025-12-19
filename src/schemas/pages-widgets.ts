@@ -1,5 +1,11 @@
 import { z } from 'zod'
-import { DocIdSchema, parseJsonString, ResponseFormatSchema, TableIdSchema } from './common.js'
+import {
+  DocIdSchema,
+  PagesPaginationSchema,
+  parseJsonString,
+  ResponseFormatSchema,
+  TableIdSchema
+} from './common.js'
 
 /**
  * Schema for grist_get_pages tool
@@ -13,19 +19,7 @@ export const GetPagesSchema = z.strictObject({
       '"summary": Page names, widget types, tables. ' +
         '"detailed": + linking info, chart configs, group-by columns'
     ),
-  limit: z
-    .number()
-    .int()
-    .min(1)
-    .max(100)
-    .default(50)
-    .describe('Maximum number of pages to return (1-100, default: 50)'),
-  offset: z
-    .number()
-    .int()
-    .min(0)
-    .default(0)
-    .describe('Starting position for pagination (default: 0)'),
+  ...PagesPaginationSchema.shape,
   response_format: ResponseFormatSchema.optional().default('markdown')
 })
 

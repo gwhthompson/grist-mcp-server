@@ -12,8 +12,13 @@
 
 import { z } from 'zod'
 import { MAX_RECORDS_PER_BATCH } from '../constants.js'
+import {
+  addRecords as domainAddRecords,
+  deleteRecords as domainDeleteRecords,
+  updateRecords as domainUpdateRecords
+} from '../domain/operations/records.js'
 import type { ToolContext, ToolDefinition } from '../registry/types.js'
-import { ApplyResponseSchema, CellValueSchema } from '../schemas/api-responses.js'
+import { CellValueSchema } from '../schemas/api-responses.js'
 import { encodeRecordForApi } from '../schemas/cell-codecs.js'
 import {
   DocIdSchema,
@@ -21,26 +26,16 @@ import {
   ResponseFormatSchema,
   TableIdSchema
 } from '../schemas/common.js'
-import {
-  buildBulkAddRecordAction,
-  buildBulkRemoveRecordAction,
-  buildBulkUpdateRecordAction
-} from '../services/action-builder.js'
-import { serializeUserAction } from '../services/grist-client.js'
-import { toDocId, toRowId, toTableId } from '../types/advanced.js'
-import type { ApplyResponse, UpsertResponse } from '../types.js'
-import { validateRetValues } from '../validators/apply-response.js'
+import { toDocId, toTableId } from '../types/advanced.js'
+import type { UpsertResponse } from '../types.js'
 import {
   validateRecordsDataIntegrity,
   validateRowIdsExist,
   validateUpsertRecordsDataIntegrity
 } from '../validators/data-integrity-validators.js'
-import {
-  validateRecord,
-  validateRecords,
-  validateUpsertRecords
-} from '../validators/record-validator.js'
-import { GristTool } from './base/GristTool.js'
+import { validateRecords, validateUpsertRecords } from '../validators/record-validator.js'
+import { BatchOperationTool } from './base/BatchOperationTool.js'
+import { nextSteps } from './utils/next-steps.js'
 
 // =============================================================================
 // Record Operation Schemas - discriminated union on 'action' field
@@ -180,6 +175,7 @@ interface OperationResult {
   recordIds?: number[]
   error?: string
   filtersUsed?: Record<string, unknown>
+  verified?: boolean
 }
 
 interface ManageRecordsResponse {
@@ -207,66 +203,60 @@ interface RecordsResponse {
   records: Array<{ id: number }>
 }
 
-export class ManageRecordsTool extends GristTool<
+export class ManageRecordsTool extends BatchOperationTool<
   typeof ManageRecordsSchema,
+  RecordOperation,
+  OperationResult,
   ManageRecordsResponse
 > {
   constructor(context: ToolContext) {
     super(context, ManageRecordsSchema)
   }
 
-  protected async executeInternal(params: ManageRecordsInput): Promise<ManageRecordsResponse> {
-    const { schemaCache } = this
-    const docIdBranded = toDocId(params.docId)
-    const results: OperationResult[] = []
-    const affectedTables = new Set<string>()
-    let totalAffected = 0
+  protected getOperations(params: ManageRecordsInput): RecordOperation[] {
+    return params.operations
+  }
 
-    // Execute operations sequentially (later operations may depend on earlier ones)
-    for (let i = 0; i < params.operations.length; i++) {
-      const op = params.operations[i]
-      if (!op) continue
+  protected getDocId(params: ManageRecordsInput): string {
+    return params.docId
+  }
 
-      const tableIdBranded = toTableId(op.tableId)
+  protected getActionName(operation: RecordOperation): string {
+    return `${operation.action} on ${operation.tableId}`
+  }
 
-      try {
-        const result = await this.executeOperation(params.docId, op.tableId, op)
-        results.push({
-          ...result,
-          tableId: op.tableId
-        })
-        totalAffected += result.recordsAffected
-        affectedTables.add(op.tableId)
+  protected async executeOperation(
+    docId: string,
+    operation: RecordOperation,
+    _index: number
+  ): Promise<OperationResult> {
+    const tableIdBranded = toTableId(operation.tableId)
+    const docIdBranded = toDocId(docId)
 
-        // Invalidate cache after any modification
-        schemaCache.invalidateCache(docIdBranded, tableIdBranded)
-      } catch (error) {
-        // Return partial failure info
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        return {
-          success: false,
-          docId: params.docId,
-          tablesAffected: Array.from(affectedTables),
-          operationsCompleted: i,
-          totalRecordsAffected: totalAffected,
-          results,
-          message: `Operation ${i + 1} (${op.action} on ${op.tableId}) failed: ${errorMessage}`,
-          partialFailure: {
-            operationIndex: i,
-            tableId: op.tableId,
-            error: errorMessage,
-            completedOperations: i
-          }
-        }
-      }
+    const result = await this.executeSingleOperation(docId, operation.tableId, operation)
+
+    // Invalidate cache after any modification
+    this.schemaCache.invalidateCache(docIdBranded, tableIdBranded)
+
+    return {
+      ...result,
+      tableId: operation.tableId
     }
+  }
 
+  protected buildSuccessResponse(
+    docId: string,
+    results: OperationResult[],
+    params: ManageRecordsInput
+  ): ManageRecordsResponse {
+    const affectedTables = new Set(results.map((r) => r.tableId))
+    const totalAffected = results.reduce((sum, r) => sum + r.recordsAffected, 0)
     const tableCount = affectedTables.size
     const tableText = tableCount === 1 ? 'table' : 'tables'
 
     return {
       success: true,
-      docId: params.docId,
+      docId,
       tablesAffected: Array.from(affectedTables),
       operationsCompleted: params.operations.length,
       totalRecordsAffected: totalAffected,
@@ -275,56 +265,71 @@ export class ManageRecordsTool extends GristTool<
     }
   }
 
+  protected buildFailureResponse(
+    docId: string,
+    failedIndex: number,
+    failedOperation: RecordOperation,
+    completedResults: OperationResult[],
+    errorMessage: string,
+    _params: ManageRecordsInput
+  ): ManageRecordsResponse {
+    const affectedTables = new Set(completedResults.map((r) => r.tableId))
+    const totalAffected = completedResults.reduce((sum, r) => sum + r.recordsAffected, 0)
+
+    return {
+      success: false,
+      docId,
+      tablesAffected: Array.from(affectedTables),
+      operationsCompleted: failedIndex,
+      totalRecordsAffected: totalAffected,
+      results: completedResults,
+      message: `Operation ${failedIndex + 1} (${failedOperation.action} on ${failedOperation.tableId}) failed: ${errorMessage}`,
+      partialFailure: {
+        operationIndex: failedIndex,
+        tableId: failedOperation.tableId,
+        error: errorMessage,
+        completedOperations: failedIndex
+      }
+    }
+  }
+
   protected async afterExecute(
     result: ManageRecordsResponse,
     params: ManageRecordsInput
   ): Promise<ManageRecordsResponse> {
-    const nextSteps: string[] = []
+    const addResults = result.results.filter((r) => r.action === 'add' && r.recordIds?.length)
+    const updateResults = result.results.filter((r) => r.action === 'update')
+    const deleteResults = result.results.filter((r) => r.action === 'delete')
+    const firstAdd = addResults[0]
+    const firstDelete = deleteResults[0]
+
+    const builder = nextSteps()
 
     if (result.partialFailure) {
-      // Guide recovery from partial failure
-      nextSteps.push(
-        `Fix error in ${result.partialFailure.tableId}: ${result.partialFailure.error}`
-      )
-      nextSteps.push(`Resume from operation index ${result.partialFailure.operationIndex}`)
+      builder
+        .add(`Fix error in ${result.partialFailure.tableId}: ${result.partialFailure.error}`)
+        .add(`Resume from operation index ${result.partialFailure.operationIndex}`)
     } else if (result.success) {
-      // Generate contextual next steps based on operations performed
-      const addResults = result.results.filter((r) => r.action === 'add' && r.recordIds?.length)
-      const updateResults = result.results.filter((r) => r.action === 'update')
-      const deleteResults = result.results.filter((r) => r.action === 'delete')
-
-      if (addResults.length > 0) {
-        const firstAdd = addResults[0]
-        if (firstAdd?.recordIds && firstAdd.recordIds.length > 0) {
-          nextSteps.push(
-            `Use grist_get_records with docId="${params.docId}" and tableId="${firstAdd.tableId}" to verify added records`
-          )
-        }
-      }
-
-      if (updateResults.length > 0) {
-        nextSteps.push(`Use grist_get_records to verify updated data`)
-      }
-
-      if (deleteResults.length > 0) {
-        const firstDelete = deleteResults[0]
-        if (firstDelete) {
-          nextSteps.push(
-            `Use grist_get_records with tableId="${firstDelete.tableId}" to verify records were deleted`
-          )
-        }
-      }
-
-      // Suggest page creation if data was added
-      if (addResults.length > 0 && result.totalRecordsAffected > 0) {
-        nextSteps.push(`Use grist_manage_pages action='create_page' to create a view for the data`)
-      }
+      builder
+        .addIf(
+          !!firstAdd?.recordIds?.length,
+          `Use grist_get_records with docId="${params.docId}" and tableId="${firstAdd?.tableId}" to verify added records`
+        )
+        .addIf(updateResults.length > 0, 'Use grist_get_records to verify updated data')
+        .addIf(
+          !!firstDelete,
+          `Use grist_get_records with tableId="${firstDelete?.tableId}" to verify records were deleted`
+        )
+        .addIf(
+          addResults.length > 0 && result.totalRecordsAffected > 0,
+          "Use grist_manage_pages action='create_page' to create a view for the data"
+        )
     }
 
-    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
+    return { ...result, nextSteps: builder.build() }
   }
 
-  private async executeOperation(
+  private async executeSingleOperation(
     docId: string,
     tableId: string,
     op: RecordOperation
@@ -353,10 +358,10 @@ export class ManageRecordsTool extends GristTool<
     // Fetch fresh column metadata for validation
     const columns = await schemaCache.getFreshColumns(docIdBranded, tableIdBranded)
 
-    // Type validation
+    // Type validation (pre-write)
     validateRecords(op.records, columns, tableId)
 
-    // Data integrity validation
+    // Data integrity validation (pre-write: references exist, choices valid)
     await validateRecordsDataIntegrity(
       op.records,
       columns,
@@ -365,36 +370,15 @@ export class ManageRecordsTool extends GristTool<
       schemaCache
     )
 
-    // Build column type map for transformation
-    const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
-
-    // Transform user-friendly formats to API formats
-    const transformedRecords = op.records.map((record) => encodeRecordForApi(record, columnTypes))
-
-    const action = buildBulkAddRecordAction(tableIdBranded, transformedRecords)
-    const response = await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [serializeUserAction(action)],
-      {
-        schema: ApplyResponseSchema,
-        context: `Adding ${op.records.length} records to ${tableId}`
-      }
-    )
-
-    const retValues = validateRetValues(response, {
-      context: `BulkAddRecord on ${tableId}`
-    })
-
-    const result = retValues[0]
-    if (!Array.isArray(result)) {
-      throw new Error(`Expected array of row IDs but got ${typeof result}`)
-    }
+    // Use domain operation - handles encoding, API call, and verification
+    const result = await domainAddRecords(this.context, docId, tableId, op.records)
 
     return {
       action: 'add',
       success: true,
-      recordsAffected: op.records.length,
-      recordIds: result as number[]
+      recordsAffected: result.count,
+      recordIds: result.records.map((r) => r.id),
+      verified: true
     }
   }
 
@@ -407,54 +391,35 @@ export class ManageRecordsTool extends GristTool<
     const docIdBranded = toDocId(docId)
     const tableIdBranded = toTableId(tableId)
 
-    // Extract row IDs and validate they exist
+    // Extract row IDs and validate they exist (pre-write)
     const rowIds = op.records.map((r) => r.id)
     await validateRowIdsExist(rowIds, tableIdBranded, docIdBranded, schemaCache)
 
     // Fetch fresh column metadata
     const columns = await schemaCache.getFreshColumns(docIdBranded, tableIdBranded)
 
-    // Process each record update
-    for (const record of op.records) {
-      validateRecord(record.fields, columns, tableId)
-      await validateRecordsDataIntegrity(
-        [record.fields],
-        columns,
-        tableIdBranded,
-        docIdBranded,
-        schemaCache
-      )
-    }
+    // Type validation (pre-write) - validate all at once
+    const allFields = op.records.map((r) => r.fields)
+    validateRecords(allFields, columns, tableId)
 
-    // Build column type map for transformation
-    const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
+    // Data integrity validation (pre-write) - validate all at once
+    await validateRecordsDataIntegrity(
+      allFields,
+      columns,
+      tableIdBranded,
+      docIdBranded,
+      schemaCache
+    )
 
-    // Build bulk update action - group updates by fields being updated
-    // For simplicity, process each record individually
-    for (const record of op.records) {
-      // Transform user-friendly formats to API formats
-      const transformedFields = encodeRecordForApi(record.fields, columnTypes)
-      const action = buildBulkUpdateRecordAction(
-        tableIdBranded,
-        [toRowId(record.id)],
-        transformedFields
-      )
-      const response = await this.client.post<ApplyResponse>(
-        `/docs/${docId}/apply`,
-        [serializeUserAction(action)],
-        {
-          schema: ApplyResponseSchema,
-          context: `Updating record ${record.id} in ${tableId}`
-        }
-      )
-      validateRetValues(response, { context: `BulkUpdateRecord on ${tableId}` })
-    }
+    // Use domain operation - handles encoding, API call, and verification
+    const result = await domainUpdateRecords(this.context, docId, tableId, op.records)
 
     return {
       action: 'update',
       success: true,
-      recordsAffected: op.records.length,
-      recordIds: rowIds
+      recordsAffected: result.count,
+      recordIds: result.records.map((r) => r.id),
+      verified: true
     }
   }
 
@@ -469,39 +434,34 @@ export class ManageRecordsTool extends GristTool<
     let rowIdsToDelete: number[]
 
     if (op.rowIds) {
+      // Validate row IDs exist (pre-write)
       await validateRowIdsExist(op.rowIds, tableIdBranded, docIdBranded, schemaCache)
       rowIdsToDelete = op.rowIds
     } else if (op.filters) {
+      // Find matching records by filter
       rowIdsToDelete = await this.findMatchingRecordIds(docId, tableId, op.filters)
       if (rowIdsToDelete.length === 0) {
         return {
           action: 'delete',
           success: true,
           recordsAffected: 0,
-          filtersUsed: op.filters
+          filtersUsed: op.filters,
+          verified: true
         }
       }
     } else {
       throw new Error('Either rowIds or filters must be provided for delete')
     }
 
-    const action = buildBulkRemoveRecordAction(tableIdBranded, rowIdsToDelete.map(toRowId))
-    const response = await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [serializeUserAction(action)],
-      {
-        schema: ApplyResponseSchema,
-        context: `Deleting ${rowIdsToDelete.length} records from ${tableId}`
-      }
-    )
-
-    validateRetValues(response, { context: `BulkRemoveRecord on ${tableId}` })
+    // Use domain operation - handles API call and verification (records gone)
+    const result = await domainDeleteRecords(this.context, docId, tableId, rowIdsToDelete)
 
     return {
       action: 'delete',
       success: true,
-      recordsAffected: rowIdsToDelete.length,
-      recordIds: rowIdsToDelete,
+      recordsAffected: result.count,
+      recordIds: result.deletedIds,
+      verified: true,
       ...(op.filters ? { filtersUsed: op.filters } : {})
     }
   }
@@ -660,7 +620,8 @@ export const ManageRecordsOutputSchema = z.object({
         filtersUsed: z
           .record(z.string(), z.unknown())
           .optional()
-          .describe('Filters used for delete')
+          .describe('Filters used for delete'),
+        verified: z.boolean().optional().describe('true if operation was verified by reading back')
       })
     )
     .describe('Per-operation results with recordIds for follow-up queries'),

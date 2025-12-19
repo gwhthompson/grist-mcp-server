@@ -2,16 +2,13 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { ValidationError } from '../../../src/errors/index.js'
 import {
-  assertType,
   createTypeGuard,
   hasProperty,
-  isArrayOf,
   isBoolean,
   isDefined,
   isError,
   isNullish,
   isNumber,
-  isObject,
   isRecord,
   isString,
   safeParse
@@ -97,36 +94,6 @@ describe('Type Guards', () => {
     })
   })
 
-  describe('isObject', () => {
-    it.each([
-      [{}, true],
-      [[], true],
-      [null, false],
-      ['object', false],
-      [42, false]
-    ])('isObject(%p) -> %s', (value, expected) => {
-      expect(isObject(value)).toBe(expected)
-    })
-  })
-
-  describe('isArrayOf', () => {
-    it('validates all elements with guard', () => {
-      expect(isArrayOf(['a', 'b'], isString)).toBe(true)
-      expect(isArrayOf([1, 2], isNumber)).toBe(true)
-      expect(isArrayOf([], isString)).toBe(true)
-    })
-
-    it('returns false if any element fails guard', () => {
-      expect(isArrayOf([1, 'b'], isString)).toBe(false)
-      expect(isArrayOf(['a', 2], isNumber)).toBe(false)
-    })
-
-    it('returns false for non-arrays', () => {
-      expect(isArrayOf('not array', isString)).toBe(false)
-      expect(isArrayOf(null, isString)).toBe(false)
-    })
-  })
-
   describe('hasProperty', () => {
     it.each([
       [{ name: 'test' }, 'name', true],
@@ -166,23 +133,6 @@ describe('Type Guards', () => {
       expect(isPositive(-1)).toBe(false)
       expect(isPositive(0)).toBe(false)
       expect(isPositive('5')).toBe(false)
-    })
-  })
-
-  describe('assertType', () => {
-    const schema = z.string().min(1)
-
-    it('passes for valid values', () => {
-      expect(() => assertType(schema, 'hello')).not.toThrow()
-    })
-
-    it('throws ValidationError for invalid values', () => {
-      expect(() => assertType(schema, '')).toThrow(ValidationError)
-      expect(() => assertType(schema, 123)).toThrow(ValidationError)
-    })
-
-    it('includes custom message in error', () => {
-      expect(() => assertType(schema, '', 'Name required')).toThrow('Name required')
     })
   })
 

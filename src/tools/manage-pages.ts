@@ -8,8 +8,13 @@
  */
 
 import { z } from 'zod'
+import { reorderPages as reorderPagesOp } from '../domain/operations/pages.js'
 import { type ToolContext, type ToolDefinition, WRITE_SAFE_ANNOTATIONS } from '../registry/types.js'
 import { ApplyResponseSchema } from '../schemas/api-responses.js'
+import {
+  createBatchOutputSchema,
+  GenericOperationResultSchema
+} from '../schemas/batch-operation-schemas.js'
 import { DocIdSchema, ResponseFormatSchema } from '../schemas/common.js'
 import {
   buildLinkActions,
@@ -37,8 +42,9 @@ import type { SectionId } from '../types/advanced.js'
 import type { ApplyResponse, SQLQueryResponse } from '../types.js'
 import { first } from '../utils/array-helpers.js'
 import { extractFields } from '../utils/grist-field-extractor.js'
-import { GristTool } from './base/GristTool.js'
+import { BatchOperationTool } from './base/BatchOperationTool.js'
 import { fetchWidgetTableMetadata } from './pages/shared.js'
+import { nextSteps } from './utils/next-steps.js'
 
 // =============================================================================
 // Shared Schemas
@@ -189,6 +195,7 @@ export type PageOperation = z.infer<typeof PageOperationSchema>
 interface OperationResult {
   action: string
   success: boolean
+  verified?: boolean
   details: Record<string, unknown>
   error?: string
 }
@@ -199,10 +206,10 @@ interface ManagePagesResponse {
   operationsCompleted: number
   results: OperationResult[]
   message: string
-  partial_failure?: {
-    operation_index: number
+  partialFailure?: {
+    operationIndex: number
     error: string
-    completed_operations: number
+    completedOperations: number
   }
   nextSteps?: string[]
 }
@@ -211,7 +218,12 @@ interface ManagePagesResponse {
 // Tool Implementation
 // =============================================================================
 
-export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManagePagesResponse> {
+export class ManagePagesTool extends BatchOperationTool<
+  typeof ManagePagesSchema,
+  PageOperation,
+  OperationResult,
+  ManagePagesResponse
+> {
   // Track page renames within batch for atomicity
   private pageNameMap = new Map<string, string>()
   private pageInfoCache = new Map<string, { id: number; viewRef: number; pagePos: number }>()
@@ -220,42 +232,68 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
     super(context, ManagePagesSchema)
   }
 
+  protected getOperations(params: ManagePagesInput): PageOperation[] {
+    return params.operations
+  }
+
+  protected getDocId(params: ManagePagesInput): string {
+    return params.docId
+  }
+
+  protected getActionName(operation: PageOperation): string {
+    return operation.action
+  }
+
+  protected async executeOperation(
+    docId: string,
+    operation: PageOperation,
+    _index: number
+  ): Promise<OperationResult> {
+    return this.executeSingleOperation(docId, operation)
+  }
+
   protected async executeInternal(params: ManagePagesInput): Promise<ManagePagesResponse> {
-    // Reset batch state
+    // Reset batch state before executing operations
     this.pageNameMap.clear()
     this.pageInfoCache.clear()
 
-    const results: OperationResult[] = []
+    // Delegate to parent's batch execution
+    return super.executeInternal(params)
+  }
 
-    for (let i = 0; i < params.operations.length; i++) {
-      const op = params.operations[i]
-      if (!op) continue
-      try {
-        const result = await this.executeOperation(params.docId, op)
-        results.push(result)
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : String(error)
-        return {
-          success: false,
-          docId: params.docId,
-          operationsCompleted: i,
-          results,
-          message: `Operation ${i + 1} (${op.action}) failed: ${errorMessage}`,
-          partial_failure: {
-            operation_index: i,
-            error: errorMessage,
-            completed_operations: i
-          }
-        }
-      }
-    }
-
+  protected buildSuccessResponse(
+    docId: string,
+    results: OperationResult[],
+    params: ManagePagesInput
+  ): ManagePagesResponse {
     return {
       success: true,
-      docId: params.docId,
+      docId,
       operationsCompleted: params.operations.length,
       results,
       message: `Successfully completed ${params.operations.length} page operation(s)`
+    }
+  }
+
+  protected buildFailureResponse(
+    docId: string,
+    failedIndex: number,
+    failedOperation: PageOperation,
+    completedResults: OperationResult[],
+    errorMessage: string,
+    _params: ManagePagesInput
+  ): ManagePagesResponse {
+    return {
+      success: false,
+      docId,
+      operationsCompleted: failedIndex,
+      results: completedResults,
+      message: `Operation ${failedIndex + 1} (${failedOperation.action}) failed: ${errorMessage}`,
+      partialFailure: {
+        operationIndex: failedIndex,
+        error: errorMessage,
+        completedOperations: failedIndex
+      }
     }
   }
 
@@ -263,71 +301,65 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
     result: ManagePagesResponse,
     _params: ManagePagesInput
   ): Promise<ManagePagesResponse> {
-    const nextSteps: string[] = []
+    const pageCreates = result.results.filter((r) => r.action === 'create_page')
+    const pageRenames = result.results.filter((r) => r.action === 'rename_page')
+    const pageDeletes = result.results.filter((r) => r.action === 'delete_page')
+    const reorderOps = result.results.filter((r) => r.action === 'reorder_pages')
+    const configureOps = result.results.filter((r) => r.action === 'configure_widget')
+    const linkOps = result.results.filter((r) => r.action === 'link_widgets')
+    const getLayouts = result.results.filter((r) => r.action === 'get_layout')
 
-    if (result.partial_failure) {
-      nextSteps.push(`Fix error: ${result.partial_failure.error}`)
-      nextSteps.push(`Resume from operation index ${result.partial_failure.operation_index}`)
+    const firstCreate = pageCreates[0]
+    const firstRename = pageRenames[0]
+
+    const builder = nextSteps()
+
+    if (result.partialFailure) {
+      builder
+        .add(`Fix error: ${result.partialFailure.error}`)
+        .add(`Resume from operation index ${result.partialFailure.operationIndex}`)
     } else if (result.success) {
-      const pageCreates = result.results.filter((r) => r.action === 'create_page')
-      const pageRenames = result.results.filter((r) => r.action === 'rename_page')
-      const pageDeletes = result.results.filter((r) => r.action === 'delete_page')
-      const reorderOps = result.results.filter((r) => r.action === 'reorder_pages')
-      const configureOps = result.results.filter((r) => r.action === 'configure_widget')
-      const linkOps = result.results.filter((r) => r.action === 'link_widgets')
-      const getLayouts = result.results.filter((r) => r.action === 'get_layout')
-
-      // After create_page, suggest linking widgets
-      if (pageCreates.length > 0 && linkOps.length === 0) {
-        const firstCreate = pageCreates[0]
+      // After create_page, suggest linking widgets (only if no link ops and multiple widgets)
+      builder.addIfFn(pageCreates.length > 0 && linkOps.length === 0, () => {
         const viewId = firstCreate?.details.viewId as number
         const sectionIds = firstCreate?.details.sectionIds as number[]
         if (viewId && sectionIds && sectionIds.length > 1) {
-          nextSteps.push(
-            `Use link_widgets with viewId=${viewId} and sectionIds=[${sectionIds.join(', ')}] to connect widgets`
-          )
+          return `Use link_widgets with viewId=${viewId} and sectionIds=[${sectionIds.join(', ')}] to connect widgets`
         }
-      }
+        return ''
+      })
 
-      // After rename_page
-      if (pageRenames.length > 0) {
-        const firstRename = pageRenames[0]
-        const newName = firstRename?.details.newName as string
-        nextSteps.push(`Use get_layout to verify page "${newName}" configuration`)
-      }
-
-      // After delete_page
-      if (pageDeletes.length > 0) {
-        nextSteps.push(`Use get_layout on remaining pages to verify document structure`)
-      }
-
-      // After reorder_pages
-      if (reorderOps.length > 0) {
-        nextSteps.push(`Page order updated. Navigate through pages to verify new order`)
-      }
-
-      // After configure_widget
-      if (configureOps.length > 0) {
-        nextSteps.push(
-          `Use grist_get_records to verify widget displays data with new configuration`
+      builder
+        .addIf(
+          pageRenames.length > 0,
+          `Use get_layout to verify page "${firstRename?.details.newName}" configuration`
         )
-      }
-
-      // After link_widgets, suggest verifying
-      if (linkOps.length > 0) {
-        nextSteps.push(`Use grist_manage_records to add test data and verify links work correctly`)
-      }
-
-      // After get_layout, suggest modifications
-      if (getLayouts.length > 0) {
-        nextSteps.push(`Use set_layout to modify the layout, or configure_widget to adjust sorting`)
-      }
+        .addIf(
+          pageDeletes.length > 0,
+          'Use get_layout on remaining pages to verify document structure'
+        )
+        .addIf(
+          reorderOps.length > 0,
+          'Page order updated. Navigate through pages to verify new order'
+        )
+        .addIf(
+          configureOps.length > 0,
+          'Use grist_get_records to verify widget displays data with new configuration'
+        )
+        .addIf(
+          linkOps.length > 0,
+          'Use grist_manage_records to add test data and verify links work correctly'
+        )
+        .addIf(
+          getLayouts.length > 0,
+          'Use set_layout to modify the layout, or configure_widget to adjust sorting'
+        )
     }
 
-    return { ...result, nextSteps: nextSteps.length > 0 ? nextSteps : undefined }
+    return { ...result, nextSteps: builder.build() }
   }
 
-  private async executeOperation(docId: string, op: PageOperation): Promise<OperationResult> {
+  private async executeSingleOperation(docId: string, op: PageOperation): Promise<OperationResult> {
     switch (op.action) {
       case 'create_page':
         return this.executeCreatePage(docId, op)
@@ -550,25 +582,14 @@ export class ManagePagesTool extends GristTool<typeof ManagePagesSchema, ManageP
     docId: string,
     op: Extract<PageOperation, { action: 'reorder_pages' }>
   ): Promise<OperationResult> {
-    const actions: Array<['UpdateRecord', string, number, Record<string, unknown>]> = []
-
-    for (let i = 0; i < op.order.length; i++) {
-      const pageName = op.order[i]
-      if (!pageName) continue
-      const page = await this.resolvePageName(docId, pageName)
-      actions.push(['UpdateRecord', '_grist_Pages', page.id, { pagePos: i + 1 }])
-    }
-
-    await this.client.post<ApplyResponse>(`/docs/${docId}/apply`, actions, {
-      schema: ApplyResponseSchema,
-      context: `Reordering ${op.order.length} pages`
-    })
-
+    const result = await reorderPagesOp(this.context, docId, op.order)
     return {
       action: 'reorder_pages',
       success: true,
+      verified: result.verified,
       details: {
-        new_order: op.order
+        new_order: result.newOrder,
+        pagesReordered: result.count
       }
     }
   }
@@ -852,28 +873,7 @@ export async function managePages(context: ToolContext, params: ManagePagesInput
 // Output Schema
 // =============================================================================
 
-export const ManagePagesOutputSchema = z.object({
-  success: z.boolean(),
-  docId: z.string(),
-  operationsCompleted: z.number(),
-  results: z.array(
-    z.object({
-      action: z.string(),
-      success: z.boolean(),
-      details: z.record(z.string(), z.unknown()),
-      error: z.string().optional()
-    })
-  ),
-  message: z.string(),
-  partial_failure: z
-    .object({
-      operation_index: z.number(),
-      error: z.string(),
-      completed_operations: z.number()
-    })
-    .optional(),
-  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
-})
+export const ManagePagesOutputSchema = createBatchOutputSchema(GenericOperationResultSchema)
 
 // =============================================================================
 // Tool Definition

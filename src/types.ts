@@ -1,4 +1,4 @@
-export type ResponseFormat = 'json' | 'markdown'
+export type ResponseFormat = 'json' | 'markdown' | 'concise'
 
 export type DetailLevelWorkspace = 'summary' | 'detailed'
 export type DetailLevelTable = 'names' | 'columns' | 'full_schema'

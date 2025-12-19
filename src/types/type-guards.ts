@@ -9,17 +9,6 @@ export function createTypeGuard<T extends z.ZodType<any, any>>(
   }
 }
 
-export function assertType<T extends z.ZodType<any, any>>(
-  schema: T,
-  value: unknown,
-  errorMessage?: string
-): asserts value is z.infer<T> {
-  const result = schema.safeParse(value)
-  if (!result.success) {
-    throw ValidationError.fromZodError(result.error, errorMessage ?? 'Type assertion failed')
-  }
-}
-
 export function safeParse<T extends z.ZodType<any, any>>(
   schema: T,
   value: unknown
@@ -34,16 +23,8 @@ export function safeParse<T extends z.ZodType<any, any>>(
   }
 }
 
-export function isArrayOf<T>(value: unknown, guard: (item: unknown) => item is T): value is T[] {
-  return Array.isArray(value) && value.every(guard)
-}
-
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-export function isObject(value: unknown): value is object {
-  return typeof value === 'object' && value !== null
 }
 
 export function isString(value: unknown): value is string {

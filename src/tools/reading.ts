@@ -14,8 +14,12 @@ import { GetRecordsOutputSchema, QuerySqlOutputSchema } from '../schemas/output-
 import { truncateIfNeeded } from '../services/formatter.js'
 import { toDocId, toTableId } from '../types/advanced.js'
 import type { CellValue, RecordsResponse, SQLQueryResponse } from '../types.js'
-import { GristTool } from './base/GristTool.js'
+import { defineStandardTool } from './factory/index.js'
 import { nextSteps } from './utils/next-steps.js'
+
+// =============================================================================
+// Shared Types
+// =============================================================================
 
 interface GristRecord {
   id: number
@@ -39,24 +43,6 @@ interface SqlResponseData {
   nextSteps?: string[]
 }
 
-/**
- * Check if any record values look like Unix timestamps (seconds since epoch).
- * Range: Jan 1, 2000 to Jan 1, 2100 (~946684800 to ~4102444800)
- */
-function hasLikelyTimestamps(records: Array<Record<string, CellValue>>): boolean {
-  const MIN_TIMESTAMP = 946684800 // 2000-01-01
-  const MAX_TIMESTAMP = 4102444800 // 2100-01-01
-
-  for (const record of records) {
-    for (const value of Object.values(record)) {
-      if (typeof value === 'number' && value >= MIN_TIMESTAMP && value <= MAX_TIMESTAMP) {
-        return true
-      }
-    }
-  }
-  return false
-}
-
 interface GetRecordsResponseData {
   docId: string
   tableId: string
@@ -75,6 +61,10 @@ interface GetRecordsResponseData {
   nextSteps?: string[]
 }
 
+// =============================================================================
+// Query SQL Tool
+// =============================================================================
+
 export const QuerySQLSchema = z.strictObject({
   docId: DocIdSchema,
   sql: z
@@ -92,61 +82,84 @@ export const QuerySQLSchema = z.strictObject({
 
 export type QuerySQLInput = z.infer<typeof QuerySQLSchema>
 
-export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, unknown> {
-  constructor(context: ToolContext) {
-    super(context, QuerySQLSchema)
-  }
+/**
+ * Check if any record values look like Unix timestamps (seconds since epoch).
+ * Range: Jan 1, 2000 to Jan 1, 2100 (~946684800 to ~4102444800)
+ */
+function hasLikelyTimestamps(records: Array<Record<string, CellValue>>): boolean {
+  const MIN_TIMESTAMP = 946684800 // 2000-01-01
+  const MAX_TIMESTAMP = 4102444800 // 2100-01-01
 
-  private addPaginationToSql(sql: string, limit: number, offset: number): string {
-    const hasLimit = /\bLIMIT\b/i.test(sql)
-    const hasOffset = /\bOFFSET\b/i.test(sql)
-
-    let paginatedSql = sql.trim()
-    if (!hasLimit) {
-      paginatedSql += ` LIMIT ${limit}`
-    }
-    if (!hasOffset) {
-      paginatedSql += ` OFFSET ${offset}`
-    }
-
-    return paginatedSql
-  }
-
-  private checkParameterizedQueryError(error: unknown, parameters?: unknown[]): void {
-    if (!parameters || !Array.isArray(parameters) || parameters.length === 0) {
-      return
-    }
-
-    const errorMsg = error instanceof Error ? error.message : String(error)
-    const is400Error = errorMsg.includes('400') || errorMsg.toLowerCase().includes('bad request')
-
-    if (is400Error) {
-      throw new Error(
-        `SQL query failed - Parameterized queries may not be supported.\n\n` +
-          `Your query uses parameters: ${JSON.stringify(parameters)}\n\n` +
-          `Parameterized queries require Grist v1.1.0+. If you're using an older version:\n` +
-          `1. Remove the "parameters" field\n` +
-          `2. Embed values directly in SQL (use proper escaping!)\n` +
-          `3. Example: Instead of "WHERE Status = $1", use "WHERE Status = 'VIP'"\n\n` +
-          `Original error: ${errorMsg}`
-      )
+  for (const record of records) {
+    for (const value of Object.values(record)) {
+      if (typeof value === 'number' && value >= MIN_TIMESTAMP && value <= MAX_TIMESTAMP) {
+        return true
+      }
     }
   }
+  return false
+}
 
-  protected async executeInternal(params: QuerySQLInput) {
-    const sql = this.addPaginationToSql(params.sql, params.limit, params.offset)
+function addPaginationToSql(sql: string, limit: number, offset: number): string {
+  const hasLimit = /\bLIMIT\b/i.test(sql)
+  const hasOffset = /\bOFFSET\b/i.test(sql)
+
+  let paginatedSql = sql.trim()
+  if (!hasLimit) {
+    paginatedSql += ` LIMIT ${limit}`
+  }
+  if (!hasOffset) {
+    paginatedSql += ` OFFSET ${offset}`
+  }
+
+  return paginatedSql
+}
+
+function checkParameterizedQueryError(error: unknown, parameters?: unknown[]): void {
+  if (!parameters || !Array.isArray(parameters) || parameters.length === 0) {
+    return
+  }
+
+  const errorMsg = error instanceof Error ? error.message : String(error)
+  const is400Error = errorMsg.includes('400') || errorMsg.toLowerCase().includes('bad request')
+
+  if (is400Error) {
+    throw new Error(
+      `SQL query failed - Parameterized queries may not be supported.\n\n` +
+        `Your query uses parameters: ${JSON.stringify(parameters)}\n\n` +
+        `Parameterized queries require Grist v1.1.0+. If you're using an older version:\n` +
+        `1. Remove the "parameters" field\n` +
+        `2. Embed values directly in SQL (use proper escaping!)\n` +
+        `3. Example: Instead of "WHERE Status = $1", use "WHERE Status = 'VIP'"\n\n` +
+        `Original error: ${errorMsg}`
+    )
+  }
+}
+
+export const QUERY_SQL_TOOL = defineStandardTool<typeof QuerySQLSchema, SqlResponseData>({
+  name: 'grist_query_sql',
+  title: 'Query Grist with SQL',
+  description: 'Execute SQL for JOINs, aggregations, and complex queries',
+  purpose: 'Run SQL queries with JOINs and aggregations',
+  category: 'reading',
+  inputSchema: QuerySQLSchema,
+  outputSchema: QuerySqlOutputSchema,
+  annotations: READ_ONLY_ANNOTATIONS,
+
+  async execute(ctx, params) {
+    const sql = addPaginationToSql(params.sql, params.limit, params.offset)
 
     try {
-      const response = await this.client.post<SQLQueryResponse>(`/docs/${params.docId}/sql`, {
+      const response = await ctx.client.post<SQLQueryResponse>(`/docs/${params.docId}/sql`, {
         sql,
         args: params.parameters || []
       })
 
       const rawRecords = response.records || []
-      const records = rawRecords.map((record) => {
-        const decodedRecord: Record<string, unknown> = {}
+      const records: Array<Record<string, CellValue>> = rawRecords.map((record) => {
+        const decodedRecord: Record<string, CellValue> = {}
         for (const [key, value] of Object.entries(record)) {
-          decodedRecord[key] = decodeCellValue(value)
+          decodedRecord[key] = decodeCellValue(value) as CellValue
         }
         return decodedRecord
       })
@@ -167,15 +180,13 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, unknown> {
         records
       }
     } catch (error) {
-      this.checkParameterizedQueryError(error, params.parameters)
+      checkParameterizedQueryError(error, params.parameters)
       throw error
     }
-  }
+  },
 
-  protected async afterExecute(
-    result: SqlResponseData,
-    _params: QuerySQLInput
-  ): Promise<SqlResponseData> {
+  async afterExecute(result, _params, _ctx) {
+    // Truncation is handled by the base formatter, just add nextSteps
     return {
       ...result,
       nextSteps: nextSteps()
@@ -190,41 +201,64 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, unknown> {
         )
         .build()
     }
+  },
+
+  docs: {
+    overview:
+      'Execute SQL queries for JOINs, aggregations, and complex filters. Use grist_get_records for single-table queries without SQL. Supports parameterized queries with ? placeholders (requires Grist v1.1.0+). **Output format:** SQL returns raw SQLite types: dates are Unix timestamps (seconds), booleans are 0/1. For ISO dates and decoded values, use grist_get_records instead.',
+    examples: [
+      {
+        desc: 'JOIN query',
+        input: {
+          docId: 'abc123',
+          sql: 'SELECT c.Name, o.Total FROM Customers c JOIN Orders o ON c.id = o.Customer'
+        }
+      },
+      {
+        desc: 'Aggregation',
+        input: {
+          docId: 'abc123',
+          sql: 'SELECT Region, AVG(Sales) as AvgSales FROM Data GROUP BY Region'
+        }
+      },
+      {
+        desc: 'Parameterized',
+        input: {
+          docId: 'abc123',
+          sql: 'SELECT * FROM Contacts WHERE Region = ?',
+          parameters: ['West']
+        }
+      },
+      {
+        desc: 'Select with row ID and boolean (note: Active returns 0/1)',
+        input: {
+          docId: 'abc123',
+          sql: 'SELECT id, Name, Active FROM Customers WHERE Active = 1'
+        }
+      }
+    ],
+    errors: [
+      { error: 'SQL syntax error', solution: 'Verify table/column names with grist_get_tables' },
+      { error: 'Table not found', solution: 'Use grist_get_tables to see available tables' },
+      {
+        error: 'Unexpected boolean format (0/1 vs true/false)',
+        solution: 'SQL returns raw SQLite types. Compare with 0/1, not true/false'
+      },
+      {
+        error: 'Dates appear as numbers (Unix timestamps)',
+        solution: 'SQL returns raw timestamps. Convert: new Date(timestamp * 1000).toISOString()'
+      }
+    ]
   }
-
-  /**
-   * Custom formatResponse - cannot use PaginatedGristTool because:
-   * 1. Uses 'records' field instead of 'items'
-   * 2. Has SQL-specific response structure
-   */
-  protected formatResponse(data: SqlResponseData, format: 'json' | 'markdown') {
-    const { data: truncatedData } = truncateIfNeeded(data.records, format, {
-      total: data.total,
-      offset: data.offset,
-      limit: data.limit,
-      hasMore: data.hasMore,
-      nextOffset: data.nextOffset
-    })
-
-    interface TruncatedDataWithItems {
-      items: unknown[]
-      [key: string]: unknown
-    }
-    const { items, ...rest } = truncatedData as TruncatedDataWithItems
-    const responseData = {
-      ...rest,
-      records: items,
-      nextSteps: data.nextSteps
-    }
-
-    return super.formatResponse(responseData, format)
-  }
-}
+})
 
 export async function querySql(context: ToolContext, params: QuerySQLInput) {
-  const tool = new QuerySqlTool(context)
-  return tool.execute(params)
+  return QUERY_SQL_TOOL.handler(context, params)
 }
+
+// =============================================================================
+// Get Records Tool
+// =============================================================================
 
 export const GetRecordsSchema = z.strictObject({
   docId: DocIdSchema,
@@ -237,14 +271,79 @@ export const GetRecordsSchema = z.strictObject({
 
 export type GetRecordsInput = z.infer<typeof GetRecordsSchema>
 
-export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecordsResponseData> {
-  constructor(context: ToolContext) {
-    super(context, GetRecordsSchema)
+function convertToGristFilters(
+  filters?: Record<string, CellValue | CellValue[]>
+): Record<string, CellValue[]> {
+  if (!filters || Object.keys(filters).length === 0) {
+    return {}
   }
 
-  protected async executeInternal(params: GetRecordsInput) {
+  const gristFilters: Record<string, CellValue[]> = {}
+  const GRIST_MARKERS = ['L', 'D', 'E', 'P', 'C', 'S', 'Reference', 'ReferenceList']
+
+  for (const [key, value] of Object.entries(filters)) {
+    const arrayValue: CellValue[] =
+      Array.isArray(value) &&
+      value.length > 0 &&
+      typeof value[0] === 'string' &&
+      GRIST_MARKERS.includes(value[0])
+        ? [value as CellValue]
+        : Array.isArray(value)
+          ? (value as CellValue[])
+          : [value as CellValue]
+
+    gristFilters[key] = arrayValue
+  }
+
+  return gristFilters
+}
+
+function selectColumns(records: GristRecord[], columns?: string[]): GristRecord[] {
+  if (!columns || columns.length === 0) {
+    return records
+  }
+
+  return records.map((record) => ({
+    id: record.id,
+    fields: Object.fromEntries(
+      Object.entries(record.fields).filter(([key]) => columns.includes(key))
+    )
+  }))
+}
+
+function flattenRecords(
+  records: GristRecord[],
+  columnTypes: Map<string, string>
+): FlattenedRecord[] {
+  return records.map((record) => {
+    const decodedFields: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(record.fields)) {
+      const colType = columnTypes.get(key) || 'Text'
+      decodedFields[key] = decodeFromApi(value, colType)
+    }
+
+    return {
+      id: record.id,
+      ...decodedFields,
+      ...(record.errors && Object.keys(record.errors).length > 0 ? { _errors: record.errors } : {})
+    }
+  })
+}
+
+export const GET_RECORDS_TOOL = defineStandardTool<typeof GetRecordsSchema, GetRecordsResponseData>({
+  name: 'grist_get_records',
+  title: 'Get Grist Records',
+  description: 'Fetch records with optional filters',
+  purpose: 'Fetch records with filters',
+  category: 'reading',
+  inputSchema: GetRecordsSchema,
+  outputSchema: GetRecordsOutputSchema,
+  annotations: READ_ONLY_ANNOTATIONS,
+  core: true,
+
+  async execute(ctx, params) {
     // Fetch column types for type-aware decoding (Date/DateTime → ISO strings)
-    const columns = await this.schemaCache.getTableColumns(
+    const columns = await ctx.schemaCache.getTableColumns(
       toDocId(params.docId),
       toTableId(params.tableId)
     )
@@ -257,12 +356,12 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
       limit: fetchLimit
     }
 
-    const gristFilters = this.convertToGristFilters(params.filters)
+    const gristFilters = convertToGristFilters(params.filters)
     if (Object.keys(gristFilters).length > 0) {
       queryParams.filter = JSON.stringify(gristFilters)
     }
 
-    const response = await this.client.get<RecordsResponse>(
+    const response = await ctx.client.get<RecordsResponse>(
       `/docs/${params.docId}/tables/${params.tableId}/records`,
       queryParams
     )
@@ -270,8 +369,8 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
     const allRecords = response.records || []
     // Apply offset client-side by slicing
     const slicedRecords = allRecords.slice(params.offset, params.offset + params.limit)
-    const records = this.selectColumns(slicedRecords, params.columns)
-    const formattedRecords = this.flattenRecords(records, columnTypes)
+    const selectedRecords = selectColumns(slicedRecords, params.columns)
+    const formattedRecords = flattenRecords(selectedRecords, columnTypes)
 
     // Calculate pagination correctly
     const totalFetched = allRecords.length
@@ -279,9 +378,11 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
     const total = totalFetched // Exact count of records that match filters
     const nextOffset = hasMore ? params.offset + params.limit : null
 
-    const recordsWithErrors = records.filter((r) => r.errors && Object.keys(r.errors).length > 0)
+    const recordsWithErrors = selectedRecords.filter(
+      (r) => r.errors && Object.keys(r.errors).length > 0
+    )
     const errorColumns = new Set<string>()
-    records.forEach((r) => {
+    selectedRecords.forEach((r) => {
       if (r.errors) {
         Object.keys(r.errors).forEach((col) => {
           errorColumns.add(col)
@@ -309,14 +410,26 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
           }
         : {})
     }
-  }
+  },
 
-  protected async afterExecute(
-    result: GetRecordsResponseData,
-    _params: GetRecordsInput
-  ): Promise<GetRecordsResponseData> {
+  async afterExecute(result, params, _ctx) {
+    // Handle truncation within afterExecute since factory doesn't support formatResponse
+    const format = params.response_format || 'json'
+    const { data: truncatedData } = truncateIfNeeded(result.items, format, {
+      docId: result.docId,
+      tableId: result.tableId,
+      total: result.total,
+      offset: result.offset,
+      limit: result.limit,
+      hasMore: result.hasMore,
+      nextOffset: result.nextOffset,
+      filters: result.filters,
+      columns: result.columns,
+      ...(result.formulaErrors ? { formulaErrors: result.formulaErrors } : {})
+    })
+
     return {
-      ...result,
+      ...truncatedData,
       nextSteps: nextSteps()
         .addPaginationHint(result, 'records')
         .addIf(result.items.length > 0, 'Use grist_manage_records to modify these records')
@@ -325,189 +438,42 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
           `Fix formula errors in columns: ${result.formulaErrors?.affectedColumns.join(', ')}`
         )
         .build()
-    }
-  }
+    } as GetRecordsResponseData
+  },
 
-  /**
-   * Custom formatResponse - cannot use PaginatedGristTool because:
-   * 1. Has many additional fields (docId, tableId, filters, columns, formulaErrors)
-   * 2. Response structure differs from standard PaginatedResponse
-   */
-  protected formatResponse(data: GetRecordsResponseData, format: 'json' | 'markdown') {
-    const { data: truncatedData } = truncateIfNeeded(data.items, format, {
-      docId: data.docId,
-      tableId: data.tableId,
-      total: data.total,
-      offset: data.offset,
-      limit: data.limit,
-      hasMore: data.hasMore,
-      nextOffset: data.nextOffset,
-      filters: data.filters,
-      columns: data.columns,
-      nextSteps: data.nextSteps
-    })
-
-    return super.formatResponse(truncatedData, format)
-  }
-
-  private convertToGristFilters(
-    filters?: Record<string, CellValue | CellValue[]>
-  ): Record<string, CellValue[]> {
-    if (!filters || Object.keys(filters).length === 0) {
-      return {}
-    }
-
-    const gristFilters: Record<string, CellValue[]> = {}
-    const GRIST_MARKERS = ['L', 'D', 'E', 'P', 'C', 'S', 'Reference', 'ReferenceList']
-
-    for (const [key, value] of Object.entries(filters)) {
-      const arrayValue: CellValue[] =
-        Array.isArray(value) &&
-        value.length > 0 &&
-        typeof value[0] === 'string' &&
-        GRIST_MARKERS.includes(value[0])
-          ? [value as CellValue]
-          : Array.isArray(value)
-            ? (value as CellValue[])
-            : [value as CellValue]
-
-      gristFilters[key] = arrayValue
-    }
-
-    return gristFilters
-  }
-
-  private selectColumns(records: GristRecord[], columns?: string[]): GristRecord[] {
-    if (!columns || columns.length === 0) {
-      return records
-    }
-
-    return records.map((record) => ({
-      id: record.id,
-      fields: Object.fromEntries(
-        Object.entries(record.fields).filter(([key]) => columns.includes(key))
-      )
-    }))
-  }
-
-  private flattenRecords(
-    records: GristRecord[],
-    columnTypes: Map<string, string>
-  ): FlattenedRecord[] {
-    return records.map((record) => {
-      const decodedFields: Record<string, unknown> = {}
-      for (const [key, value] of Object.entries(record.fields)) {
-        const colType = columnTypes.get(key) || 'Text'
-        decodedFields[key] = decodeFromApi(value, colType)
+  docs: {
+    overview:
+      'Fetch records with filters. No SQL needed. Use grist_query_sql for JOINs and aggregations. Filter syntax: {"Status": "Active"}, {"Priority": 1}, {"IsActive": true}, {"Status": ["Open", "In Progress"]}.',
+    examples: [
+      {
+        desc: 'Filter by status',
+        input: { docId: 'abc123', tableId: 'Contacts', filters: { Status: 'Active' } }
+      },
+      {
+        desc: 'Filter by number',
+        input: { docId: 'abc123', tableId: 'Tasks', filters: { Priority: 1 } }
+      },
+      {
+        desc: 'Select columns',
+        input: { docId: 'abc123', tableId: 'Contacts', columns: ['Name', 'Email'] }
       }
-
-      return {
-        id: record.id,
-        ...decodedFields,
-        ...(record.errors && Object.keys(record.errors).length > 0
-          ? { _errors: record.errors }
-          : {})
-      }
-    })
+    ],
+    errors: [
+      { error: 'Table not found', solution: 'Use grist_get_tables' },
+      { error: 'Column not found', solution: "Use grist_get_tables with detail_level='columns'" }
+    ]
   }
-}
+})
 
 export async function getRecords(context: ToolContext, params: GetRecordsInput) {
-  const tool = new GetRecordsTool(context)
-  return tool.execute(params)
+  return GET_RECORDS_TOOL.handler(context, params)
 }
 
+// =============================================================================
+// Tool Definitions Export
+// =============================================================================
+
 export const READING_TOOLS: ReadonlyArray<ToolDefinition> = [
-  {
-    name: 'grist_query_sql',
-    title: 'Query Grist with SQL',
-    description: 'Execute SQL for JOINs, aggregations, and complex queries',
-    purpose: 'Run SQL queries with JOINs and aggregations',
-    category: 'reading',
-    inputSchema: QuerySQLSchema,
-    outputSchema: QuerySqlOutputSchema,
-    annotations: READ_ONLY_ANNOTATIONS,
-    handler: querySql,
-    docs: {
-      overview:
-        'Execute SQL queries for JOINs, aggregations, and complex filters. Use grist_get_records for single-table queries without SQL. Supports parameterized queries with ? placeholders (requires Grist v1.1.0+). **Output format:** SQL returns raw SQLite types: dates are Unix timestamps (seconds), booleans are 0/1. For ISO dates and decoded values, use grist_get_records instead.',
-      examples: [
-        {
-          desc: 'JOIN query',
-          input: {
-            docId: 'abc123',
-            sql: 'SELECT c.Name, o.Total FROM Customers c JOIN Orders o ON c.id = o.Customer'
-          }
-        },
-        {
-          desc: 'Aggregation',
-          input: {
-            docId: 'abc123',
-            sql: 'SELECT Region, AVG(Sales) as AvgSales FROM Data GROUP BY Region'
-          }
-        },
-        {
-          desc: 'Parameterized',
-          input: {
-            docId: 'abc123',
-            sql: 'SELECT * FROM Contacts WHERE Region = ?',
-            parameters: ['West']
-          }
-        },
-        {
-          desc: 'Select with row ID and boolean (note: Active returns 0/1)',
-          input: {
-            docId: 'abc123',
-            sql: 'SELECT id, Name, Active FROM Customers WHERE Active = 1'
-          }
-        }
-      ],
-      errors: [
-        { error: 'SQL syntax error', solution: 'Verify table/column names with grist_get_tables' },
-        { error: 'Table not found', solution: 'Use grist_get_tables to see available tables' },
-        {
-          error: 'Unexpected boolean format (0/1 vs true/false)',
-          solution: 'SQL returns raw SQLite types. Compare with 0/1, not true/false'
-        },
-        {
-          error: 'Dates appear as numbers (Unix timestamps)',
-          solution: 'SQL returns raw timestamps. Convert: new Date(timestamp * 1000).toISOString()'
-        }
-      ]
-    }
-  },
-  {
-    name: 'grist_get_records',
-    title: 'Get Grist Records',
-    description: 'Fetch records with optional filters',
-    purpose: 'Fetch records with filters',
-    category: 'reading',
-    inputSchema: GetRecordsSchema,
-    outputSchema: GetRecordsOutputSchema,
-    annotations: READ_ONLY_ANNOTATIONS,
-    handler: getRecords,
-    core: true,
-    docs: {
-      overview:
-        'Fetch records with filters. No SQL needed. Use grist_query_sql for JOINs and aggregations. Filter syntax: {"Status": "Active"}, {"Priority": 1}, {"IsActive": true}, {"Status": ["Open", "In Progress"]}.',
-      examples: [
-        {
-          desc: 'Filter by status',
-          input: { docId: 'abc123', tableId: 'Contacts', filters: { Status: 'Active' } }
-        },
-        {
-          desc: 'Filter by number',
-          input: { docId: 'abc123', tableId: 'Tasks', filters: { Priority: 1 } }
-        },
-        {
-          desc: 'Select columns',
-          input: { docId: 'abc123', tableId: 'Contacts', columns: ['Name', 'Email'] }
-        }
-      ],
-      errors: [
-        { error: 'Table not found', solution: 'Use grist_get_tables' },
-        { error: 'Column not found', solution: "Use grist_get_tables with detail_level='columns'" }
-      ]
-    }
-  }
+  QUERY_SQL_TOOL,
+  GET_RECORDS_TOOL
 ] as const

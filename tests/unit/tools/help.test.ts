@@ -7,7 +7,7 @@
  * The tool now uses the factory pattern (defineStandardTool) instead of classes.
  */
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 import type { ToolContext } from '../../../src/registry/types.js'
 import { HELP_TOPICS } from '../../../src/schemas/help.js'
 import { getHelp, HELP_TOOL } from '../../../src/tools/help.js'

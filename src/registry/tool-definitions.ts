@@ -14,8 +14,6 @@
  */
 
 import type { z } from 'zod'
-import { HelpSchema } from '../schemas/help.js'
-import { HelpOutputSchema } from '../schemas/output-schemas.js'
 import { DISCOVERY_TOOLS } from '../tools/discovery.js'
 import { DOCUMENT_TOOLS } from '../tools/documents.js'
 import { HELP_TOOL } from '../tools/help.js'

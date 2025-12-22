@@ -4,11 +4,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ToolContext } from '../../../src/registry/types.js'
-import {
-  ManageWebhooksSchema,
-  ManageWebhooksTool,
-  WEBHOOK_TOOLS
-} from '../../../src/tools/webhooks.js'
+import { ManageWebhooksSchema, manageWebhooks, WEBHOOK_TOOLS } from '../../../src/tools/webhooks.js'
 
 // Valid Base58 22-char doc ID
 const VALID_DOC_ID = 'aaaaaaaaaaaaaaaaaaaaaa'
@@ -69,23 +65,21 @@ describe('ManageWebhooksTool', () => {
         ]
       })
 
-      const tool = new ManageWebhooksTool(context)
-      const result = await tool.execute({
+      const result = await manageWebhooks(context, {
         docId: VALID_DOC_ID,
         operations: [{ action: 'list' }]
       })
 
       expect(mockClient.get).toHaveBeenCalledWith(`/docs/${VALID_DOC_ID}/webhooks`)
       expect(result.structuredContent?.success).toBe(true)
-      expect(result.structuredContent?.results[0].operation).toBe('list')
+      expect(result.structuredContent?.results[0].action).toBe('list')
       expect(result.structuredContent?.results[0].webhookCount).toBe(2)
     })
 
     it('handles empty webhook list', async () => {
       mockClient.get.mockResolvedValue({ webhooks: [] })
 
-      const tool = new ManageWebhooksTool(context)
-      const result = await tool.execute({
+      const result = await manageWebhooks(context, {
         docId: VALID_DOC_ID,
         operations: [{ action: 'list' }]
       })
@@ -111,8 +105,7 @@ describe('ManageWebhooksTool', () => {
         }))
       })
 
-      const tool = new ManageWebhooksTool(context)
-      const result = await tool.execute({
+      const result = await manageWebhooks(context, {
         docId: VALID_DOC_ID,
         operations: [{ action: 'list', limit: 3 }]
       })
@@ -128,8 +121,7 @@ describe('ManageWebhooksTool', () => {
         webhooks: [{ id: 'new-wh-id' }]
       })
 
-      const tool = new ManageWebhooksTool(context)
-      const result = await tool.execute({
+      const result = await manageWebhooks(context, {
         docId: VALID_DOC_ID,
         operations: [
           {
@@ -158,7 +150,7 @@ describe('ManageWebhooksTool', () => {
         })
       )
       expect(result.structuredContent?.success).toBe(true)
-      expect(result.structuredContent?.results[0].operation).toBe('create')
+      expect(result.structuredContent?.results[0].action).toBe('create')
     })
 
     it('creates webhook with optional fields', async () => {
@@ -166,8 +158,7 @@ describe('ManageWebhooksTool', () => {
         webhooks: [{ id: 'new-wh-id' }]
       })
 
-      const tool = new ManageWebhooksTool(context)
-      const result = await tool.execute({
+      const result = await manageWebhooks(context, {
         docId: VALID_DOC_ID,
         operations: [
           {
@@ -211,8 +202,7 @@ describe('ManageWebhooksTool', () => {
     it('updates a webhook', async () => {
       mockClient.patch.mockResolvedValue({})
 
-      const tool = new ManageWebhooksTool(context)
-      const result = await tool.execute({
+      const result = await manageWebhooks(context, {
         docId: VALID_DOC_ID,
         operations: [
           {
@@ -230,14 +220,13 @@ describe('ManageWebhooksTool', () => {
         })
       )
       expect(result.structuredContent?.success).toBe(true)
-      expect(result.structuredContent?.results[0].operation).toBe('update')
+      expect(result.structuredContent?.results[0].action).toBe('update')
     })
 
     it('updates multiple fields', async () => {
       mockClient.patch.mockResolvedValue({})
 
-      const tool = new ManageWebhooksTool(context)
-      await tool.execute({
+      await manageWebhooks(context, {
         docId: VALID_DOC_ID,
         operations: [
           {
@@ -269,8 +258,7 @@ describe('ManageWebhooksTool', () => {
     it('deletes a webhook', async () => {
       mockClient.delete.mockResolvedValue({ success: true })
 
-      const tool = new ManageWebhooksTool(context)
-      const result = await tool.execute({
+      const result = await manageWebhooks(context, {
         docId: VALID_DOC_ID,
         operations: [
           {
@@ -284,7 +272,7 @@ describe('ManageWebhooksTool', () => {
         `/docs/${VALID_DOC_ID}/webhooks/${VALID_WEBHOOK_ID}`
       )
       expect(result.structuredContent?.success).toBe(true)
-      expect(result.structuredContent?.results[0].operation).toBe('delete')
+      expect(result.structuredContent?.results[0].action).toBe('delete')
     })
   })
 
@@ -292,8 +280,7 @@ describe('ManageWebhooksTool', () => {
     it('clears webhook queue', async () => {
       mockClient.delete.mockResolvedValue({})
 
-      const tool = new ManageWebhooksTool(context)
-      const result = await tool.execute({
+      const result = await manageWebhooks(context, {
         docId: VALID_DOC_ID,
         operations: [
           {
@@ -304,7 +291,7 @@ describe('ManageWebhooksTool', () => {
 
       expect(mockClient.delete).toHaveBeenCalledWith(`/docs/${VALID_DOC_ID}/webhooks/queue`)
       expect(result.structuredContent?.success).toBe(true)
-      expect(result.structuredContent?.results[0].operation).toBe('clear_queue')
+      expect(result.structuredContent?.results[0].action).toBe('clear_queue')
     })
   })
 
@@ -316,8 +303,7 @@ describe('ManageWebhooksTool', () => {
       mockClient.post.mockResolvedValue({ webhooks: [{ id: VALID_WEBHOOK_ID }] })
       mockClient.delete.mockResolvedValue({ success: true })
 
-      const tool = new ManageWebhooksTool(context)
-      const result = await tool.execute({
+      const result = await manageWebhooks(context, {
         docId: VALID_DOC_ID,
         operations: [
           {
@@ -336,8 +322,7 @@ describe('ManageWebhooksTool', () => {
       mockClient.post.mockResolvedValue({ webhooks: [{ id: VALID_WEBHOOK_ID }] })
       mockClient.delete.mockRejectedValue(new Error('Network error'))
 
-      const tool = new ManageWebhooksTool(context)
-      const result = await tool.execute({
+      const result = await manageWebhooks(context, {
         docId: VALID_DOC_ID,
         operations: [
           {

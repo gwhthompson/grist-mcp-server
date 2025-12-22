@@ -82,7 +82,7 @@ Add to your MCP config:
 | `grist_manage_pages` | Page layout and management |
 | `grist_create_document` | Create new Grist documents or copy existing ones |
 | `grist_manage_webhooks` | Create and manage webhooks for real-time event notifications |
-| `grist_help` | Get detailed documentation and examples for any tool |
+| `grist_help` | Discover tools and get detailed documentation with JSON schemas |
 <!-- TOOLS_TABLE_END -->
 
 ## Examples

@@ -183,9 +183,10 @@ export const WebhookOperationSchema = z.preprocess(parseJsonString, RawWebhookOp
 
 /** Operations array: list and clear_queue must be alone */
 const WebhookOperationsArraySchema = z
-  .array(WebhookOperationSchema)
-  .min(1)
-  .max(10)
+  .preprocess(
+    parseJsonString, // Handle array-level JSON strings: "[{...}]" → [{...}]
+    z.array(WebhookOperationSchema).min(1).max(10)
+  )
   .refine(
     (ops) => {
       const hasSingleOnly = ops.some((op) => op.action === 'list' || op.action === 'clear_queue')

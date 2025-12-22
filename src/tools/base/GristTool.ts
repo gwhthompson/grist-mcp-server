@@ -60,17 +60,22 @@ export abstract class GristTool<TInput extends z.ZodType<any, any>, TOutput = un
 
   protected getToolName(): string {
     const className = this.constructor.name
-    return className
+    const baseName = className
       .replace(/Tool$/, '')
       .replace(/([A-Z])/g, '_$1')
       .toLowerCase()
       .replace(/^_/, '')
+    return `grist_${baseName}`
   }
 
   protected validateInput(params: unknown): z.infer<TInput> {
     const result = this.inputSchema.safeParse(params)
     if (!result.success) {
-      throw ValidationError.fromZodError(result.error, 'Invalid tool parameters')
+      throw ValidationError.fromZodError(
+        result.error,
+        'Invalid tool parameters',
+        this.getToolName()
+      )
     }
     return result.data
   }
@@ -92,7 +97,7 @@ export abstract class GristTool<TInput extends z.ZodType<any, any>, TOutput = un
         return format
       }
     }
-    return 'markdown'
+    return 'json'
   }
 
   protected formatResponse(data: TOutput, format: ResponseFormat): MCPToolResponse {

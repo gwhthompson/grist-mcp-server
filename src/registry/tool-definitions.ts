@@ -18,14 +18,13 @@ import { HelpSchema } from '../schemas/help.js'
 import { HelpOutputSchema } from '../schemas/output-schemas.js'
 import { DISCOVERY_TOOLS } from '../tools/discovery.js'
 import { DOCUMENT_TOOLS } from '../tools/documents.js'
-import { getHelp } from '../tools/help.js'
+import { HELP_TOOL } from '../tools/help.js'
 import { MANAGE_PAGES_TOOL } from '../tools/manage-pages.js'
 import { MANAGE_RECORDS_TOOL } from '../tools/manage-records.js'
 import { MANAGE_SCHEMA_TOOL } from '../tools/manage-schema.js'
 import { READING_TOOLS } from '../tools/reading.js'
 import { WEBHOOK_TOOLS } from '../tools/webhooks.js'
 import {
-  READ_ONLY_ANNOTATIONS,
   type ToolAnnotations,
   type ToolCategory,
   type ToolContext,
@@ -43,48 +42,10 @@ export {
 } from './types.js'
 
 /**
- * Utility tools (grist_help) - defined inline since they're meta-tools.
- * The help tool will be updated to use tool.docs directly.
+ * Utility tools (grist_help) - the HELP_TOOL definition comes from help.ts
+ * but is wrapped here to avoid circular dependency issues.
  */
-export const UTILITY_TOOLS: ReadonlyArray<ToolDefinition> = [
-  {
-    name: 'grist_help',
-    title: 'Get Tool Help',
-    description:
-      'Get documentation for any Grist tool.\n' +
-      'Topics: overview (~500B), examples, errors, parameters, full (default)\n' +
-      'Params: tool_name, topic (optional)\n' +
-      'Ex: {tool_name:"grist_manage_records",topic:"errors"}\n' +
-      'Use topic="overview" for quick help, "errors" when troubleshooting.',
-    purpose: 'Get detailed documentation and examples for any tool',
-    category: 'utility',
-    inputSchema: HelpSchema,
-    outputSchema: HelpOutputSchema,
-    annotations: READ_ONLY_ANNOTATIONS,
-    handler: getHelp,
-    core: true,
-    docs: {
-      overview:
-        'Retrieves documentation for any Grist tool. Use topic="overview" for quick summaries, ' +
-        '"examples" for usage patterns, "errors" when troubleshooting, or "full" for complete docs.',
-      examples: [
-        {
-          desc: 'Get error troubleshooting',
-          input: { tool_name: 'grist_manage_records', topic: 'errors' }
-        },
-        {
-          desc: 'Get usage examples',
-          input: { tool_name: 'grist_manage_schema', topic: 'examples' }
-        },
-        {
-          desc: 'Get full documentation',
-          input: { tool_name: 'grist_manage_pages' }
-        }
-      ],
-      errors: [{ error: 'Tool not found', solution: 'Check tool name spelling (case-sensitive)' }]
-    }
-  }
-] as const
+export const UTILITY_TOOLS: ReadonlyArray<ToolDefinition> = [HELP_TOOL] as const
 
 /**
  * New consolidated tools that combine related operations.

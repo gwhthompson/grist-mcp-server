@@ -19,10 +19,15 @@ import {
 } from '../domain/operations/records.js'
 import type { ToolContext, ToolDefinition } from '../registry/types.js'
 import { CellValueSchema } from '../schemas/api-responses.js'
+import type {
+  RecordOperationResult,
+  RecordsBatchResponse
+} from '../schemas/batch-operation-schemas.js'
 import { encodeRecordForApi } from '../schemas/cell-codecs.js'
 import {
   DocIdSchema,
   FilterSchema,
+  jsonSafeArray,
   ResponseFormatSchema,
   TableIdSchema
 } from '../schemas/common.js'
@@ -122,44 +127,15 @@ const RecordOperationSchema = z.discriminatedUnion('action', [
 /** Main schema for grist_manage_records */
 export const ManageRecordsSchema = z.strictObject({
   docId: DocIdSchema,
-  operations: z.array(RecordOperationSchema).min(1).max(10),
+  operations: jsonSafeArray(RecordOperationSchema, { min: 1, max: 10 }),
   response_format: ResponseFormatSchema
 })
 
 export type ManageRecordsInput = z.infer<typeof ManageRecordsSchema>
 export type RecordOperation = z.infer<typeof RecordOperationSchema>
 
-// =============================================================================
-// Response types
-// =============================================================================
-
-interface OperationResult {
-  action: string
-  tableId: string
-  success: boolean
-  recordsAffected: number
-  recordIds?: number[]
-  error?: string
-  filtersUsed?: Record<string, unknown>
-  verified?: boolean
-}
-
-interface ManageRecordsResponse {
-  success: boolean
-  docId: string
-  tablesAffected: string[]
-  operationsCompleted: number
-  totalRecordsAffected: number
-  results: OperationResult[]
-  message: string
-  partialFailure?: {
-    operationIndex: number
-    tableId: string
-    error: string
-    completedOperations: number
-  }
-  nextSteps?: string[]
-}
+// Response types: imported from batch-operation-schemas.ts
+// RecordOperationResult and RecordsBatchResponse are shared with other batch tools
 
 // =============================================================================
 // Tool Implementation
@@ -172,8 +148,8 @@ interface RecordsResponse {
 export class ManageRecordsTool extends BatchOperationTool<
   typeof ManageRecordsSchema,
   RecordOperation,
-  OperationResult,
-  ManageRecordsResponse
+  RecordOperationResult,
+  RecordsBatchResponse
 > {
   constructor(context: ToolContext) {
     super(context, ManageRecordsSchema)
@@ -195,7 +171,7 @@ export class ManageRecordsTool extends BatchOperationTool<
     docId: string,
     operation: RecordOperation,
     _index: number
-  ): Promise<OperationResult> {
+  ): Promise<RecordOperationResult> {
     const tableIdBranded = toTableId(operation.tableId)
     const docIdBranded = toDocId(docId)
 
@@ -212,9 +188,9 @@ export class ManageRecordsTool extends BatchOperationTool<
 
   protected buildSuccessResponse(
     docId: string,
-    results: OperationResult[],
+    results: RecordOperationResult[],
     params: ManageRecordsInput
-  ): ManageRecordsResponse {
+  ): RecordsBatchResponse {
     const affectedTables = new Set(results.map((r) => r.tableId))
     const totalAffected = results.reduce((sum, r) => sum + r.recordsAffected, 0)
     const tableCount = affectedTables.size
@@ -235,10 +211,10 @@ export class ManageRecordsTool extends BatchOperationTool<
     docId: string,
     failedIndex: number,
     failedOperation: RecordOperation,
-    completedResults: OperationResult[],
+    completedResults: RecordOperationResult[],
     errorMessage: string,
     _params: ManageRecordsInput
-  ): ManageRecordsResponse {
+  ): RecordsBatchResponse {
     const affectedTables = new Set(completedResults.map((r) => r.tableId))
     const totalAffected = completedResults.reduce((sum, r) => sum + r.recordsAffected, 0)
 
@@ -260,9 +236,9 @@ export class ManageRecordsTool extends BatchOperationTool<
   }
 
   protected async afterExecute(
-    result: ManageRecordsResponse,
+    result: RecordsBatchResponse,
     params: ManageRecordsInput
-  ): Promise<ManageRecordsResponse> {
+  ): Promise<RecordsBatchResponse> {
     const addResults = result.results.filter((r) => r.action === 'add' && r.recordIds?.length)
     const updateResults = result.results.filter((r) => r.action === 'update')
     const deleteResults = result.results.filter((r) => r.action === 'delete')
@@ -299,7 +275,7 @@ export class ManageRecordsTool extends BatchOperationTool<
     docId: string,
     tableId: string,
     op: RecordOperation
-  ): Promise<Omit<OperationResult, 'tableId'>> {
+  ): Promise<Omit<RecordOperationResult, 'tableId'>> {
     switch (op.action) {
       case 'add':
         return this.executeAdd(docId, tableId, op)
@@ -316,7 +292,7 @@ export class ManageRecordsTool extends BatchOperationTool<
     docId: string,
     tableId: string,
     op: Extract<RecordOperation, { action: 'add' }>
-  ): Promise<Omit<OperationResult, 'tableId'>> {
+  ): Promise<Omit<RecordOperationResult, 'tableId'>> {
     const { schemaCache } = this
     const docIdBranded = toDocId(docId)
     const tableIdBranded = toTableId(tableId)
@@ -352,7 +328,7 @@ export class ManageRecordsTool extends BatchOperationTool<
     docId: string,
     tableId: string,
     op: Extract<RecordOperation, { action: 'update' }>
-  ): Promise<Omit<OperationResult, 'tableId'>> {
+  ): Promise<Omit<RecordOperationResult, 'tableId'>> {
     const { schemaCache } = this
     const docIdBranded = toDocId(docId)
     const tableIdBranded = toTableId(tableId)
@@ -393,7 +369,7 @@ export class ManageRecordsTool extends BatchOperationTool<
     docId: string,
     tableId: string,
     op: Extract<RecordOperation, { action: 'delete' }>
-  ): Promise<Omit<OperationResult, 'tableId'>> {
+  ): Promise<Omit<RecordOperationResult, 'tableId'>> {
     const { schemaCache } = this
     const docIdBranded = toDocId(docId)
     const tableIdBranded = toTableId(tableId)
@@ -436,7 +412,7 @@ export class ManageRecordsTool extends BatchOperationTool<
     docId: string,
     tableId: string,
     op: Extract<RecordOperation, { action: 'upsert' }>
-  ): Promise<Omit<OperationResult, 'tableId'>> {
+  ): Promise<Omit<RecordOperationResult, 'tableId'>> {
     const { schemaCache } = this
     const docIdBranded = toDocId(docId)
     const tableIdBranded = toTableId(tableId)

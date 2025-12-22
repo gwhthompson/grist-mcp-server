@@ -521,11 +521,59 @@ export const ManageWebhooksOutputSchema = z.looseObject({
 // Utility Tool Outputs
 // ============================================================================
 
-/** grist_help output */
+/** Tool example schema */
+const ToolExampleSchema = z.object({
+  description: z.string(),
+  input: z.record(z.string(), z.unknown())
+})
+
+/** Tool error schema */
+const ToolErrorSchema = z.object({
+  error: z.string(),
+  cause: z.string().optional(),
+  solution: z.string()
+})
+
+/** Single tool help schema */
+const ToolHelpSchema = z.object({
+  name: z.string(),
+  overview: z.string().optional(),
+  examples: z.array(ToolExampleSchema).optional(),
+  errors: z.array(ToolErrorSchema).optional(),
+  schema: z.record(z.string(), z.unknown()).optional()
+})
+
+/** Discovery response schema */
+const DiscoveryResponseSchema = z.object({
+  tools: z.array(
+    z.object({
+      name: z.string(),
+      summary: z.string(),
+      category: z.string()
+    })
+  ),
+  workflow: z.string(),
+  tip: z.string()
+})
+
+/**
+ * grist_help output - supports both new progressive disclosure and legacy format.
+ *
+ * Single object with all fields optional to avoid SDK union validation bug.
+ * Response will have either:
+ * - discovery (when no tools specified)
+ * - tools + optional $defs (when tools specified)
+ * - legacy fields (backward compatibility)
+ */
 export const HelpOutputSchema = z.object({
-  toolName: z.string(),
-  topic: z.string(),
-  documentation: z.string(),
-  availableTopics: z.array(z.string()),
+  // Progressive disclosure format
+  discovery: DiscoveryResponseSchema.optional(),
+  tools: z.record(z.string(), ToolHelpSchema).optional(),
+  $defs: z.record(z.string(), z.unknown()).optional(),
+  // Legacy format (deprecated but still supported)
+  toolName: z.string().optional(),
+  topic: z.string().optional(),
+  documentation: z.string().optional(),
+  availableTopics: z.array(z.string()).optional(),
   nextSteps: z.array(z.string()).optional().describe('suggested next actions')
 })

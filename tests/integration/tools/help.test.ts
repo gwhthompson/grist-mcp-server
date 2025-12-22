@@ -297,13 +297,21 @@ describe('grist_help', () => {
   // =========================================================================
 
   describe('schema validation', () => {
-    it('rejects missing required tool_name', async () => {
+    it('returns discovery response when no tool_name provided', async () => {
       const result = await ctx.client.callTool({
         name: 'grist_help',
         arguments: {}
       })
 
-      expect(result.isError).toBe(true)
+      expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      // Discovery mode returns list of all tools
+      expect(parsed.discovery).toBeDefined()
+      expect(parsed.discovery.tools).toBeInstanceOf(Array)
+      expect(parsed.discovery.tools.length).toBeGreaterThan(0)
     })
 
     it('rejects invalid tool_name', async () => {

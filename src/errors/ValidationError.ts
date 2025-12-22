@@ -6,7 +6,8 @@ export class ValidationError extends GristError {
     public readonly field: string,
     public readonly value: unknown,
     public readonly constraint: string,
-    context?: Record<string, unknown>
+    context?: Record<string, unknown>,
+    public readonly schemaHint?: string
   ) {
     super(`Validation failed for ${field}: ${constraint}`, 'VALIDATION_ERROR', {
       ...context,
@@ -19,11 +20,13 @@ export class ValidationError extends GristError {
   toUserMessage(): string {
     const valueStr = typeof this.value === 'string' ? `"${this.value}"` : JSON.stringify(this.value)
 
+    const hint = this.schemaHint ? `\n\n${this.schemaHint}` : ''
+
     return (
       `Invalid value for parameter '${this.field}'\n\n` +
       `Constraint: ${this.constraint}\n` +
       `Received: ${valueStr}\n\n` +
-      `Please check the parameter documentation and provide a valid value.`
+      `Please check the parameter documentation and provide a valid value.${hint}`
     )
   }
 
@@ -98,16 +101,35 @@ export class ValidationError extends GristError {
     return suggestions
   }
 
-  static fromZodError(error: z.ZodError, field: string = 'unknown'): ValidationError {
+  static fromZodError(
+    error: z.ZodError,
+    field: string = 'unknown',
+    toolName?: string
+  ): ValidationError {
     const issues = error.issues || []
     const firstIssue = issues[0]
+    const schemaHint = toolName
+      ? `Use grist_help({tools: "${toolName}"}) for full parameter documentation.`
+      : undefined
 
     if (firstIssue) {
       const path = firstIssue.path.join('.')
       const received = 'received' in firstIssue ? firstIssue.received : undefined
-      return new ValidationError(path || field, received, firstIssue.message, { zodIssues: issues })
+      return new ValidationError(
+        path || field,
+        received,
+        firstIssue.message,
+        { zodIssues: issues },
+        schemaHint
+      )
     }
 
-    return new ValidationError(field, undefined, error.message || 'Validation failed')
+    return new ValidationError(
+      field,
+      undefined,
+      error.message || 'Validation failed',
+      undefined,
+      schemaHint
+    )
   }
 }

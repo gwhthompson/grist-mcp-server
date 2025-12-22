@@ -23,11 +23,11 @@ describe('Formatter Service', () => {
       expect(result.structuredContent).toEqual(data)
     })
 
-    it('should default to markdown format', () => {
+    it('should default to json format', () => {
       const data = { name: 'Alice' }
       const result = formatToolResponse(data)
 
-      expect(result.content[0].text).toContain('**name**')
+      expect(result.content[0].text).toContain('"name"')
       expect(result.structuredContent).toEqual(data)
     })
 

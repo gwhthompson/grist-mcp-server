@@ -13,9 +13,11 @@ import type { ToolContext, ToolDefinition } from '../registry/types.js'
 import { ApplyResponseSchema } from '../schemas/api-responses.js'
 import {
   createBatchOutputSchema,
+  type GenericBatchResponse,
+  type GenericOperationResult,
   GenericOperationResultSchema
 } from '../schemas/batch-operation-schemas.js'
-import { DocIdSchema, ResponseFormatSchema } from '../schemas/common.js'
+import { DocIdSchema, jsonSafeArray, ResponseFormatSchema } from '../schemas/common.js'
 import {
   buildLinkActions,
   executeCreatePage,
@@ -164,7 +166,7 @@ const PageOperationSchema = z.discriminatedUnion('action', [
 
 export const ManagePagesSchema = z.strictObject({
   docId: DocIdSchema,
-  operations: z.array(PageOperationSchema).min(1).max(20),
+  operations: jsonSafeArray(PageOperationSchema, { min: 1, max: 20 }),
   response_format: ResponseFormatSchema
 })
 
@@ -172,30 +174,11 @@ export type ManagePagesInput = z.infer<typeof ManagePagesSchema>
 export type PageOperation = z.infer<typeof PageOperationSchema>
 
 // =============================================================================
-// Response Types
+// Response Types (using shared interfaces from batch-operation-schemas.ts)
 // =============================================================================
 
-interface OperationResult {
-  action: string
-  success: boolean
-  verified?: boolean
-  details: Record<string, unknown>
-  error?: string
-}
-
-interface ManagePagesResponse {
-  success: boolean
-  docId: string
-  operationsCompleted: number
-  results: OperationResult[]
-  message: string
-  partialFailure?: {
-    operationIndex: number
-    error: string
-    completedOperations: number
-  }
-  nextSteps?: string[]
-}
+// OperationResult → GenericOperationResult
+// GenericBatchResponse → GenericBatchResponse
 
 // =============================================================================
 // Tool Implementation
@@ -204,8 +187,8 @@ interface ManagePagesResponse {
 export class ManagePagesTool extends BatchOperationTool<
   typeof ManagePagesSchema,
   PageOperation,
-  OperationResult,
-  ManagePagesResponse
+  GenericOperationResult,
+  GenericBatchResponse
 > {
   // Track page renames within batch for atomicity
   private pageNameMap = new Map<string, string>()
@@ -231,11 +214,11 @@ export class ManagePagesTool extends BatchOperationTool<
     docId: string,
     operation: PageOperation,
     _index: number
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     return this.executeSingleOperation(docId, operation)
   }
 
-  protected async executeInternal(params: ManagePagesInput): Promise<ManagePagesResponse> {
+  protected async executeInternal(params: ManagePagesInput): Promise<GenericBatchResponse> {
     // Reset batch state before executing operations
     this.pageNameMap.clear()
     this.pageInfoCache.clear()
@@ -246,9 +229,9 @@ export class ManagePagesTool extends BatchOperationTool<
 
   protected buildSuccessResponse(
     docId: string,
-    results: OperationResult[],
+    results: GenericOperationResult[],
     params: ManagePagesInput
-  ): ManagePagesResponse {
+  ): GenericBatchResponse {
     return {
       success: true,
       docId,
@@ -262,10 +245,10 @@ export class ManagePagesTool extends BatchOperationTool<
     docId: string,
     failedIndex: number,
     failedOperation: PageOperation,
-    completedResults: OperationResult[],
+    completedResults: GenericOperationResult[],
     errorMessage: string,
     _params: ManagePagesInput
-  ): ManagePagesResponse {
+  ): GenericBatchResponse {
     return {
       success: false,
       docId,
@@ -281,9 +264,9 @@ export class ManagePagesTool extends BatchOperationTool<
   }
 
   protected async afterExecute(
-    result: ManagePagesResponse,
+    result: GenericBatchResponse,
     _params: ManagePagesInput
-  ): Promise<ManagePagesResponse> {
+  ): Promise<GenericBatchResponse> {
     const pageCreates = result.results.filter((r) => r.action === 'create_page')
     const pageRenames = result.results.filter((r) => r.action === 'rename_page')
     const pageDeletes = result.results.filter((r) => r.action === 'delete_page')
@@ -342,7 +325,10 @@ export class ManagePagesTool extends BatchOperationTool<
     return { ...result, nextSteps: builder.build() }
   }
 
-  private async executeSingleOperation(docId: string, op: PageOperation): Promise<OperationResult> {
+  private async executeSingleOperation(
+    docId: string,
+    op: PageOperation
+  ): Promise<GenericOperationResult> {
     switch (op.action) {
       case 'create_page':
         return this.executeCreatePage(docId, op)
@@ -370,7 +356,7 @@ export class ManagePagesTool extends BatchOperationTool<
   private async executeCreatePage(
     docId: string,
     op: Extract<PageOperation, { action: 'create_page' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const result = await executeCreatePage(
       this.client,
       docId,
@@ -405,7 +391,7 @@ export class ManagePagesTool extends BatchOperationTool<
   private async executeSetLayout(
     docId: string,
     op: Extract<PageOperation, { action: 'set_layout' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     // Resolve page
     const viewId =
       typeof op.page === 'number' ? op.page : (await this.resolvePageName(docId, op.page)).viewRef
@@ -466,7 +452,7 @@ export class ManagePagesTool extends BatchOperationTool<
   private async executeGetLayout(
     docId: string,
     op: Extract<PageOperation, { action: 'get_layout' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     // Resolve page
     const viewId =
       typeof op.page === 'number' ? op.page : (await this.resolvePageName(docId, op.page)).viewRef
@@ -490,7 +476,7 @@ export class ManagePagesTool extends BatchOperationTool<
   private async executeRenamePage(
     docId: string,
     op: Extract<PageOperation, { action: 'rename_page' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const page = await this.resolvePageName(docId, op.page)
 
     // Track rename
@@ -519,7 +505,7 @@ export class ManagePagesTool extends BatchOperationTool<
   private async executeDeletePage(
     docId: string,
     op: Extract<PageOperation, { action: 'delete_page' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const page = await this.resolvePageName(docId, op.page)
     const actions: Array<['BulkRemoveRecord' | 'RemoveTable', string, number[] | string]> = [
       ['BulkRemoveRecord', '_grist_Pages', [page.id]]
@@ -564,7 +550,7 @@ export class ManagePagesTool extends BatchOperationTool<
   private async executeReorderPages(
     docId: string,
     op: Extract<PageOperation, { action: 'reorder_pages' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const result = await reorderPagesOp(this.context, docId, op.order)
     return {
       action: 'reorder_pages',
@@ -584,7 +570,7 @@ export class ManagePagesTool extends BatchOperationTool<
   private async executeConfigureWidget(
     docId: string,
     op: Extract<PageOperation, { action: 'configure_widget' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const page = await this.resolvePageName(docId, op.page)
     const sectionId = await resolveWidgetNameToSectionId(
       this.client,
@@ -649,7 +635,7 @@ export class ManagePagesTool extends BatchOperationTool<
   private async executeLinkWidgets(
     docId: string,
     op: Extract<PageOperation, { action: 'link_widgets' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const { viewId, links } = op
 
     // Phase 1: Validate all widgets exist on the page

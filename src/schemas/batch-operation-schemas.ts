@@ -78,3 +78,85 @@ export function createBatchOutputSchema<TResult extends z.ZodType>(resultSchema:
     nextSteps: z.array(z.string()).optional().describe('Suggested follow-up actions')
   })
 }
+
+// =============================================================================
+// TypeScript Interfaces (mirror Zod schemas for use in tool implementations)
+// =============================================================================
+
+/**
+ * Partial failure info when a batch operation fails midway.
+ */
+export interface PartialFailure {
+  operationIndex: number
+  error: string
+  completedOperations: number
+}
+
+/**
+ * Base operation result - common fields for all batch operations.
+ */
+export interface BaseOperationResult {
+  action: string
+  success: boolean
+  verified?: boolean
+  error?: string
+}
+
+/**
+ * Generic operation result with flexible details object.
+ * Used by manage-schema and manage-pages.
+ */
+export interface GenericOperationResult extends BaseOperationResult {
+  details: Record<string, unknown>
+}
+
+/**
+ * Base batch response structure.
+ * Tools can extend with tool-specific fields.
+ */
+export interface BaseBatchResponse<TResult extends BaseOperationResult> {
+  success: boolean
+  docId: string
+  operationsCompleted: number
+  results: TResult[]
+  message: string
+  partialFailure?: PartialFailure
+  nextSteps?: string[]
+}
+
+/**
+ * Standard batch response using GenericOperationResult.
+ * Used by manage-schema and manage-pages.
+ */
+export type GenericBatchResponse = BaseBatchResponse<GenericOperationResult>
+
+// =============================================================================
+// Records-Specific Types (manage-records has additional fields)
+// =============================================================================
+
+/**
+ * Records-specific operation result with affected count and IDs.
+ */
+export interface RecordOperationResult extends BaseOperationResult {
+  tableId: string
+  recordsAffected: number
+  recordIds?: number[]
+  filtersUsed?: Record<string, unknown>
+}
+
+/**
+ * Records-specific partial failure with table context.
+ */
+export interface RecordPartialFailure extends PartialFailure {
+  tableId: string
+}
+
+/**
+ * Records batch response with table tracking.
+ */
+export interface RecordsBatchResponse
+  extends Omit<BaseBatchResponse<RecordOperationResult>, 'partialFailure'> {
+  tablesAffected: string[]
+  totalRecordsAffected: number
+  partialFailure?: RecordPartialFailure
+}

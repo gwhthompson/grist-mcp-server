@@ -113,6 +113,7 @@ export const DocIdSchema = z
       'Document ID must be Base58 format (22 chars, excludes 0OIl which are visually ambiguous)'
   })
   .brand<'DocId'>()
+  .meta({ id: 'DocId' })
 
 /** Branded DocId type - use DocIdSchema.parse() to create */
 export type DocId = z.infer<typeof DocIdSchema>
@@ -130,6 +131,7 @@ export const TableIdSchema = z
       'Table ID cannot be a Python keyword (for, class, if, def, etc.) because Grist uses Python for formulas'
   })
   .brand<'TableId'>()
+  .meta({ id: 'TableId' })
 
 /** Branded TableId type - use TableIdSchema.parse() to create */
 export type TableId = z.infer<typeof TableIdSchema>
@@ -152,6 +154,7 @@ export const ColIdSchema = z
     error: 'Column ID cannot start with gristHelper_ (reserved prefix for Grist internal columns)'
   })
   .brand<'ColId'>()
+  .meta({ id: 'ColId' })
 
 /** Branded ColId type - use ColIdSchema.parse() to create */
 export type ColId = z.infer<typeof ColIdSchema>
@@ -276,4 +279,49 @@ export function parseJsonString(val: unknown): unknown {
     }
   }
   return val
+}
+
+/**
+ * Options for jsonSafeArray utility.
+ */
+export interface JsonSafeArrayOptions {
+  min?: number
+  max?: number
+  description?: string
+}
+
+/**
+ * Create a JSON-safe array schema that handles MCP client quirks.
+ *
+ * MCP clients may send arrays as:
+ * 1. Native arrays: [{...}, {...}]
+ * 2. JSON strings: "[{...}, {...}]" (array-level)
+ * 3. Mixed: ["{...}", {...}] (element-level)
+ *
+ * This handles both levels using the existing codebase pattern of
+ * z.preprocess() + parseJsonString, but applied at both levels.
+ *
+ * @example
+ * // Before (only handles element-level):
+ * z.array(z.preprocess(parseJsonString, ElementSchema)).min(1).max(10)
+ *
+ * // After (handles both levels):
+ * jsonSafeArray(ElementSchema, { min: 1, max: 10 })
+ */
+export function jsonSafeArray<T extends z.ZodType>(
+  elementSchema: T,
+  options: JsonSafeArrayOptions = {}
+) {
+  const { min, max, description } = options
+
+  // Build inner array with element-level preprocessing
+  // This handles: ["{...}", "{...}"] → [{...}, {...}]
+  let arraySchema = z.array(z.preprocess(parseJsonString, elementSchema))
+  if (min !== undefined) arraySchema = arraySchema.min(min)
+  if (max !== undefined) arraySchema = arraySchema.max(max)
+  if (description) arraySchema = arraySchema.describe(description)
+
+  // Wrap with array-level preprocessing
+  // This handles: "[{...}, {...}]" → [{...}, {...}]
+  return z.preprocess(parseJsonString, arraySchema)
 }

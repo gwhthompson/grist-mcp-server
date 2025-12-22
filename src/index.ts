@@ -2,9 +2,10 @@
 
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
+import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
 import packageJson from '../package.json' with { type: 'json' }
 import { DEFAULT_BASE_URL, STRICT_MODE } from './constants.js'
-import { ALL_TOOLS } from './registry/tool-definitions.js'
+import { ALL_TOOLS, type ToolDefinition } from './registry/tool-definitions.js'
 import {
   consoleLoggingStrategy,
   getToolStatsByCategory,
@@ -97,6 +98,57 @@ function logStartupInfo(config: ServerConfig): void {
 // Server instance for cleanup during shutdown
 let serverInstance: ServerInstance | null = null
 
+/**
+ * Build rich description for tools/list that includes quick examples.
+ * This helps agents use tools without needing to call grist_help first.
+ */
+function buildRichDescription(tool: ToolDefinition): string {
+  const overview = tool.docs.overview.slice(0, 150)
+  const firstExample = tool.docs.examples[0]
+
+  if (firstExample) {
+    const exampleJson = JSON.stringify(firstExample.input)
+    // Keep description under ~300 chars for conciseness
+    if (overview.length + exampleJson.length < 280) {
+      return `${overview}\n\nExample: ${exampleJson}\n\nUse grist_help({tools:"${tool.name}"}) for full schema.`
+    }
+  }
+
+  return `${overview}\n\nUse grist_help({tools:"${tool.name}"}) for full schema.`
+}
+
+/**
+ * Override tools/list with minimal schemas for progressive disclosure.
+ *
+ * This reduces upfront token usage by ~90% (from ~52KB to ~5KB).
+ * Full schemas are available on-demand via grist_help({tools: "tool_name"}).
+ *
+ * MCP spec allows minimal inputSchema with just {type: "object"}.
+ */
+function overrideToolsList(server: McpServer): void {
+  // Access the underlying Server instance to override the handler
+  // The SDK's McpServer exposes server.server (readonly Server)
+  // biome-ignore lint/complexity/noBannedTypes: SDK internal type not exported
+  const internalServer = (server as unknown as { server: { setRequestHandler: Function } }).server
+
+  internalServer.setRequestHandler(ListToolsRequestSchema, async () => {
+    return {
+      tools: ALL_TOOLS.map((tool) => ({
+        name: tool.name,
+        title: tool.title,
+        description: buildRichDescription(tool),
+        inputSchema: { type: 'object' as const }, // Minimal MCP-compliant schema
+        annotations: {
+          readOnlyHint: tool.annotations.readOnlyHint,
+          destructiveHint: tool.annotations.destructiveHint,
+          idempotentHint: tool.annotations.idempotentHint,
+          openWorldHint: tool.annotations.openWorldHint
+        }
+      }))
+    }
+  })
+}
+
 async function main(): Promise<void> {
   const config = validateEnvironment(process.env)
   initSessionAnalytics(sharedLogger)
@@ -110,8 +162,9 @@ async function main(): Promise<void> {
 
   await registerTools(serverInstance.server, serverInstance.context)
 
-  // SDK's registerTool() automatically sets up tools/list handler
-  // with MCP-compliant JSON Schema output
+  // Override tools/list with minimal schemas for progressive disclosure
+  // Full schemas are available via grist_help({tools: "tool_name"})
+  overrideToolsList(serverInstance.server)
 
   await connectServer(serverInstance.server)
   logStartupInfo(config)

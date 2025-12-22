@@ -489,11 +489,17 @@ describe('PaginatedGristTool', () => {
       expect(response.isError).toBeUndefined()
       expect(response.structuredContent).toBeDefined()
       expect(response.structuredContent).toHaveProperty('items')
-      expect(response.structuredContent).toHaveProperty('pagination')
+      // Pagination fields are flat (total, offset, etc.) for backwards compatibility
+      expect(response.structuredContent).toHaveProperty('total')
+      expect(response.structuredContent).toHaveProperty('offset')
 
-      const structured = response.structuredContent as PaginatedResponse<TestItem>
+      const structured = response.structuredContent as {
+        items: TestItem[]
+        total: number
+        offset: number
+      }
       expect(structured.items).toHaveLength(25)
-      expect(structured.pagination.offset).toBe(50)
+      expect(structured.offset).toBe(50)
     })
 
     it('handles validation errors in pagination params', async () => {

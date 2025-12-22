@@ -192,6 +192,11 @@ export class QuerySqlTool extends GristTool<typeof QuerySQLSchema, unknown> {
     }
   }
 
+  /**
+   * Custom formatResponse - cannot use PaginatedGristTool because:
+   * 1. Uses 'records' field instead of 'items'
+   * 2. Has SQL-specific response structure
+   */
   protected formatResponse(data: SqlResponseData, format: 'json' | 'markdown') {
     const { data: truncatedData } = truncateIfNeeded(data.records, format, {
       total: data.total,
@@ -323,6 +328,11 @@ export class GetRecordsTool extends GristTool<typeof GetRecordsSchema, GetRecord
     }
   }
 
+  /**
+   * Custom formatResponse - cannot use PaginatedGristTool because:
+   * 1. Has many additional fields (docId, tableId, filters, columns, formulaErrors)
+   * 2. Response structure differs from standard PaginatedResponse
+   */
   protected formatResponse(data: GetRecordsResponseData, format: 'json' | 'markdown') {
     const { data: truncatedData } = truncateIfNeeded(data.items, format, {
       docId: data.docId,

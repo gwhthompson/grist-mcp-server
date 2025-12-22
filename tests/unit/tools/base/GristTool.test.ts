@@ -250,9 +250,9 @@ describe('GristTool', () => {
       formatTool = new CustomFormatTool(context)
     })
 
-    it('defaults to markdown format', () => {
+    it('defaults to json format', () => {
       const format = formatTool.getResponseFormat({ data: 'test' })
-      expect(format).toBe('markdown')
+      expect(format).toBe('json')
     })
 
     it('extracts json format from params', () => {
@@ -271,22 +271,22 @@ describe('GristTool', () => {
       expect(format).toBe('markdown')
     })
 
-    it('defaults to markdown for invalid format', () => {
+    it('defaults to json for invalid format', () => {
       const format = formatTool.getResponseFormat({
         data: 'test',
         response_format: 'invalid' as 'json'
       })
-      expect(format).toBe('markdown')
+      expect(format).toBe('json')
     })
 
     it('handles null params', () => {
       const format = formatTool.getResponseFormat(null)
-      expect(format).toBe('markdown')
+      expect(format).toBe('json')
     })
 
     it('handles non-object params', () => {
       const format = formatTool.getResponseFormat('string')
-      expect(format).toBe('markdown')
+      expect(format).toBe('json')
     })
   })
 
@@ -374,12 +374,12 @@ describe('GristTool', () => {
   })
 
   describe('getToolName()', () => {
-    it('converts class name to snake_case', () => {
+    it('converts class name to snake_case with grist_ prefix', () => {
       const name = tool.getToolName()
-      expect(name).toBe('test')
+      expect(name).toBe('grist_test')
     })
 
-    it('removes Tool suffix', () => {
+    it('removes Tool suffix and adds grist_ prefix', () => {
       class MyCustomTool extends GristTool<z.ZodObject<Record<string, never>>, unknown> {
         constructor(context: ToolContext) {
           super(context, z.object({}))
@@ -390,10 +390,10 @@ describe('GristTool', () => {
       }
 
       const myTool = new MyCustomTool(context)
-      expect(myTool.getToolName()).toBe('my_custom')
+      expect(myTool.getToolName()).toBe('grist_my_custom')
     })
 
-    it('handles single word class names', () => {
+    it('handles single word class names with grist_ prefix', () => {
       class Simple extends GristTool<z.ZodObject<Record<string, never>>, unknown> {
         constructor(context: ToolContext) {
           super(context, z.object({}))
@@ -404,7 +404,7 @@ describe('GristTool', () => {
       }
 
       const simple = new Simple(context)
-      expect(simple.getToolName()).toBe('simple')
+      expect(simple.getToolName()).toBe('grist_simple')
     })
   })
 

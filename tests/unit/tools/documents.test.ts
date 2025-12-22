@@ -4,9 +4,13 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ToolContext } from '../../../src/registry/types.js'
-import { CreateDocumentTool, createDocument, DOCUMENT_TOOLS } from '../../../src/tools/documents.js'
+import {
+  CREATE_DOCUMENT_TOOL,
+  createDocument,
+  DOCUMENT_TOOLS
+} from '../../../src/tools/documents.js'
 
-describe('CreateDocumentTool', () => {
+describe('grist_create_document', () => {
   let context: ToolContext
   let mockClient: {
     post: ReturnType<typeof vi.fn>
@@ -20,17 +24,15 @@ describe('CreateDocumentTool', () => {
     }
     context = {
       client: mockClient as unknown as ToolContext['client'],
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       schemaCache: {} as ToolContext['schemaCache']
     }
   })
 
-  describe('executeInternal', () => {
+  describe('execute', () => {
     it('creates a new document', async () => {
       mockClient.post.mockResolvedValue('newDocId123')
 
-      const tool = new CreateDocumentTool(context)
-      const result = await tool.execute({
+      const result = await CREATE_DOCUMENT_TOOL.handler(context, {
         name: 'My New Document',
         workspaceId: 123
       })
@@ -51,8 +53,7 @@ describe('CreateDocumentTool', () => {
       // Valid Base58 22-char doc ID
       const sourceDocId = 'aaaaaaaaaaaaaaaaaaaaaa'
 
-      const tool = new CreateDocumentTool(context)
-      const result = await tool.execute({
+      const result = await CREATE_DOCUMENT_TOOL.handler(context, {
         name: 'Forked Document',
         workspaceId: 456,
         forkFromDocId: sourceDocId
@@ -72,8 +73,7 @@ describe('CreateDocumentTool', () => {
     it('handles response as object with id property', async () => {
       mockClient.post.mockResolvedValue({ id: 'objDocId' })
 
-      const tool = new CreateDocumentTool(context)
-      const result = await tool.execute({
+      const result = await CREATE_DOCUMENT_TOOL.handler(context, {
         name: 'Test Doc',
         workspaceId: 100
       })
@@ -86,8 +86,7 @@ describe('CreateDocumentTool', () => {
       // Valid Base58 22-char doc ID
       const sourceDocId = 'bbbbbbbbbbbbbbbbbbbbbb'
 
-      const tool = new CreateDocumentTool(context)
-      const result = await tool.execute({
+      const result = await CREATE_DOCUMENT_TOOL.handler(context, {
         name: 'Forked Doc',
         workspaceId: 100,
         forkFromDocId: sourceDocId
@@ -99,8 +98,7 @@ describe('CreateDocumentTool', () => {
     it('returns nextSteps with helpful suggestions', async () => {
       mockClient.post.mockResolvedValue('doc123')
 
-      const tool = new CreateDocumentTool(context)
-      const result = await tool.execute({
+      const result = await CREATE_DOCUMENT_TOOL.handler(context, {
         name: 'Test',
         workspaceId: 1
       })
@@ -112,7 +110,9 @@ describe('CreateDocumentTool', () => {
         "Use grist_manage_schema with action='create_table' to add tables"
       )
       expect(
-        result.structuredContent.nextSteps.some((s) => s.includes('https://grist.example.com'))
+        result.structuredContent.nextSteps.some((s: string) =>
+          s.includes('https://grist.example.com')
+        )
       ).toBe(true)
     })
   })
@@ -126,7 +126,6 @@ describe('createDocument', () => {
     }
     const context: ToolContext = {
       client: mockClient as unknown as ToolContext['client'],
-      logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
       schemaCache: {} as ToolContext['schemaCache']
     }
 

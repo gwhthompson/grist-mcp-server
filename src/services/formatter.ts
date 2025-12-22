@@ -25,10 +25,7 @@ function normalizeForSerialization(value: unknown): unknown {
   return value
 }
 
-export function formatToolResponse<T>(
-  data: T,
-  format: ResponseFormat = 'markdown'
-): MCPToolResponse {
+export function formatToolResponse<T>(data: T, format: ResponseFormat = 'json'): MCPToolResponse {
   const normalized = normalizeForSerialization(data)
 
   const text =

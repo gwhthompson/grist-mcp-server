@@ -27,6 +27,8 @@ import type { ToolContext, ToolDefinition } from '../registry/types.js'
 import { ApplyResponseSchema } from '../schemas/api-responses.js'
 import {
   createBatchOutputSchema,
+  type GenericBatchResponse,
+  type GenericOperationResult,
   GenericOperationResultSchema
 } from '../schemas/batch-operation-schemas.js'
 import {
@@ -41,7 +43,13 @@ import {
   parseGristType,
   VisibleColSchema
 } from '../schemas/column-types.js'
-import { ColIdSchema, DocIdSchema, ResponseFormatSchema, TableIdSchema } from '../schemas/common.js'
+import {
+  ColIdSchema,
+  DocIdSchema,
+  jsonSafeArray,
+  ResponseFormatSchema,
+  TableIdSchema
+} from '../schemas/common.js'
 import { BaseConditionalRuleSchema } from '../schemas/conditional-rules.js'
 import {
   buildAddColumnAction,
@@ -193,7 +201,7 @@ const SchemaOperationSchema = z.discriminatedUnion('action', [
 
 export const ManageSchemaSchema = z.strictObject({
   docId: DocIdSchema,
-  operations: z.array(SchemaOperationSchema).min(1).max(MAX_COLUMN_OPERATIONS),
+  operations: jsonSafeArray(SchemaOperationSchema, { min: 1, max: MAX_COLUMN_OPERATIONS }),
   response_format: ResponseFormatSchema
 })
 
@@ -201,30 +209,11 @@ export type ManageSchemaInput = z.infer<typeof ManageSchemaSchema>
 export type SchemaOperation = z.infer<typeof SchemaOperationSchema>
 
 // =============================================================================
-// Response Types
+// Response Types (using shared interfaces from batch-operation-schemas.ts)
 // =============================================================================
 
-interface OperationResult {
-  action: string
-  success: boolean
-  verified?: boolean
-  details: Record<string, unknown>
-  error?: string
-}
-
-interface ManageSchemaResponse {
-  success: boolean
-  docId: string
-  operationsCompleted: number
-  results: OperationResult[]
-  message: string
-  partialFailure?: {
-    operationIndex: number
-    error: string
-    completedOperations: number
-  }
-  nextSteps?: string[]
-}
+// OperationResult → GenericOperationResult
+// GenericBatchResponse → GenericBatchResponse
 
 // =============================================================================
 // Tool Implementation
@@ -233,8 +222,8 @@ interface ManageSchemaResponse {
 export class ManageSchemaTool extends BatchOperationTool<
   typeof ManageSchemaSchema,
   SchemaOperation,
-  OperationResult,
-  ManageSchemaResponse
+  GenericOperationResult,
+  GenericBatchResponse
 > {
   constructor(context: ToolContext) {
     super(context, ManageSchemaSchema)
@@ -256,15 +245,15 @@ export class ManageSchemaTool extends BatchOperationTool<
     docId: string,
     operation: SchemaOperation,
     _index: number
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     return this.executeSingleOperation(docId, operation)
   }
 
   protected buildSuccessResponse(
     docId: string,
-    results: OperationResult[],
+    results: GenericOperationResult[],
     params: ManageSchemaInput
-  ): ManageSchemaResponse {
+  ): GenericBatchResponse {
     return {
       success: true,
       docId,
@@ -278,10 +267,10 @@ export class ManageSchemaTool extends BatchOperationTool<
     docId: string,
     failedIndex: number,
     failedOperation: SchemaOperation,
-    completedResults: OperationResult[],
+    completedResults: GenericOperationResult[],
     errorMessage: string,
     _params: ManageSchemaInput
-  ): ManageSchemaResponse {
+  ): GenericBatchResponse {
     return {
       success: false,
       docId,
@@ -297,9 +286,9 @@ export class ManageSchemaTool extends BatchOperationTool<
   }
 
   protected async afterExecute(
-    result: ManageSchemaResponse,
+    result: GenericBatchResponse,
     _params: ManageSchemaInput
-  ): Promise<ManageSchemaResponse> {
+  ): Promise<GenericBatchResponse> {
     const tableCreates = result.results.filter((r) => r.action === 'create_table')
     const tableDeletes = result.results.filter((r) => r.action === 'delete_table')
     const tableRenames = result.results.filter((r) => r.action === 'rename_table')
@@ -381,7 +370,7 @@ export class ManageSchemaTool extends BatchOperationTool<
   private async executeSingleOperation(
     docId: string,
     op: SchemaOperation
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     switch (op.action) {
       case 'create_table':
         return this.executeCreateTable(docId, op)
@@ -411,7 +400,7 @@ export class ManageSchemaTool extends BatchOperationTool<
   private async executeCreateTable(
     docId: string,
     op: Extract<SchemaOperation, { action: 'create_table' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     // Resolve visibleCol in columns
     const resolvedColumns = await this.resolveVisibleColInColumns(docId, op.columns)
     const gristColumns = this.columnsToGristFormat(resolvedColumns)
@@ -467,7 +456,7 @@ export class ManageSchemaTool extends BatchOperationTool<
   private async executeUpdateTable(
     docId: string,
     op: Extract<SchemaOperation, { action: 'update_table' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const tableId = toTableId(op.tableId)
     let rowRulesUpdated = 0
 
@@ -491,7 +480,7 @@ export class ManageSchemaTool extends BatchOperationTool<
   private async executeRenameTable(
     docId: string,
     op: Extract<SchemaOperation, { action: 'rename_table' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const result = await renameTableOp(this.context, docId, op.tableId, op.newTableId)
     return {
       action: 'rename_table',
@@ -507,7 +496,7 @@ export class ManageSchemaTool extends BatchOperationTool<
   private async executeDeleteTable(
     docId: string,
     op: Extract<SchemaOperation, { action: 'delete_table' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const result = await deleteTableOp(this.context, docId, op.tableId)
     return {
       action: 'delete_table',
@@ -527,7 +516,7 @@ export class ManageSchemaTool extends BatchOperationTool<
   private async executeAddColumn(
     docId: string,
     op: Extract<SchemaOperation, { action: 'add_column' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const column = await this.resolveVisibleColInColumn(docId, op.column)
     const widgetOptions = extractWidgetOptions(column)
     const gristType = buildGristType(column as { type: string; refTable?: string })
@@ -594,7 +583,7 @@ export class ManageSchemaTool extends BatchOperationTool<
   private async executeModifyColumn(
     docId: string,
     op: Extract<SchemaOperation, { action: 'modify_column' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const updates: Record<string, unknown> = {}
 
     // Handle type with refTable
@@ -695,7 +684,7 @@ export class ManageSchemaTool extends BatchOperationTool<
   private async executeRemoveColumn(
     docId: string,
     op: Extract<SchemaOperation, { action: 'remove_column' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const result = await removeColumnOp(this.context, docId, op.tableId, op.colId)
     return {
       action: 'remove_column',
@@ -711,7 +700,7 @@ export class ManageSchemaTool extends BatchOperationTool<
   private async executeRenameColumn(
     docId: string,
     op: Extract<SchemaOperation, { action: 'rename_column' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     const result = await renameColumnOp(this.context, docId, op.tableId, op.colId, op.newColId)
     return {
       action: 'rename_column',
@@ -732,7 +721,7 @@ export class ManageSchemaTool extends BatchOperationTool<
   private async executeCreateSummary(
     docId: string,
     op: Extract<SchemaOperation, { action: 'create_summary' }>
-  ): Promise<OperationResult> {
+  ): Promise<GenericOperationResult> {
     // Get source table ref
     const sourceTableRef = await this.schemaCache.getTableRef(toDocId(docId), op.sourceTable)
     if (sourceTableRef === null) {

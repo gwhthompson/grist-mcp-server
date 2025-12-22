@@ -20,7 +20,6 @@ import {
   getColumnNameFromId,
   isReferenceType
 } from '../services/column-resolver.js'
-import { truncateIfNeeded } from '../services/formatter.js'
 import type { DocumentInfo, WorkspaceInfo } from '../types.js'
 import { GristTool } from './base/GristTool.js'
 import { PaginatedGristTool, type PaginatedResponse } from './base/PaginatedGristTool.js'
@@ -54,8 +53,7 @@ interface FormattedWorkspace {
 
 export class GetWorkspacesTool extends PaginatedGristTool<
   typeof GetWorkspacesSchema,
-  FormattedWorkspace,
-  PaginatedResponse<FormattedWorkspace>
+  FormattedWorkspace
 > {
   constructor(context: ToolContext) {
     super(context, GetWorkspacesSchema)
@@ -136,30 +134,7 @@ export class GetWorkspacesTool extends PaginatedGristTool<
         .build()
     }
   }
-
-  protected formatResponse(
-    data: PaginatedResponse<FormattedWorkspace> & { nextSteps?: string[] },
-    format: 'json' | 'markdown'
-  ) {
-    const { data: truncatedData } = truncateIfNeeded(data.items, format, {
-      total: data.pagination.total,
-      offset: data.pagination.offset,
-      limit: data.pagination.limit,
-      hasMore: data.pagination.hasMore,
-      nextOffset: data.pagination.nextOffset
-    })
-
-    // Preserve nextSteps through truncation
-    const responseData = {
-      ...(truncatedData as unknown as PaginatedResponse<FormattedWorkspace>),
-      nextSteps: data.nextSteps
-    }
-
-    return super.formatResponse(
-      responseData as unknown as PaginatedResponse<FormattedWorkspace>,
-      format
-    )
-  }
+  // formatResponse override removed - base class handles truncation automatically
 }
 
 export async function getWorkspaces(context: ToolContext, params: GetWorkspacesInput) {
@@ -201,8 +176,7 @@ interface FormattedDocument {
 
 export class GetDocumentsTool extends PaginatedGristTool<
   typeof GetDocumentsSchema,
-  FormattedDocument,
-  PaginatedResponse<FormattedDocument>
+  FormattedDocument
 > {
   constructor(context: ToolContext) {
     super(context, GetDocumentsSchema)
@@ -321,30 +295,7 @@ export class GetDocumentsTool extends PaginatedGristTool<
         .build()
     }
   }
-
-  protected formatResponse(
-    data: PaginatedResponse<FormattedDocument> & { nextSteps?: string[] },
-    format: 'json' | 'markdown'
-  ) {
-    const { data: truncatedData } = truncateIfNeeded(data.items, format, {
-      total: data.pagination.total,
-      offset: data.pagination.offset,
-      limit: data.pagination.limit,
-      hasMore: data.pagination.hasMore,
-      nextOffset: data.pagination.nextOffset
-    })
-
-    // Preserve nextSteps through truncation
-    const responseData = {
-      ...(truncatedData as unknown as PaginatedResponse<FormattedDocument>),
-      nextSteps: data.nextSteps
-    }
-
-    return super.formatResponse(
-      responseData as unknown as PaginatedResponse<FormattedDocument>,
-      format
-    )
-  }
+  // formatResponse override removed - base class handles truncation automatically
 }
 
 export async function getDocuments(context: ToolContext, params: GetDocumentsInput) {

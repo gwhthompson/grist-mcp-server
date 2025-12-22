@@ -84,20 +84,22 @@ export type StyleProps = ColumnStyle
 // Column Type Enum
 // =============================================================================
 
-export const ColumnTypeLiteralSchema = z.enum([
-  'Any',
-  'Text',
-  'Numeric',
-  'Int',
-  'Bool',
-  'Date',
-  'DateTime',
-  'Choice',
-  'ChoiceList',
-  'Attachments',
-  'Ref',
-  'RefList'
-])
+export const ColumnTypeLiteralSchema = z
+  .enum([
+    'Any',
+    'Text',
+    'Numeric',
+    'Int',
+    'Bool',
+    'Date',
+    'DateTime',
+    'Choice',
+    'ChoiceList',
+    'Attachments',
+    'Ref',
+    'RefList'
+  ])
+  .meta({ id: 'ColumnType' })
 
 export type ColumnTypeLiteral = z.infer<typeof ColumnTypeLiteralSchema>
 
@@ -167,45 +169,47 @@ export const VisibleColSchema = z.union([z.string(), z.number()])
  * }
  * ```
  */
-export const ColumnDefinitionSchema = z.object({
-  // Core properties (all column types)
-  colId: ColIdSchema,
-  type: ColumnTypeLiteralSchema,
-  label: z.string().optional(),
-  isFormula: z.boolean().default(false),
-  formula: z.string().optional().describe('e.g. $Price * $Quantity'),
+export const ColumnDefinitionSchema = z
+  .object({
+    // Core properties (all column types)
+    colId: ColIdSchema,
+    type: ColumnTypeLiteralSchema,
+    label: z.string().optional(),
+    isFormula: z.boolean().default(false),
+    formula: z.string().optional().describe('e.g. $Price * $Quantity'),
 
-  // Text options
-  widget: WidgetTypeSchema.optional(),
-  wrap: z.boolean().optional(),
+    // Text options
+    widget: WidgetTypeSchema.optional(),
+    wrap: z.boolean().optional(),
 
-  // Numeric/Int options
-  numMode: NumModeSchema.optional(),
-  currency: CurrencyCodeInputSchema.optional(),
-  numSign: z.enum(['parens']).nullable().optional(),
-  decimals: z.number().int().min(0).max(20).optional(),
-  maxDecimals: z.number().int().min(0).max(20).optional(),
+    // Numeric/Int options
+    numMode: NumModeSchema.optional(),
+    currency: CurrencyCodeInputSchema.optional(),
+    numSign: z.enum(['parens']).nullable().optional(),
+    decimals: z.number().int().min(0).max(20).optional(),
+    maxDecimals: z.number().int().min(0).max(20).optional(),
 
-  // Date/DateTime options
-  dateFormat: z.string().max(100).optional().describe('e.g. YYYY-MM-DD'),
-  isCustomDateFormat: z.boolean().optional(),
-  timeFormat: z.string().max(100).optional().describe('e.g. HH:mm:ss'),
-  isCustomTimeFormat: z.boolean().optional(),
+    // Date/DateTime options
+    dateFormat: z.string().max(100).optional().describe('e.g. YYYY-MM-DD'),
+    isCustomDateFormat: z.boolean().optional(),
+    timeFormat: z.string().max(100).optional().describe('e.g. HH:mm:ss'),
+    isCustomTimeFormat: z.boolean().optional(),
 
-  // Choice/ChoiceList options
-  choices: z.array(z.string().min(1).max(255)).max(1000).optional(),
-  choiceOptions: ChoiceOptionsSchema,
+    // Choice/ChoiceList options
+    choices: z.array(z.string().min(1).max(255)).max(1000).optional(),
+    choiceOptions: ChoiceOptionsSchema,
 
-  // Ref/RefList options
-  refTable: RefTableSchema.optional(),
-  visibleCol: VisibleColSchema.optional(),
+    // Ref/RefList options
+    refTable: RefTableSchema.optional(),
+    visibleCol: VisibleColSchema.optional(),
 
-  // Attachments options
-  height: z.number().int().min(1).max(5000).optional().describe('preview height px'),
+    // Attachments options
+    height: z.number().int().min(1).max(5000).optional().describe('preview height px'),
 
-  // Universal styling (all column types)
-  style: ColumnStyleSchema.optional()
-})
+    // Universal styling (all column types)
+    style: ColumnStyleSchema.optional()
+  })
+  .meta({ id: 'ColumnDefinition' })
 
 export type ColumnDefinition = z.infer<typeof ColumnDefinitionSchema>
 

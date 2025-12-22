@@ -16,7 +16,23 @@ import type {
   BaseBatchResponse,
   BaseOperationResult
 } from '../../schemas/batch-operation-schemas.js'
-import type { PaginatedResponse } from '../base/PaginatedGristTool.js'
+
+// =============================================================================
+// Pagination Types (previously in PaginatedGristTool)
+// =============================================================================
+
+export interface PaginationMetadata {
+  total: number
+  offset: number
+  limit: number
+  hasMore: boolean
+  nextOffset: number | null
+}
+
+export interface PaginatedResponse<TItem> {
+  items: TItem[]
+  pagination: PaginationMetadata
+}
 
 /**
  * Constraint: all tool input schemas must be Zod object types.

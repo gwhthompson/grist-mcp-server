@@ -15,9 +15,9 @@ import type {
 import { formatErrorResponse, formatToolResponse } from '../../services/formatter.js'
 import { getSessionAnalytics } from '../../services/session-analytics.js'
 import type { MCPToolResponse, ResponseFormat } from '../../types.js'
-import type { PaginatedResponse } from '../base/PaginatedGristTool.js'
 import type {
   BatchToolConfig,
+  PaginatedResponse,
   PaginatedToolConfig,
   StandardToolConfig,
   ToolInputSchema,

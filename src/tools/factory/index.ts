@@ -10,7 +10,9 @@ export { defineBatchTool, definePaginatedTool, defineStandardTool } from './defi
 export type {
   BaseToolConfig,
   BatchToolConfig,
+  PaginatedResponse,
   PaginatedToolConfig,
+  PaginationMetadata,
   StandardToolConfig,
   ToolConfig,
   ToolInputSchema,

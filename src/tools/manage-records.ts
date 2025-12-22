@@ -357,13 +357,10 @@ async function findMatchingRecordIds(
     gristFilters[key] = Array.isArray(value) ? value : [value]
   }
 
-  const response = await client.get<RecordsResponse>(
-    `/docs/${docId}/tables/${tableId}/records`,
-    {
-      filter: JSON.stringify(gristFilters),
-      limit: MAX_RECORDS_PER_BATCH
-    }
-  )
+  const response = await client.get<RecordsResponse>(`/docs/${docId}/tables/${tableId}/records`, {
+    filter: JSON.stringify(gristFilters),
+    limit: MAX_RECORDS_PER_BATCH
+  })
 
   return (response.records || []).map((r) => r.id)
 }

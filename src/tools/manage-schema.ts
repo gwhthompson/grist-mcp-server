@@ -473,7 +473,8 @@ async function executeModifyColumn(
   // Handle visibleCol resolution
   if (op.updates.visibleCol !== undefined) {
     if (typeof op.updates.visibleCol === 'string') {
-      const columnType = op.updates.type || (await getColumnType(client, docId, op.tableId, op.colId))
+      const columnType =
+        op.updates.type || (await getColumnType(client, docId, op.tableId, op.colId))
       const parsed = parseGristType(columnType)
       const refTable = op.updates.refTable || parsed.refTable
       if (refTable) {
@@ -896,10 +897,7 @@ async function renameView(
  * Only deletes if Table1 exists, has no records, and no custom columns.
  * This is a convenience feature - failures are silently ignored.
  */
-async function maybeDeleteEmptyTable1(
-  client: ToolContext['client'],
-  docId: string
-): Promise<void> {
+async function maybeDeleteEmptyTable1(client: ToolContext['client'], docId: string): Promise<void> {
   try {
     // Check if Table1 exists
     const tablesResp = await client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {

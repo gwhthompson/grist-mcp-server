@@ -44,9 +44,26 @@ import type { SectionId } from '../types/advanced.js'
 import type { ApplyResponse, SQLQueryResponse } from '../types.js'
 import { first } from '../utils/array-helpers.js'
 import { extractFields } from '../utils/grist-field-extractor.js'
-import { BatchOperationTool } from './base/BatchOperationTool.js'
+import { defineBatchTool } from './factory/index.js'
 import { fetchWidgetTableMetadata } from './pages/shared.js'
 import { nextSteps } from './utils/next-steps.js'
+
+// =============================================================================
+// Batch State Management
+// =============================================================================
+
+/**
+ * Batch state is used to track page renames and cache page info within a single batch execution.
+ * Since the factory pattern doesn't have built-in state, we use module-level state
+ * that gets reset when beforeExecute runs.
+ */
+let batchPageNameMap = new Map<string, string>()
+let batchPageInfoCache = new Map<string, { id: number; viewRef: number; pagePos: number }>()
+
+function resetBatchState(): void {
+  batchPageNameMap = new Map()
+  batchPageInfoCache = new Map()
+}
 
 // =============================================================================
 // Shared Schemas
@@ -181,661 +198,534 @@ export type PageOperation = z.infer<typeof PageOperationSchema>
 // GenericBatchResponse → GenericBatchResponse
 
 // =============================================================================
-// Tool Implementation
+// Helper Functions for Operations
 // =============================================================================
 
-export class ManagePagesTool extends BatchOperationTool<
-  typeof ManagePagesSchema,
-  PageOperation,
-  GenericOperationResult,
-  GenericBatchResponse
-> {
-  // Track page renames within batch for atomicity
-  private pageNameMap = new Map<string, string>()
-  private pageInfoCache = new Map<string, { id: number; viewRef: number; pagePos: number }>()
-
-  constructor(context: ToolContext) {
-    super(context, ManagePagesSchema)
+/**
+ * Execute a single page operation.
+ */
+async function executeSingleOperation(
+  ctx: ToolContext,
+  docId: string,
+  op: PageOperation
+): Promise<GenericOperationResult> {
+  switch (op.action) {
+    case 'create_page':
+      return executeCreatePageOp(ctx, docId, op)
+    case 'set_layout':
+      return executeSetLayoutOp(ctx, docId, op)
+    case 'get_layout':
+      return executeGetLayoutOp(ctx, docId, op)
+    case 'rename_page':
+      return executeRenamePage(ctx, docId, op)
+    case 'delete_page':
+      return executeDeletePage(ctx, docId, op)
+    case 'reorder_pages':
+      return executeReorderPagesOp(ctx, docId, op)
+    case 'configure_widget':
+      return executeConfigureWidget(ctx, docId, op)
+    case 'link_widgets':
+      return executeLinkWidgets(ctx, docId, op)
   }
+}
 
-  protected getOperations(params: ManagePagesInput): PageOperation[] {
-    return params.operations
-  }
+// ---------------------------------------------------------------------------
+// Layout Operations
+// ---------------------------------------------------------------------------
 
-  protected getDocId(params: ManagePagesInput): string {
-    return params.docId
-  }
+async function executeCreatePageOp(
+  ctx: ToolContext,
+  docId: string,
+  op: Extract<PageOperation, { action: 'create_page' }>
+): Promise<GenericOperationResult> {
+  const { client } = ctx
 
-  protected getActionName(operation: PageOperation): string {
-    return operation.action
-  }
-
-  protected async executeOperation(
-    docId: string,
-    operation: PageOperation,
-    _index: number
-  ): Promise<GenericOperationResult> {
-    return this.executeSingleOperation(docId, operation)
-  }
-
-  protected async executeInternal(params: ManagePagesInput): Promise<GenericBatchResponse> {
-    // Reset batch state before executing operations
-    this.pageNameMap.clear()
-    this.pageInfoCache.clear()
-
-    // Delegate to parent's batch execution
-    return super.executeInternal(params)
-  }
-
-  protected buildSuccessResponse(
-    docId: string,
-    results: GenericOperationResult[],
-    params: ManagePagesInput
-  ): GenericBatchResponse {
-    return {
-      success: true,
-      docId,
-      operationsCompleted: params.operations.length,
-      results,
-      message: `Successfully completed ${params.operations.length} page operation(s)`
-    }
-  }
-
-  protected buildFailureResponse(
-    docId: string,
-    failedIndex: number,
-    failedOperation: PageOperation,
-    completedResults: GenericOperationResult[],
-    errorMessage: string,
-    _params: ManagePagesInput
-  ): GenericBatchResponse {
-    return {
-      success: false,
-      docId,
-      operationsCompleted: failedIndex,
-      results: completedResults,
-      message: `Operation ${failedIndex + 1} (${failedOperation.action}) failed: ${errorMessage}`,
-      partialFailure: {
-        operationIndex: failedIndex,
-        error: errorMessage,
-        completedOperations: failedIndex
-      }
-    }
-  }
-
-  protected async afterExecute(
-    result: GenericBatchResponse,
-    _params: ManagePagesInput
-  ): Promise<GenericBatchResponse> {
-    const pageCreates = result.results.filter((r) => r.action === 'create_page')
-    const pageRenames = result.results.filter((r) => r.action === 'rename_page')
-    const pageDeletes = result.results.filter((r) => r.action === 'delete_page')
-    const reorderOps = result.results.filter((r) => r.action === 'reorder_pages')
-    const configureOps = result.results.filter((r) => r.action === 'configure_widget')
-    const linkOps = result.results.filter((r) => r.action === 'link_widgets')
-    const getLayouts = result.results.filter((r) => r.action === 'get_layout')
-
-    const firstCreate = pageCreates[0]
-    const firstRename = pageRenames[0]
-
-    const builder = nextSteps()
-
-    if (result.partialFailure) {
-      builder
-        .add(`Fix error: ${result.partialFailure.error}`)
-        .add(`Resume from operation index ${result.partialFailure.operationIndex}`)
-    } else if (result.success) {
-      // After create_page, suggest linking widgets (only if no link ops and multiple widgets)
-      builder.addIfFn(pageCreates.length > 0 && linkOps.length === 0, () => {
-        const viewId = firstCreate?.details.viewId as number
-        const sectionIds = firstCreate?.details.sectionIds as number[]
-        if (viewId && sectionIds && sectionIds.length > 1) {
-          return `Use link_widgets with viewId=${viewId} and sectionIds=[${sectionIds.join(', ')}] to connect widgets`
-        }
-        return ''
+  const result = await executeCreatePage(
+    client,
+    docId,
+    op.name,
+    op.layout,
+    async (tableId: string) => {
+      const tableResp = await client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+        sql: 'SELECT id FROM _grist_Tables WHERE tableId = ?',
+        args: [tableId]
       })
-
-      builder
-        .addIf(
-          pageRenames.length > 0,
-          `Use get_layout to verify page "${firstRename?.details.newName}" configuration`
-        )
-        .addIf(
-          pageDeletes.length > 0,
-          'Use get_layout on remaining pages to verify document structure'
-        )
-        .addIf(
-          reorderOps.length > 0,
-          'Page order updated. Navigate through pages to verify new order'
-        )
-        .addIf(
-          configureOps.length > 0,
-          'Use grist_get_records to verify widget displays data with new configuration'
-        )
-        .addIf(
-          linkOps.length > 0,
-          'Use grist_manage_records to add test data and verify links work correctly'
-        )
-        .addIf(
-          getLayouts.length > 0,
-          'Use set_layout to modify the layout, or configure_widget to adjust sorting'
-        )
+      if (tableResp.records.length === 0) {
+        throw new Error(`Table "${tableId}" not found`)
+      }
+      const record = first(tableResp.records, `Table ${tableId}`)
+      const fields = extractFields(record)
+      return fields.id as number
     }
+  )
 
-    return { ...result, nextSteps: builder.build() }
-  }
-
-  private async executeSingleOperation(
-    docId: string,
-    op: PageOperation
-  ): Promise<GenericOperationResult> {
-    switch (op.action) {
-      case 'create_page':
-        return this.executeCreatePage(docId, op)
-      case 'set_layout':
-        return this.executeSetLayout(docId, op)
-      case 'get_layout':
-        return this.executeGetLayout(docId, op)
-      case 'rename_page':
-        return this.executeRenamePage(docId, op)
-      case 'delete_page':
-        return this.executeDeletePage(docId, op)
-      case 'reorder_pages':
-        return this.executeReorderPages(docId, op)
-      case 'configure_widget':
-        return this.executeConfigureWidget(docId, op)
-      case 'link_widgets':
-        return this.executeLinkWidgets(docId, op)
+  return {
+    action: 'create_page',
+    success: true,
+    details: {
+      pageName: result.pageName,
+      viewId: result.viewId,
+      widgetsCreated: result.widgetsCreated,
+      sectionIds: result.sectionIds
     }
   }
+}
 
-  // ---------------------------------------------------------------------------
-  // Layout Operations
-  // ---------------------------------------------------------------------------
+async function executeSetLayoutOp(
+  ctx: ToolContext,
+  docId: string,
+  op: Extract<PageOperation, { action: 'set_layout' }>
+): Promise<GenericOperationResult> {
+  const { client } = ctx
 
-  private async executeCreatePage(
-    docId: string,
-    op: Extract<PageOperation, { action: 'create_page' }>
-  ): Promise<GenericOperationResult> {
-    const result = await executeCreatePage(
-      this.client,
-      docId,
-      op.name,
-      op.layout,
-      async (tableId: string) => {
-        const tableResp = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
-          sql: 'SELECT id FROM _grist_Tables WHERE tableId = ?',
-          args: [tableId]
-        })
-        if (tableResp.records.length === 0) {
-          throw new Error(`Table "${tableId}" not found`)
-        }
-        const record = first(tableResp.records, `Table ${tableId}`)
-        const fields = extractFields(record)
-        return fields.id as number
+  // Resolve page
+  const viewId =
+    typeof op.page === 'number' ? op.page : (await resolvePageName(client, docId, op.page)).viewRef
+
+  const result = await executeSetLayout(
+    client,
+    docId,
+    viewId,
+    op.layout,
+    op.remove ?? [],
+    async (tableId: string) => {
+      const tableResp = await client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+        sql: 'SELECT id FROM _grist_Tables WHERE tableId = ?',
+        args: [tableId]
+      })
+      if (tableResp.records.length === 0) {
+        throw new Error(`Table "${tableId}" not found`)
       }
-    )
-
-    return {
-      action: 'create_page',
-      success: true,
-      details: {
-        pageName: result.pageName,
-        viewId: result.viewId,
-        widgetsCreated: result.widgetsCreated,
-        sectionIds: result.sectionIds
-      }
-    }
-  }
-
-  private async executeSetLayout(
-    docId: string,
-    op: Extract<PageOperation, { action: 'set_layout' }>
-  ): Promise<GenericOperationResult> {
-    // Resolve page
-    const viewId =
-      typeof op.page === 'number' ? op.page : (await this.resolvePageName(docId, op.page)).viewRef
-
-    const result = await executeSetLayout(
-      this.client,
-      docId,
-      viewId,
-      op.layout,
-      op.remove ?? [],
-      async (tableId: string) => {
-        const tableResp = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
-          sql: 'SELECT id FROM _grist_Tables WHERE tableId = ?',
-          args: [tableId]
-        })
-        if (tableResp.records.length === 0) {
-          throw new Error(`Table "${tableId}" not found`)
-        }
-        const record = first(tableResp.records, `Table ${tableId}`)
-        const fields = extractFields(record)
-        return fields.id as number
-      },
-      async () => {
-        // Get existing widgets on page
-        const widgetsResp = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
-          sql: `
-            SELECT vs.id, t.tableId, vs.tableRef
-            FROM _grist_Views_section vs
-            JOIN _grist_Tables t ON vs.tableRef = t.id
-            WHERE vs.parentId = ?
-          `,
-          args: [viewId]
-        })
-
-        const widgets = new Map<number, { tableId: string; tableRef: number }>()
-        for (const record of widgetsResp.records) {
-          const fields = extractFields(record)
-          widgets.set(fields.id as number, {
-            tableId: fields.tableId as string,
-            tableRef: fields.tableRef as number
-          })
-        }
-        return widgets
-      }
-    )
-
-    return {
-      action: 'set_layout',
-      success: true,
-      details: {
-        viewId: result.viewId,
-        widgetsAdded: result.widgetsAdded,
-        widgetsRemoved: result.widgetsRemoved
-      }
-    }
-  }
-
-  private async executeGetLayout(
-    docId: string,
-    op: Extract<PageOperation, { action: 'get_layout' }>
-  ): Promise<GenericOperationResult> {
-    // Resolve page
-    const viewId =
-      typeof op.page === 'number' ? op.page : (await this.resolvePageName(docId, op.page)).viewRef
-
-    const result = await executeGetLayout(this.client, docId, viewId)
-
-    return {
-      action: 'get_layout',
-      success: true,
-      details: {
-        layout: result.layout,
-        widgets: result.widgets
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Metadata Operations
-  // ---------------------------------------------------------------------------
-
-  private async executeRenamePage(
-    docId: string,
-    op: Extract<PageOperation, { action: 'rename_page' }>
-  ): Promise<GenericOperationResult> {
-    const page = await this.resolvePageName(docId, op.page)
-
-    // Track rename
-    this.pageNameMap.set(op.page, op.newName)
-    this.pageInfoCache.set(op.newName, page)
-
-    await this.client.post<ApplyResponse>(
-      `/docs/${docId}/apply`,
-      [['UpdateRecord', '_grist_Views', page.viewRef, { name: op.newName }]],
-      {
-        schema: ApplyResponseSchema,
-        context: `Renaming page "${op.page}" to "${op.newName}"`
-      }
-    )
-
-    return {
-      action: 'rename_page',
-      success: true,
-      details: {
-        oldName: op.page,
-        newName: op.newName
-      }
-    }
-  }
-
-  private async executeDeletePage(
-    docId: string,
-    op: Extract<PageOperation, { action: 'delete_page' }>
-  ): Promise<GenericOperationResult> {
-    const page = await this.resolvePageName(docId, op.page)
-    const actions: Array<['BulkRemoveRecord' | 'RemoveTable', string, number[] | string]> = [
-      ['BulkRemoveRecord', '_grist_Pages', [page.id]]
-    ]
-    const deletedTables: string[] = []
-
-    if (op.deleteData) {
-      const tablesResp = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+      const record = first(tableResp.records, `Table ${tableId}`)
+      const fields = extractFields(record)
+      return fields.id as number
+    },
+    async () => {
+      // Get existing widgets on page
+      const widgetsResp = await client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
         sql: `
-          SELECT DISTINCT t.tableId
+          SELECT vs.id, t.tableId, vs.tableRef
           FROM _grist_Views_section vs
           JOIN _grist_Tables t ON vs.tableRef = t.id
           WHERE vs.parentId = ?
         `,
-        args: [page.viewRef]
+        args: [viewId]
       })
 
-      for (const record of tablesResp.records) {
+      const widgets = new Map<number, { tableId: string; tableRef: number }>()
+      for (const record of widgetsResp.records) {
         const fields = extractFields(record)
-        const tableId = fields.tableId as string
-        actions.push(['RemoveTable', tableId, tableId])
-        deletedTables.push(tableId)
+        widgets.set(fields.id as number, {
+          tableId: fields.tableId as string,
+          tableRef: fields.tableRef as number
+        })
       }
+      return widgets
     }
+  )
 
-    await this.client.post<ApplyResponse>(`/docs/${docId}/apply`, actions, {
+  return {
+    action: 'set_layout',
+    success: true,
+    details: {
+      viewId: result.viewId,
+      widgetsAdded: result.widgetsAdded,
+      widgetsRemoved: result.widgetsRemoved
+    }
+  }
+}
+
+async function executeGetLayoutOp(
+  ctx: ToolContext,
+  docId: string,
+  op: Extract<PageOperation, { action: 'get_layout' }>
+): Promise<GenericOperationResult> {
+  const { client } = ctx
+
+  // Resolve page
+  const viewId =
+    typeof op.page === 'number' ? op.page : (await resolvePageName(client, docId, op.page)).viewRef
+
+  const result = await executeGetLayout(client, docId, viewId)
+
+  return {
+    action: 'get_layout',
+    success: true,
+    details: {
+      layout: result.layout,
+      widgets: result.widgets
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Metadata Operations
+// ---------------------------------------------------------------------------
+
+async function executeRenamePage(
+  ctx: ToolContext,
+  docId: string,
+  op: Extract<PageOperation, { action: 'rename_page' }>
+): Promise<GenericOperationResult> {
+  const { client } = ctx
+  const page = await resolvePageName(client, docId, op.page)
+
+  // Track rename in batch state
+  batchPageNameMap.set(op.page, op.newName)
+  batchPageInfoCache.set(op.newName, page)
+
+  await client.post<ApplyResponse>(
+    `/docs/${docId}/apply`,
+    [['UpdateRecord', '_grist_Views', page.viewRef, { name: op.newName }]],
+    {
       schema: ApplyResponseSchema,
-      context: `Deleting page "${op.page}"`
-    })
+      context: `Renaming page "${op.page}" to "${op.newName}"`
+    }
+  )
 
-    return {
-      action: 'delete_page',
-      success: true,
-      details: {
-        pageName: op.page,
-        pageId: page.id,
-        ...(deletedTables.length > 0 && { deleted_tables: deletedTables })
-      }
+  return {
+    action: 'rename_page',
+    success: true,
+    details: {
+      oldName: op.page,
+      newName: op.newName
     }
   }
+}
 
-  private async executeReorderPages(
-    docId: string,
-    op: Extract<PageOperation, { action: 'reorder_pages' }>
-  ): Promise<GenericOperationResult> {
-    const result = await reorderPagesOp(this.context, docId, op.order)
-    return {
-      action: 'reorder_pages',
-      success: true,
-      verified: result.verified,
-      details: {
-        new_order: result.newOrder,
-        pagesReordered: result.count
-      }
-    }
-  }
+async function executeDeletePage(
+  ctx: ToolContext,
+  docId: string,
+  op: Extract<PageOperation, { action: 'delete_page' }>
+): Promise<GenericOperationResult> {
+  const { client } = ctx
+  const page = await resolvePageName(client, docId, op.page)
+  const actions: Array<['BulkRemoveRecord' | 'RemoveTable', string, number[] | string]> = [
+    ['BulkRemoveRecord', '_grist_Pages', [page.id]]
+  ]
+  const deletedTables: string[] = []
 
-  // ---------------------------------------------------------------------------
-  // Config Operations
-  // ---------------------------------------------------------------------------
-
-  private async executeConfigureWidget(
-    docId: string,
-    op: Extract<PageOperation, { action: 'configure_widget' }>
-  ): Promise<GenericOperationResult> {
-    const page = await this.resolvePageName(docId, op.page)
-    const sectionId = await resolveWidgetNameToSectionId(
-      this.client,
-      docId,
-      page.viewRef,
-      op.widget
-    )
-
-    const service = new ViewSectionService(this.client)
-    const existing = await service.getViewSection(docId, sectionId as SectionId)
-    const updates: Record<string, unknown> = {}
-
-    if (op.title !== undefined) {
-      updates.title = op.title
-    }
-
-    if (op.sortBy !== undefined) {
-      // Get table for column resolution
-      const metadata = await fetchWidgetTableMetadata(this.client, docId, [sectionId])
-      const tableMetadata = metadata.get(sectionId)
-      if (!tableMetadata) {
-        throw new Error(`Could not find table for widget "${op.widget}"`)
-      }
-
-      const resolvedSortSpec = await this.resolveSortSpec(docId, tableMetadata.tableId, op.sortBy)
-      updates.sortColRefs = serializeSortSpec(resolvedSortSpec)
-    }
-
-    if (Object.keys(updates).length > 0) {
-      const updatePayload = buildViewSectionUpdate(existing, updates)
-      await this.client.post<ApplyResponse>(
-        `/docs/${docId}/apply`,
-        [['UpdateRecord', '_grist_Views_section', sectionId, updatePayload]],
-        {
-          schema: ApplyResponseSchema,
-          context: `Configuring widget "${op.widget}"`
-        }
-      )
-    }
-
-    return {
-      action: 'configure_widget',
-      success: true,
-      details: {
-        page: op.page,
-        widget: op.widget,
-        updates: Object.keys(updates)
-      }
-    }
-  }
-
-  // ---------------------------------------------------------------------------
-  // Link Operations (Architecture B)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Execute link_widgets operation.
-   *
-   * Architecture B: All widget references use real sectionIds from previous responses.
-   * Validates that widgets exist on the specified page before applying links.
-   */
-  private async executeLinkWidgets(
-    docId: string,
-    op: Extract<PageOperation, { action: 'link_widgets' }>
-  ): Promise<GenericOperationResult> {
-    const { viewId, links } = op
-
-    // Phase 1: Validate all widgets exist on the page
-    const widgetsOnPage = await this.fetchWidgetsOnPage(docId, viewId)
-    const widgetMap = new Map(widgetsOnPage.map((w) => [w.sectionId, w]))
-
-    // Collect all referenced sectionIds
-    const referencedIds = new Set<number>()
-    for (const linkSpec of links) {
-      referencedIds.add(linkSpec.source)
-      referencedIds.add(linkSpec.target)
-    }
-
-    // Validate all widgets exist on this page
-    for (const sectionId of referencedIds) {
-      if (!widgetMap.has(sectionId)) {
-        throw new Error(
-          `Widget ${sectionId} not found on page ${viewId}. ` +
-            `Available widgets: ${[...widgetMap.keys()].join(', ')}`
-        )
-      }
-    }
-
-    // Phase 2: Set up registry with all widgets
-    const registry = new WidgetRegistry()
-    for (const w of widgetsOnPage) {
-      registry.register(w.sectionId)
-    }
-
-    // Phase 3: Resolve and build link actions
-    const resolvedLinks: Array<{ sectionId: number; resolved: ResolvedLink }> = []
-
-    // Helper to get widget info
-    const getWidgetInfo = async (sectionId: number): Promise<LinkWidgetInfo> => {
-      const info = widgetMap.get(sectionId)
-      if (!info) {
-        throw new Error(`Widget ${sectionId} not found on page`)
-      }
-      const summaryCheck = await isSummaryTable(this.client, docId, info.tableRef)
-      return {
-        sectionId: info.sectionId,
-        tableId: info.tableId,
-        tableRef: info.tableRef,
-        widgetType: info.widgetType,
-        isSummaryTable: summaryCheck
-      }
-    }
-
-    for (const linkSpec of links) {
-      const targetInfo = widgetMap.get(linkSpec.target)
-      if (!targetInfo) {
-        throw new Error(`Target widget ${linkSpec.target} not found`)
-      }
-
-      // Update link source_widget to use the actual source sectionId
-      const linkWithSource = {
-        ...linkSpec.link,
-        source_widget: linkSpec.source as WidgetId
-      }
-
-      const resolved = await resolveLink(
-        this.client,
-        docId,
-        linkSpec.target,
-        targetInfo.tableId,
-        linkWithSource,
-        registry,
-        getWidgetInfo
-      )
-      resolvedLinks.push({ sectionId: linkSpec.target, resolved })
-    }
-
-    // Phase 4: Apply link actions
-    const actions = buildLinkActions(resolvedLinks)
-    if (actions.length > 0) {
-      await this.client.post<ApplyResponse>(`/docs/${docId}/apply`, actions, {
-        schema: ApplyResponseSchema,
-        context: `Configuring ${links.length} widget link(s)`
-      })
-    }
-
-    return {
-      action: 'link_widgets',
-      success: true,
-      details: {
-        viewId,
-        linksConfigured: links.length,
-        widgets: links.map((l) => ({
-          source: l.source,
-          target: l.target,
-          type: l.link.type
-        }))
-      }
-    }
-  }
-
-  /**
-   * Fetch all widgets on a page with metadata needed for link resolution.
-   */
-  private async fetchWidgetsOnPage(
-    docId: string,
-    viewId: number
-  ): Promise<
-    Array<{
-      sectionId: number
-      tableId: string
-      tableRef: number
-      widgetType: string
-    }>
-  > {
-    const response = await this.client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+  if (op.deleteData) {
+    const tablesResp = await client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
       sql: `
-        SELECT
-          vs.id as sectionId,
-          t.tableId,
-          vs.tableRef,
-          vs.parentKey as widgetType
+        SELECT DISTINCT t.tableId
         FROM _grist_Views_section vs
         JOIN _grist_Tables t ON vs.tableRef = t.id
         WHERE vs.parentId = ?
       `,
-      args: [viewId]
+      args: [page.viewRef]
     })
 
-    return response.records.map((record) => {
-      const f = extractFields(record)
-      return {
-        sectionId: f.sectionId as number,
-        tableId: f.tableId as string,
-        tableRef: f.tableRef as number,
-        widgetType: f.widgetType as string
-      }
-    })
+    for (const record of tablesResp.records) {
+      const fields = extractFields(record)
+      const tableId = fields.tableId as string
+      actions.push(['RemoveTable', tableId, tableId])
+      deletedTables.push(tableId)
+    }
   }
 
-  // ---------------------------------------------------------------------------
-  // Helper Methods
-  // ---------------------------------------------------------------------------
+  await client.post<ApplyResponse>(`/docs/${docId}/apply`, actions, {
+    schema: ApplyResponseSchema,
+    context: `Deleting page "${op.page}"`
+  })
 
-  private async resolvePageName(
-    docId: string,
-    pageName: string
-  ): Promise<{ id: number; viewRef: number; pagePos: number }> {
-    // Check for in-flight rename
-    const newNameFromRename = this.pageNameMap.get(pageName)
-    if (newNameFromRename) {
-      throw new Error(
-        `Page "${pageName}" was renamed to "${newNameFromRename}" in an earlier operation. ` +
-          `Use "${newNameFromRename}" instead.`
-      )
+  return {
+    action: 'delete_page',
+    success: true,
+    details: {
+      pageName: op.page,
+      pageId: page.id,
+      ...(deletedTables.length > 0 && { deleted_tables: deletedTables })
     }
-
-    // Check cache
-    const cached = this.pageInfoCache.get(pageName)
-    if (cached) {
-      return cached
-    }
-
-    // Fetch from database
-    const page = await getPageByName(this.client, docId, pageName)
-    this.pageInfoCache.set(pageName, page)
-    return page
-  }
-
-  private async resolveSortSpec(
-    docId: string,
-    tableId: string,
-    sortSpec: Array<number | string>
-  ): Promise<Array<number | string>> {
-    const resolved: Array<number | string> = []
-
-    for (const item of sortSpec) {
-      if (typeof item === 'number') {
-        resolved.push(item)
-      } else {
-        const isDescending = item.startsWith('-')
-        const withoutPrefix = isDescending ? item.slice(1) : item
-        const colonIndex = withoutPrefix.indexOf(':')
-        const columnPart = colonIndex >= 0 ? withoutPrefix.slice(0, colonIndex) : withoutPrefix
-        const flagsPart = colonIndex >= 0 ? withoutPrefix.slice(colonIndex) : ''
-
-        const numericValue = Number(columnPart)
-        if (!Number.isNaN(numericValue) && columnPart.trim() !== '') {
-          const colId = isDescending ? -numericValue : numericValue
-          resolved.push(flagsPart ? `${colId}${flagsPart}` : colId)
-        } else {
-          const colRef = await resolveColumnNameToColRef(this.client, docId, tableId, columnPart)
-          const signedColRef = isDescending ? -colRef : colRef
-          resolved.push(flagsPart ? `${signedColRef}${flagsPart}` : signedColRef)
-        }
-      }
-    }
-
-    return resolved
   }
 }
 
-export async function managePages(context: ToolContext, params: ManagePagesInput) {
-  const tool = new ManagePagesTool(context)
-  return tool.execute(params)
+async function executeReorderPagesOp(
+  ctx: ToolContext,
+  docId: string,
+  op: Extract<PageOperation, { action: 'reorder_pages' }>
+): Promise<GenericOperationResult> {
+  const result = await reorderPagesOp(ctx, docId, op.order)
+  return {
+    action: 'reorder_pages',
+    success: true,
+    verified: result.verified,
+    details: {
+      new_order: result.newOrder,
+      pagesReordered: result.count
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Config Operations
+// ---------------------------------------------------------------------------
+
+async function executeConfigureWidget(
+  ctx: ToolContext,
+  docId: string,
+  op: Extract<PageOperation, { action: 'configure_widget' }>
+): Promise<GenericOperationResult> {
+  const { client } = ctx
+  const page = await resolvePageName(client, docId, op.page)
+  const sectionId = await resolveWidgetNameToSectionId(client, docId, page.viewRef, op.widget)
+
+  const service = new ViewSectionService(client)
+  const existing = await service.getViewSection(docId, sectionId as SectionId)
+  const updates: Record<string, unknown> = {}
+
+  if (op.title !== undefined) {
+    updates.title = op.title
+  }
+
+  if (op.sortBy !== undefined) {
+    // Get table for column resolution
+    const metadata = await fetchWidgetTableMetadata(client, docId, [sectionId])
+    const tableMetadata = metadata.get(sectionId)
+    if (!tableMetadata) {
+      throw new Error(`Could not find table for widget "${op.widget}"`)
+    }
+
+    const resolvedSortSpec = await resolveSortSpec(client, docId, tableMetadata.tableId, op.sortBy)
+    updates.sortColRefs = serializeSortSpec(resolvedSortSpec)
+  }
+
+  if (Object.keys(updates).length > 0) {
+    const updatePayload = buildViewSectionUpdate(existing, updates)
+    await client.post<ApplyResponse>(
+      `/docs/${docId}/apply`,
+      [['UpdateRecord', '_grist_Views_section', sectionId, updatePayload]],
+      {
+        schema: ApplyResponseSchema,
+        context: `Configuring widget "${op.widget}"`
+      }
+    )
+  }
+
+  return {
+    action: 'configure_widget',
+    success: true,
+    details: {
+      page: op.page,
+      widget: op.widget,
+      updates: Object.keys(updates)
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Link Operations (Architecture B)
+// ---------------------------------------------------------------------------
+
+/**
+ * Execute link_widgets operation.
+ *
+ * Architecture B: All widget references use real sectionIds from previous responses.
+ * Validates that widgets exist on the specified page before applying links.
+ */
+async function executeLinkWidgets(
+  ctx: ToolContext,
+  docId: string,
+  op: Extract<PageOperation, { action: 'link_widgets' }>
+): Promise<GenericOperationResult> {
+  const { client } = ctx
+  const { viewId, links } = op
+
+  // Phase 1: Validate all widgets exist on the page
+  const widgetsOnPage = await fetchWidgetsOnPage(client, docId, viewId)
+  const widgetMap = new Map(widgetsOnPage.map((w) => [w.sectionId, w]))
+
+  // Collect all referenced sectionIds
+  const referencedIds = new Set<number>()
+  for (const linkSpec of links) {
+    referencedIds.add(linkSpec.source)
+    referencedIds.add(linkSpec.target)
+  }
+
+  // Validate all widgets exist on this page
+  for (const sectionId of referencedIds) {
+    if (!widgetMap.has(sectionId)) {
+      throw new Error(
+        `Widget ${sectionId} not found on page ${viewId}. ` +
+          `Available widgets: ${[...widgetMap.keys()].join(', ')}`
+      )
+    }
+  }
+
+  // Phase 2: Set up registry with all widgets
+  const registry = new WidgetRegistry()
+  for (const w of widgetsOnPage) {
+    registry.register(w.sectionId)
+  }
+
+  // Phase 3: Resolve and build link actions
+  const resolvedLinks: Array<{ sectionId: number; resolved: ResolvedLink }> = []
+
+  // Helper to get widget info
+  const getWidgetInfo = async (sectionId: number): Promise<LinkWidgetInfo> => {
+    const info = widgetMap.get(sectionId)
+    if (!info) {
+      throw new Error(`Widget ${sectionId} not found on page`)
+    }
+    const summaryCheck = await isSummaryTable(client, docId, info.tableRef)
+    return {
+      sectionId: info.sectionId,
+      tableId: info.tableId,
+      tableRef: info.tableRef,
+      widgetType: info.widgetType,
+      isSummaryTable: summaryCheck
+    }
+  }
+
+  for (const linkSpec of links) {
+    const targetInfo = widgetMap.get(linkSpec.target)
+    if (!targetInfo) {
+      throw new Error(`Target widget ${linkSpec.target} not found`)
+    }
+
+    // Update link source_widget to use the actual source sectionId
+    const linkWithSource = {
+      ...linkSpec.link,
+      source_widget: linkSpec.source as WidgetId
+    }
+
+    const resolved = await resolveLink(
+      client,
+      docId,
+      linkSpec.target,
+      targetInfo.tableId,
+      linkWithSource,
+      registry,
+      getWidgetInfo
+    )
+    resolvedLinks.push({ sectionId: linkSpec.target, resolved })
+  }
+
+  // Phase 4: Apply link actions
+  const actions = buildLinkActions(resolvedLinks)
+  if (actions.length > 0) {
+    await client.post<ApplyResponse>(`/docs/${docId}/apply`, actions, {
+      schema: ApplyResponseSchema,
+      context: `Configuring ${links.length} widget link(s)`
+    })
+  }
+
+  return {
+    action: 'link_widgets',
+    success: true,
+    details: {
+      viewId,
+      linksConfigured: links.length,
+      widgets: links.map((l) => ({
+        source: l.source,
+        target: l.target,
+        type: l.link.type
+      }))
+    }
+  }
+}
+
+/**
+ * Fetch all widgets on a page with metadata needed for link resolution.
+ */
+async function fetchWidgetsOnPage(
+  client: ToolContext['client'],
+  docId: string,
+  viewId: number
+): Promise<
+  Array<{
+    sectionId: number
+    tableId: string
+    tableRef: number
+    widgetType: string
+  }>
+> {
+  const response = await client.post<SQLQueryResponse>(`/docs/${docId}/sql`, {
+    sql: `
+      SELECT
+        vs.id as sectionId,
+        t.tableId,
+        vs.tableRef,
+        vs.parentKey as widgetType
+      FROM _grist_Views_section vs
+      JOIN _grist_Tables t ON vs.tableRef = t.id
+      WHERE vs.parentId = ?
+    `,
+    args: [viewId]
+  })
+
+  return response.records.map((record) => {
+    const f = extractFields(record)
+    return {
+      sectionId: f.sectionId as number,
+      tableId: f.tableId as string,
+      tableRef: f.tableRef as number,
+      widgetType: f.widgetType as string
+    }
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Helper Functions
+// ---------------------------------------------------------------------------
+
+async function resolvePageName(
+  client: ToolContext['client'],
+  docId: string,
+  pageName: string
+): Promise<{ id: number; viewRef: number; pagePos: number }> {
+  // Check for in-flight rename
+  const newNameFromRename = batchPageNameMap.get(pageName)
+  if (newNameFromRename) {
+    throw new Error(
+      `Page "${pageName}" was renamed to "${newNameFromRename}" in an earlier operation. ` +
+        `Use "${newNameFromRename}" instead.`
+    )
+  }
+
+  // Check cache
+  const cached = batchPageInfoCache.get(pageName)
+  if (cached) {
+    return cached
+  }
+
+  // Fetch from database
+  const page = await getPageByName(client, docId, pageName)
+  batchPageInfoCache.set(pageName, page)
+  return page
+}
+
+async function resolveSortSpec(
+  client: ToolContext['client'],
+  docId: string,
+  tableId: string,
+  sortSpec: Array<number | string>
+): Promise<Array<number | string>> {
+  const resolved: Array<number | string> = []
+
+  for (const item of sortSpec) {
+    if (typeof item === 'number') {
+      resolved.push(item)
+    } else {
+      const isDescending = item.startsWith('-')
+      const withoutPrefix = isDescending ? item.slice(1) : item
+      const colonIndex = withoutPrefix.indexOf(':')
+      const columnPart = colonIndex >= 0 ? withoutPrefix.slice(0, colonIndex) : withoutPrefix
+      const flagsPart = colonIndex >= 0 ? withoutPrefix.slice(colonIndex) : ''
+
+      const numericValue = Number(columnPart)
+      if (!Number.isNaN(numericValue) && columnPart.trim() !== '') {
+        const colId = isDescending ? -numericValue : numericValue
+        resolved.push(flagsPart ? `${colId}${flagsPart}` : colId)
+      } else {
+        const colRef = await resolveColumnNameToColRef(client, docId, tableId, columnPart)
+        const signedColRef = isDescending ? -colRef : colRef
+        resolved.push(flagsPart ? `${signedColRef}${flagsPart}` : signedColRef)
+      }
+    }
+  }
+
+  return resolved
 }
 
 // =============================================================================
@@ -845,10 +735,15 @@ export async function managePages(context: ToolContext, params: ManagePagesInput
 export const ManagePagesOutputSchema = createBatchOutputSchema(GenericOperationResultSchema)
 
 // =============================================================================
-// Tool Definition
+// Tool Definition (Factory Pattern)
 // =============================================================================
 
-export const MANAGE_PAGES_TOOL: ToolDefinition = {
+export const MANAGE_PAGES_TOOL = defineBatchTool<
+  typeof ManagePagesSchema,
+  PageOperation,
+  GenericOperationResult,
+  GenericBatchResponse
+>({
   name: 'grist_manage_pages',
   title: 'Manage Pages',
   description:
@@ -864,7 +759,80 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
     idempotentHint: false,
     openWorldHint: true
   },
-  handler: managePages,
+
+  getOperations: (params) => params.operations,
+  getDocId: (params) => params.docId,
+  getActionName: (operation) => operation.action,
+
+  async beforeExecute() {
+    // Reset batch state for page name tracking across operations
+    resetBatchState()
+  },
+
+  async executeOperation(ctx, docId, operation, _index) {
+    return executeSingleOperation(ctx, docId, operation)
+  },
+
+  buildSuccessResponse(docId, results, params) {
+    const operationTypes = new Set(results.map((r) => r.action))
+    const typeList = Array.from(operationTypes).join(', ')
+
+    return {
+      success: true,
+      docId,
+      operationsCompleted: params.operations.length,
+      results,
+      message: `Successfully completed ${params.operations.length} page operation(s): ${typeList}`
+    }
+  },
+
+  buildFailureResponse(docId, failedIndex, failedOperation, completedResults, errorMessage) {
+    return {
+      success: false,
+      docId,
+      operationsCompleted: failedIndex,
+      results: completedResults,
+      message: `Operation ${failedIndex + 1} (${failedOperation.action}) failed: ${errorMessage}`,
+      partialFailure: {
+        operationIndex: failedIndex,
+        action: failedOperation.action,
+        error: errorMessage,
+        completedOperations: failedIndex
+      }
+    }
+  },
+
+  async afterExecute(result, params, _ctx) {
+    const createResults = result.results.filter((r) => r.action === 'create_page' && r.success)
+    // Check if any create_page results have multiple widgets (sectionIds array)
+    const linkablePages = createResults.filter((r) => {
+      const details = r.details as { sectionIds?: number[]; viewId?: number } | undefined
+      return details?.sectionIds && details.sectionIds.length > 1
+    })
+
+    const builder = nextSteps()
+
+    if (result.partialFailure) {
+      builder
+        .add(`Fix error: ${result.partialFailure.error}`)
+        .add(`Resume from operation index ${result.partialFailure.operationIndex}`)
+    } else if (result.success) {
+      const firstLinkable = linkablePages[0]
+      if (firstLinkable) {
+        const details = firstLinkable.details as { sectionIds: number[]; viewId: number }
+        builder.add(
+          `Use link_widgets with viewId=${details.viewId} and sectionIds ${JSON.stringify(details.sectionIds)} to connect widgets`
+        )
+      }
+      builder.addIf(
+        createResults.length > 0,
+        `Use grist_get_records with docId="${params.docId}" to populate newly created pages`
+      )
+    }
+
+    return { ...result, nextSteps: builder.build() }
+  },
+
   docs: {
     overview:
       'Create pages with declarative layouts specifying widget arrangement (cols/rows splits). ' +
@@ -1038,4 +1006,11 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
       }
     ]
   }
+})
+
+export async function managePages(context: ToolContext, params: ManagePagesInput) {
+  return MANAGE_PAGES_TOOL.handler(context, params)
 }
+
+// Export tools array for registry
+export const MANAGE_PAGES_TOOLS: ReadonlyArray<ToolDefinition> = [MANAGE_PAGES_TOOL] as const

@@ -75,83 +75,82 @@ function formatWorkspace(ws: WorkspaceInfo, detailLevel: string): FormattedWorks
   return base
 }
 
-export const GET_WORKSPACES_TOOL = definePaginatedTool<typeof GetWorkspacesSchema, FormattedWorkspace>(
-  {
-    name: 'grist_get_workspaces',
-    title: 'Get Workspaces',
-    description: 'List accessible workspaces',
-    purpose: 'List and filter workspaces',
-    category: 'discovery',
-    inputSchema: GetWorkspacesSchema,
-    outputSchema: GetWorkspacesOutputSchema,
-    annotations: READ_ONLY_ANNOTATIONS,
-    core: true,
+export const GET_WORKSPACES_TOOL = definePaginatedTool<
+  typeof GetWorkspacesSchema,
+  FormattedWorkspace
+>({
+  name: 'grist_get_workspaces',
+  title: 'Get Workspaces',
+  description: 'List accessible workspaces',
+  purpose: 'List and filter workspaces',
+  category: 'discovery',
+  inputSchema: GetWorkspacesSchema,
+  outputSchema: GetWorkspacesOutputSchema,
+  annotations: READ_ONLY_ANNOTATIONS,
+  core: true,
 
-    async fetchItems(ctx, params) {
-      const maxWorkspaces = 1000
+  async fetchItems(ctx, params) {
+    const maxWorkspaces = 1000
 
-      const orgs = await ctx.client.get<Array<{ id: number; name: string; domain: string }>>('/orgs')
+    const orgs = await ctx.client.get<Array<{ id: number; name: string; domain: string }>>('/orgs')
 
-      const allWorkspaces: WorkspaceInfo[] = []
-      for (const org of orgs) {
-        if (allWorkspaces.length >= maxWorkspaces) {
-          console.error(
-            `[GetWorkspaces] Reached max workspaces during fetch: ${allWorkspaces.length}/${maxWorkspaces}`
-          )
-          break
-        }
-
-        const workspacesResponse = await ctx.client.get<WorkspaceInfo[]>(
-          `/orgs/${org.id}/workspaces`
+    const allWorkspaces: WorkspaceInfo[] = []
+    for (const org of orgs) {
+      if (allWorkspaces.length >= maxWorkspaces) {
+        console.error(
+          `[GetWorkspaces] Reached max workspaces during fetch: ${allWorkspaces.length}/${maxWorkspaces}`
         )
-
-        const wsToAdd = workspacesResponse.slice(0, maxWorkspaces - allWorkspaces.length)
-        allWorkspaces.push(...wsToAdd)
+        break
       }
 
-      return allWorkspaces.map((ws) => formatWorkspace(ws, params.detail_level))
-    },
+      const workspacesResponse = await ctx.client.get<WorkspaceInfo[]>(`/orgs/${org.id}/workspaces`)
 
-    filterItems(items, params) {
-      if (!params.name_contains) {
-        return items
-      }
-
-      const searchTerm = params.name_contains.toLowerCase()
-      return items.filter((ws) => ws.name.toLowerCase().includes(searchTerm))
-    },
-
-    async afterExecute(result, _params, _ctx) {
-      const firstWs = result.items[0]
-
-      return {
-        ...result,
-        nextSteps: nextSteps()
-          .addIf(
-            !!firstWs,
-            `Use grist_get_documents with workspaceId=${firstWs?.id} to list documents in "${firstWs?.name}"`
-          )
-          .addPaginationHint(result.pagination, 'workspaces')
-          .build()
-      }
-    },
-
-    docs: {
-      overview:
-        'List workspaces with filtering. Use browse mode ({limit: 20}) to see all, or search mode ({name_contains: "Sales"}) to filter. Detail levels: summary (name, ID, access, doc count ~50 tokens) or detailed (+ timestamps ~150 tokens).',
-      examples: [
-        { desc: 'List all workspaces', input: { limit: 20, detail_level: 'summary' } },
-        { desc: 'Search by name', input: { name_contains: 'Sales', limit: 5 } }
-      ],
-      errors: [
-        {
-          error: 'No workspaces found matching "X"',
-          solution: 'Remove name_contains to see all accessible workspaces'
-        }
-      ]
+      const wsToAdd = workspacesResponse.slice(0, maxWorkspaces - allWorkspaces.length)
+      allWorkspaces.push(...wsToAdd)
     }
+
+    return allWorkspaces.map((ws) => formatWorkspace(ws, params.detail_level))
+  },
+
+  filterItems(items, params) {
+    if (!params.name_contains) {
+      return items
+    }
+
+    const searchTerm = params.name_contains.toLowerCase()
+    return items.filter((ws) => ws.name.toLowerCase().includes(searchTerm))
+  },
+
+  async afterExecute(result, _params, _ctx) {
+    const firstWs = result.items[0]
+
+    return {
+      ...result,
+      nextSteps: nextSteps()
+        .addIf(
+          !!firstWs,
+          `Use grist_get_documents with workspaceId=${firstWs?.id} to list documents in "${firstWs?.name}"`
+        )
+        .addPaginationHint(result.pagination, 'workspaces')
+        .build()
+    }
+  },
+
+  docs: {
+    overview:
+      'List workspaces with filtering. Use browse mode ({limit: 20}) to see all, or search mode ({name_contains: "Sales"}) to filter. Detail levels: summary (name, ID, access, doc count ~50 tokens) or detailed (+ timestamps ~150 tokens).',
+    examples: [
+      { desc: 'List all workspaces', input: { limit: 20, detail_level: 'summary' } },
+      { desc: 'Search by name', input: { name_contains: 'Sales', limit: 5 } }
+    ],
+    errors: [
+      {
+        error: 'No workspaces found matching "X"',
+        solution: 'Remove name_contains to see all accessible workspaces'
+      }
+    ]
   }
-)
+})
 
 export async function getWorkspaces(context: ToolContext, params: GetWorkspacesInput) {
   return GET_WORKSPACES_TOOL.handler(context, params)
@@ -193,7 +192,11 @@ interface FormattedDocument {
   public?: boolean
 }
 
-function formatDocument(doc: DocumentInfo, detailLevel: string, baseUrl: string): FormattedDocument {
+function formatDocument(
+  doc: DocumentInfo,
+  detailLevel: string,
+  baseUrl: string
+): FormattedDocument {
   if (detailLevel === 'summary') {
     return {
       docId: doc.id,
@@ -251,78 +254,80 @@ async function fetchAllDocuments(
   return documents
 }
 
-export const GET_DOCUMENTS_TOOL = definePaginatedTool<typeof GetDocumentsSchema, FormattedDocument>({
-  name: 'grist_get_documents',
-  title: 'Get Documents',
-  description: 'Find documents by ID, name, or workspace',
-  purpose: 'Find documents by ID, name, or workspace',
-  category: 'discovery',
-  inputSchema: GetDocumentsSchema,
-  outputSchema: GetDocumentsOutputSchema,
-  annotations: READ_ONLY_ANNOTATIONS,
-  core: true,
+export const GET_DOCUMENTS_TOOL = definePaginatedTool<typeof GetDocumentsSchema, FormattedDocument>(
+  {
+    name: 'grist_get_documents',
+    title: 'Get Documents',
+    description: 'Find documents by ID, name, or workspace',
+    purpose: 'Find documents by ID, name, or workspace',
+    category: 'discovery',
+    inputSchema: GetDocumentsSchema,
+    outputSchema: GetDocumentsOutputSchema,
+    annotations: READ_ONLY_ANNOTATIONS,
+    core: true,
 
-  async fetchItems(ctx, params) {
-    const baseUrl = ctx.client.getBaseUrl()
+    async fetchItems(ctx, params) {
+      const baseUrl = ctx.client.getBaseUrl()
 
-    if (params.docId) {
-      const doc = await ctx.client.get<DocumentInfo>(`/docs/${params.docId}`)
-      return [formatDocument(doc, params.detail_level, baseUrl)]
-    }
+      if (params.docId) {
+        const doc = await ctx.client.get<DocumentInfo>(`/docs/${params.docId}`)
+        return [formatDocument(doc, params.detail_level, baseUrl)]
+      }
 
-    if (params.workspaceId) {
-      const response = await ctx.client.get<{ docs: DocumentInfo[] }>(
-        `/workspaces/${params.workspaceId}`
-      )
-      const docs = response.docs || []
-      return docs.map((doc) => formatDocument(doc, params.detail_level, baseUrl))
-    }
-
-    return await fetchAllDocuments(ctx, params.detail_level)
-  },
-
-  filterItems(items, params) {
-    if (!params.name_contains) {
-      return items
-    }
-
-    const searchTerm = params.name_contains.toLowerCase()
-    return items.filter((doc) => doc.name.toLowerCase().includes(searchTerm))
-  },
-
-  async afterExecute(result, params, _ctx) {
-    const firstDoc = result.items[0]
-
-    return {
-      ...result,
-      nextSteps: nextSteps()
-        .addIf(
-          !!firstDoc,
-          `Use grist_get_tables with docId="${firstDoc?.docId}" to see table schema`
+      if (params.workspaceId) {
+        const response = await ctx.client.get<{ docs: DocumentInfo[] }>(
+          `/workspaces/${params.workspaceId}`
         )
-        .addIf(
-          !!params.docId && result.items.length === 1,
-          'Use grist_get_records to query data from tables'
-        )
-        .addPaginationHint(result.pagination, 'documents')
-        .build()
-    }
-  },
+        const docs = response.docs || []
+        return docs.map((doc) => formatDocument(doc, params.detail_level, baseUrl))
+      }
 
-  docs: {
-    overview:
-      'Find documents by ID (fastest), name search, workspace filter, or browse all. Detail levels: summary (name, id, workspace, access ~50 tokens/doc) or detailed (+ permissions, timestamps, urls ~150 tokens/doc).',
-    examples: [
-      { desc: 'Get by ID', input: { docId: 'qBbArddFDSrKd2jpv3uZTj' } },
-      { desc: 'Search by name', input: { name_contains: 'CRM', limit: 5 } },
-      { desc: 'Filter by workspace', input: { workspaceId: 3, limit: 10 } }
-    ],
-    errors: [
-      { error: 'Document not found', solution: 'Use grist_get_documents without filters' },
-      { error: 'Workspace not found', solution: 'Use grist_get_workspaces to find IDs' }
-    ]
+      return await fetchAllDocuments(ctx, params.detail_level)
+    },
+
+    filterItems(items, params) {
+      if (!params.name_contains) {
+        return items
+      }
+
+      const searchTerm = params.name_contains.toLowerCase()
+      return items.filter((doc) => doc.name.toLowerCase().includes(searchTerm))
+    },
+
+    async afterExecute(result, params, _ctx) {
+      const firstDoc = result.items[0]
+
+      return {
+        ...result,
+        nextSteps: nextSteps()
+          .addIf(
+            !!firstDoc,
+            `Use grist_get_tables with docId="${firstDoc?.docId}" to see table schema`
+          )
+          .addIf(
+            !!params.docId && result.items.length === 1,
+            'Use grist_get_records to query data from tables'
+          )
+          .addPaginationHint(result.pagination, 'documents')
+          .build()
+      }
+    },
+
+    docs: {
+      overview:
+        'Find documents by ID (fastest), name search, workspace filter, or browse all. Detail levels: summary (name, id, workspace, access ~50 tokens/doc) or detailed (+ permissions, timestamps, urls ~150 tokens/doc).',
+      examples: [
+        { desc: 'Get by ID', input: { docId: 'qBbArddFDSrKd2jpv3uZTj' } },
+        { desc: 'Search by name', input: { name_contains: 'CRM', limit: 5 } },
+        { desc: 'Filter by workspace', input: { workspaceId: 3, limit: 10 } }
+      ],
+      errors: [
+        { error: 'Document not found', solution: 'Use grist_get_documents without filters' },
+        { error: 'Workspace not found', solution: 'Use grist_get_workspaces to find IDs' }
+      ]
+    }
   }
-})
+)
 
 export async function getDocuments(context: ToolContext, params: GetDocumentsInput) {
   return GET_DOCUMENTS_TOOL.handler(context, params)

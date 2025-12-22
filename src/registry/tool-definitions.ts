@@ -24,12 +24,12 @@ import { MANAGE_RECORDS_TOOL } from '../tools/manage-records.js'
 import { MANAGE_SCHEMA_TOOL } from '../tools/manage-schema.js'
 import { READING_TOOLS } from '../tools/reading.js'
 import { WEBHOOK_TOOLS } from '../tools/webhooks.js'
-import {
-  type ToolAnnotations,
-  type ToolCategory,
-  type ToolContext,
-  type ToolDefinition,
-  type ToolHandler
+import type {
+  ToolAnnotations,
+  ToolCategory,
+  ToolContext,
+  ToolDefinition,
+  ToolHandler
 } from './types.js'
 
 // Re-export types for consumers

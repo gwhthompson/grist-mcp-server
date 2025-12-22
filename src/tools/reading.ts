@@ -330,140 +330,142 @@ function flattenRecords(
   })
 }
 
-export const GET_RECORDS_TOOL = defineStandardTool<typeof GetRecordsSchema, GetRecordsResponseData>({
-  name: 'grist_get_records',
-  title: 'Get Grist Records',
-  description: 'Fetch records with optional filters',
-  purpose: 'Fetch records with filters',
-  category: 'reading',
-  inputSchema: GetRecordsSchema,
-  outputSchema: GetRecordsOutputSchema,
-  annotations: READ_ONLY_ANNOTATIONS,
-  core: true,
+export const GET_RECORDS_TOOL = defineStandardTool<typeof GetRecordsSchema, GetRecordsResponseData>(
+  {
+    name: 'grist_get_records',
+    title: 'Get Grist Records',
+    description: 'Fetch records with optional filters',
+    purpose: 'Fetch records with filters',
+    category: 'reading',
+    inputSchema: GetRecordsSchema,
+    outputSchema: GetRecordsOutputSchema,
+    annotations: READ_ONLY_ANNOTATIONS,
+    core: true,
 
-  async execute(ctx, params) {
-    // Fetch column types for type-aware decoding (Date/DateTime → ISO strings)
-    const columns = await ctx.schemaCache.getTableColumns(
-      toDocId(params.docId),
-      toTableId(params.tableId)
-    )
-    const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
+    async execute(ctx, params) {
+      // Fetch column types for type-aware decoding (Date/DateTime → ISO strings)
+      const columns = await ctx.schemaCache.getTableColumns(
+        toDocId(params.docId),
+        toTableId(params.tableId)
+      )
+      const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
 
-    // Grist API doesn't support offset - implement client-side pagination
-    // Fetch offset + limit + 1 records to detect if there are more pages
-    const fetchLimit = params.offset + params.limit + 1
-    const queryParams: Record<string, unknown> = {
-      limit: fetchLimit
-    }
-
-    const gristFilters = convertToGristFilters(params.filters)
-    if (Object.keys(gristFilters).length > 0) {
-      queryParams.filter = JSON.stringify(gristFilters)
-    }
-
-    const response = await ctx.client.get<RecordsResponse>(
-      `/docs/${params.docId}/tables/${params.tableId}/records`,
-      queryParams
-    )
-
-    const allRecords = response.records || []
-    // Apply offset client-side by slicing
-    const slicedRecords = allRecords.slice(params.offset, params.offset + params.limit)
-    const selectedRecords = selectColumns(slicedRecords, params.columns)
-    const formattedRecords = flattenRecords(selectedRecords, columnTypes)
-
-    // Calculate pagination correctly
-    const totalFetched = allRecords.length
-    const hasMore = totalFetched > params.offset + params.limit
-    const total = totalFetched // Exact count of records that match filters
-    const nextOffset = hasMore ? params.offset + params.limit : null
-
-    const recordsWithErrors = selectedRecords.filter(
-      (r) => r.errors && Object.keys(r.errors).length > 0
-    )
-    const errorColumns = new Set<string>()
-    selectedRecords.forEach((r) => {
-      if (r.errors) {
-        Object.keys(r.errors).forEach((col) => {
-          errorColumns.add(col)
-        })
+      // Grist API doesn't support offset - implement client-side pagination
+      // Fetch offset + limit + 1 records to detect if there are more pages
+      const fetchLimit = params.offset + params.limit + 1
+      const queryParams: Record<string, unknown> = {
+        limit: fetchLimit
       }
-    })
 
-    return {
-      docId: params.docId,
-      tableId: params.tableId,
-      total,
-      offset: params.offset,
-      limit: params.limit,
-      hasMore: hasMore,
-      nextOffset: nextOffset,
-      filters: params.filters || {},
-      columns: params.columns || 'all',
-      items: formattedRecords,
-      ...(recordsWithErrors.length > 0
-        ? {
-            formulaErrors: {
-              recordsWithErrors: recordsWithErrors.length,
-              affectedColumns: Array.from(errorColumns)
+      const gristFilters = convertToGristFilters(params.filters)
+      if (Object.keys(gristFilters).length > 0) {
+        queryParams.filter = JSON.stringify(gristFilters)
+      }
+
+      const response = await ctx.client.get<RecordsResponse>(
+        `/docs/${params.docId}/tables/${params.tableId}/records`,
+        queryParams
+      )
+
+      const allRecords = response.records || []
+      // Apply offset client-side by slicing
+      const slicedRecords = allRecords.slice(params.offset, params.offset + params.limit)
+      const selectedRecords = selectColumns(slicedRecords, params.columns)
+      const formattedRecords = flattenRecords(selectedRecords, columnTypes)
+
+      // Calculate pagination correctly
+      const totalFetched = allRecords.length
+      const hasMore = totalFetched > params.offset + params.limit
+      const total = totalFetched // Exact count of records that match filters
+      const nextOffset = hasMore ? params.offset + params.limit : null
+
+      const recordsWithErrors = selectedRecords.filter(
+        (r) => r.errors && Object.keys(r.errors).length > 0
+      )
+      const errorColumns = new Set<string>()
+      selectedRecords.forEach((r) => {
+        if (r.errors) {
+          Object.keys(r.errors).forEach((col) => {
+            errorColumns.add(col)
+          })
+        }
+      })
+
+      return {
+        docId: params.docId,
+        tableId: params.tableId,
+        total,
+        offset: params.offset,
+        limit: params.limit,
+        hasMore: hasMore,
+        nextOffset: nextOffset,
+        filters: params.filters || {},
+        columns: params.columns || 'all',
+        items: formattedRecords,
+        ...(recordsWithErrors.length > 0
+          ? {
+              formulaErrors: {
+                recordsWithErrors: recordsWithErrors.length,
+                affectedColumns: Array.from(errorColumns)
+              }
             }
-          }
-        : {})
-    }
-  },
-
-  async afterExecute(result, params, _ctx) {
-    // Handle truncation within afterExecute since factory doesn't support formatResponse
-    const format = params.response_format || 'json'
-    const { data: truncatedData } = truncateIfNeeded(result.items, format, {
-      docId: result.docId,
-      tableId: result.tableId,
-      total: result.total,
-      offset: result.offset,
-      limit: result.limit,
-      hasMore: result.hasMore,
-      nextOffset: result.nextOffset,
-      filters: result.filters,
-      columns: result.columns,
-      ...(result.formulaErrors ? { formulaErrors: result.formulaErrors } : {})
-    })
-
-    return {
-      ...truncatedData,
-      nextSteps: nextSteps()
-        .addPaginationHint(result, 'records')
-        .addIf(result.items.length > 0, 'Use grist_manage_records to modify these records')
-        .addIf(
-          !!result.formulaErrors && result.formulaErrors.recordsWithErrors > 0,
-          `Fix formula errors in columns: ${result.formulaErrors?.affectedColumns.join(', ')}`
-        )
-        .build()
-    } as GetRecordsResponseData
-  },
-
-  docs: {
-    overview:
-      'Fetch records with filters. No SQL needed. Use grist_query_sql for JOINs and aggregations. Filter syntax: {"Status": "Active"}, {"Priority": 1}, {"IsActive": true}, {"Status": ["Open", "In Progress"]}.',
-    examples: [
-      {
-        desc: 'Filter by status',
-        input: { docId: 'abc123', tableId: 'Contacts', filters: { Status: 'Active' } }
-      },
-      {
-        desc: 'Filter by number',
-        input: { docId: 'abc123', tableId: 'Tasks', filters: { Priority: 1 } }
-      },
-      {
-        desc: 'Select columns',
-        input: { docId: 'abc123', tableId: 'Contacts', columns: ['Name', 'Email'] }
+          : {})
       }
-    ],
-    errors: [
-      { error: 'Table not found', solution: 'Use grist_get_tables' },
-      { error: 'Column not found', solution: "Use grist_get_tables with detail_level='columns'" }
-    ]
+    },
+
+    async afterExecute(result, params, _ctx) {
+      // Handle truncation within afterExecute since factory doesn't support formatResponse
+      const format = params.response_format || 'json'
+      const { data: truncatedData } = truncateIfNeeded(result.items, format, {
+        docId: result.docId,
+        tableId: result.tableId,
+        total: result.total,
+        offset: result.offset,
+        limit: result.limit,
+        hasMore: result.hasMore,
+        nextOffset: result.nextOffset,
+        filters: result.filters,
+        columns: result.columns,
+        ...(result.formulaErrors ? { formulaErrors: result.formulaErrors } : {})
+      })
+
+      return {
+        ...truncatedData,
+        nextSteps: nextSteps()
+          .addPaginationHint(result, 'records')
+          .addIf(result.items.length > 0, 'Use grist_manage_records to modify these records')
+          .addIf(
+            !!result.formulaErrors && result.formulaErrors.recordsWithErrors > 0,
+            `Fix formula errors in columns: ${result.formulaErrors?.affectedColumns.join(', ')}`
+          )
+          .build()
+      } as GetRecordsResponseData
+    },
+
+    docs: {
+      overview:
+        'Fetch records with filters. No SQL needed. Use grist_query_sql for JOINs and aggregations. Filter syntax: {"Status": "Active"}, {"Priority": 1}, {"IsActive": true}, {"Status": ["Open", "In Progress"]}.',
+      examples: [
+        {
+          desc: 'Filter by status',
+          input: { docId: 'abc123', tableId: 'Contacts', filters: { Status: 'Active' } }
+        },
+        {
+          desc: 'Filter by number',
+          input: { docId: 'abc123', tableId: 'Tasks', filters: { Priority: 1 } }
+        },
+        {
+          desc: 'Select columns',
+          input: { docId: 'abc123', tableId: 'Contacts', columns: ['Name', 'Email'] }
+        }
+      ],
+      errors: [
+        { error: 'Table not found', solution: 'Use grist_get_tables' },
+        { error: 'Column not found', solution: "Use grist_get_tables with detail_level='columns'" }
+      ]
+    }
   }
-})
+)
 
 export async function getRecords(context: ToolContext, params: GetRecordsInput) {
   return GET_RECORDS_TOOL.handler(context, params)

@@ -20,11 +20,14 @@ import {
   getColumnNameFromId,
   isReferenceType
 } from '../services/column-resolver.js'
-import type { DocumentInfo, WorkspaceInfo } from '../types.js'
-import { GristTool } from './base/GristTool.js'
-import { PaginatedGristTool, type PaginatedResponse } from './base/PaginatedGristTool.js'
+import type { DocumentInfo, TablesApiResponse, WorkspaceInfo } from '../types.js'
+import { definePaginatedTool, defineStandardTool } from './factory/index.js'
 import { nextSteps } from './utils/next-steps.js'
 import { paginate } from './utils/pagination.js'
+
+// =============================================================================
+// Get Workspaces Tool
+// =============================================================================
 
 export const GetWorkspacesSchema = z.strictObject({
   name_contains: z
@@ -51,96 +54,112 @@ interface FormattedWorkspace {
   updatedAt?: string
 }
 
-export class GetWorkspacesTool extends PaginatedGristTool<
-  typeof GetWorkspacesSchema,
-  FormattedWorkspace
-> {
-  constructor(context: ToolContext) {
-    super(context, GetWorkspacesSchema)
+function formatWorkspace(ws: WorkspaceInfo, detailLevel: string): FormattedWorkspace {
+  const base = {
+    id: ws.id,
+    name: ws.name,
+    org: ws.orgName || ws.org,
+    docCount: ws.docs?.length || 0,
+    access: ws.access
   }
 
-  protected async fetchItems(params: GetWorkspacesInput): Promise<FormattedWorkspace[]> {
-    const maxWorkspaces = 1000
-
-    const orgs = await this.client.get<Array<{ id: number; name: string; domain: string }>>('/orgs')
-
-    const allWorkspaces: WorkspaceInfo[] = []
-    for (const org of orgs) {
-      if (allWorkspaces.length >= maxWorkspaces) {
-        console.error(
-          `[GetWorkspaces] Reached max workspaces during fetch: ${allWorkspaces.length}/${maxWorkspaces}`
-        )
-        break
-      }
-
-      const workspacesResponse = await this.client.get<WorkspaceInfo[]>(
-        `/orgs/${org.id}/workspaces`
-      )
-
-      const wsToAdd = workspacesResponse.slice(0, maxWorkspaces - allWorkspaces.length)
-      allWorkspaces.push(...wsToAdd)
-    }
-
-    return allWorkspaces.map((ws) => this.formatWorkspace(ws, params.detail_level))
-  }
-
-  protected filterItems(
-    items: FormattedWorkspace[],
-    params: GetWorkspacesInput
-  ): FormattedWorkspace[] {
-    if (!params.name_contains) {
-      return items
-    }
-
-    const searchTerm = params.name_contains.toLowerCase()
-    return items.filter((ws) => ws.name.toLowerCase().includes(searchTerm))
-  }
-
-  private formatWorkspace(ws: WorkspaceInfo, detailLevel: string): FormattedWorkspace {
-    const base = {
-      id: ws.id,
-      name: ws.name,
-      org: ws.orgName || ws.org,
-      docCount: ws.docs?.length || 0,
-      access: ws.access
-    }
-
-    if (detailLevel === 'detailed') {
-      return {
-        ...base,
-        orgDomain: ws.orgDomain,
-        createdAt: ws.createdAt,
-        updatedAt: ws.updatedAt
-      }
-    }
-
-    return base
-  }
-
-  protected async afterExecute(
-    result: PaginatedResponse<FormattedWorkspace>,
-    _params: GetWorkspacesInput
-  ): Promise<PaginatedResponse<FormattedWorkspace> & { nextSteps?: string[] }> {
-    const firstWs = result.items[0]
-
+  if (detailLevel === 'detailed') {
     return {
-      ...result,
-      nextSteps: nextSteps()
-        .addIf(
-          !!firstWs,
-          `Use grist_get_documents with workspaceId=${firstWs?.id} to list documents in "${firstWs?.name}"`
-        )
-        .addPaginationHint(result.pagination, 'workspaces')
-        .build()
+      ...base,
+      orgDomain: ws.orgDomain,
+      createdAt: ws.createdAt,
+      updatedAt: ws.updatedAt
     }
   }
-  // formatResponse override removed - base class handles truncation automatically
+
+  return base
 }
+
+export const GET_WORKSPACES_TOOL = definePaginatedTool<typeof GetWorkspacesSchema, FormattedWorkspace>(
+  {
+    name: 'grist_get_workspaces',
+    title: 'Get Workspaces',
+    description: 'List accessible workspaces',
+    purpose: 'List and filter workspaces',
+    category: 'discovery',
+    inputSchema: GetWorkspacesSchema,
+    outputSchema: GetWorkspacesOutputSchema,
+    annotations: READ_ONLY_ANNOTATIONS,
+    core: true,
+
+    async fetchItems(ctx, params) {
+      const maxWorkspaces = 1000
+
+      const orgs = await ctx.client.get<Array<{ id: number; name: string; domain: string }>>('/orgs')
+
+      const allWorkspaces: WorkspaceInfo[] = []
+      for (const org of orgs) {
+        if (allWorkspaces.length >= maxWorkspaces) {
+          console.error(
+            `[GetWorkspaces] Reached max workspaces during fetch: ${allWorkspaces.length}/${maxWorkspaces}`
+          )
+          break
+        }
+
+        const workspacesResponse = await ctx.client.get<WorkspaceInfo[]>(
+          `/orgs/${org.id}/workspaces`
+        )
+
+        const wsToAdd = workspacesResponse.slice(0, maxWorkspaces - allWorkspaces.length)
+        allWorkspaces.push(...wsToAdd)
+      }
+
+      return allWorkspaces.map((ws) => formatWorkspace(ws, params.detail_level))
+    },
+
+    filterItems(items, params) {
+      if (!params.name_contains) {
+        return items
+      }
+
+      const searchTerm = params.name_contains.toLowerCase()
+      return items.filter((ws) => ws.name.toLowerCase().includes(searchTerm))
+    },
+
+    async afterExecute(result, _params, _ctx) {
+      const firstWs = result.items[0]
+
+      return {
+        ...result,
+        nextSteps: nextSteps()
+          .addIf(
+            !!firstWs,
+            `Use grist_get_documents with workspaceId=${firstWs?.id} to list documents in "${firstWs?.name}"`
+          )
+          .addPaginationHint(result.pagination, 'workspaces')
+          .build()
+      }
+    },
+
+    docs: {
+      overview:
+        'List workspaces with filtering. Use browse mode ({limit: 20}) to see all, or search mode ({name_contains: "Sales"}) to filter. Detail levels: summary (name, ID, access, doc count ~50 tokens) or detailed (+ timestamps ~150 tokens).',
+      examples: [
+        { desc: 'List all workspaces', input: { limit: 20, detail_level: 'summary' } },
+        { desc: 'Search by name', input: { name_contains: 'Sales', limit: 5 } }
+      ],
+      errors: [
+        {
+          error: 'No workspaces found matching "X"',
+          solution: 'Remove name_contains to see all accessible workspaces'
+        }
+      ]
+    }
+  }
+)
 
 export async function getWorkspaces(context: ToolContext, params: GetWorkspacesInput) {
-  const tool = new GetWorkspacesTool(context)
-  return tool.execute(params)
+  return GET_WORKSPACES_TOOL.handler(context, params)
 }
+
+// =============================================================================
+// Get Documents Tool
+// =============================================================================
 
 export const GetDocumentsSchema = z.strictObject({
   docId: DocIdSchema.optional(),
@@ -174,110 +193,104 @@ interface FormattedDocument {
   public?: boolean
 }
 
-export class GetDocumentsTool extends PaginatedGristTool<
-  typeof GetDocumentsSchema,
-  FormattedDocument
-> {
-  constructor(context: ToolContext) {
-    super(context, GetDocumentsSchema)
+function formatDocument(doc: DocumentInfo, detailLevel: string, baseUrl: string): FormattedDocument {
+  if (detailLevel === 'summary') {
+    return {
+      docId: doc.id,
+      name: doc.name,
+      workspace: doc.workspace?.name,
+      workspaceId: doc.workspace?.id,
+      access: doc.access
+    }
   }
 
-  protected async fetchItems(params: GetDocumentsInput): Promise<FormattedDocument[]> {
-    const baseUrl = this.client.getBaseUrl()
+  return {
+    docId: doc.id,
+    name: doc.name,
+    workspace: doc.workspace,
+    access: doc.access,
+    url: `${baseUrl}/doc/${doc.id}`,
+    isPinned: doc.isPinned || false,
+    createdAt: doc.createdAt,
+    updatedAt: doc.updatedAt,
+    public: doc.public || false
+  }
+}
+
+async function fetchAllDocuments(
+  ctx: ToolContext,
+  detailLevel: string,
+  maxDocuments = 1000
+): Promise<FormattedDocument[]> {
+  const baseUrl = ctx.client.getBaseUrl()
+  const documents: FormattedDocument[] = []
+  const orgs = await ctx.client.get<Array<{ id: number }>>('/orgs')
+
+  for (const org of orgs) {
+    if (documents.length >= maxDocuments) {
+      console.error(
+        `[GetDocuments] Reached max documents during fetch: ${documents.length}/${maxDocuments}`
+      )
+      break
+    }
+
+    const workspaces = await ctx.client.get<WorkspaceInfo[]>(`/orgs/${org.id}/workspaces`)
+
+    for (const ws of workspaces) {
+      if (documents.length >= maxDocuments) break
+
+      if (ws.docs) {
+        const docsToAdd = ws.docs
+          .slice(0, maxDocuments - documents.length)
+          .map((doc) => formatDocument(doc, detailLevel, baseUrl))
+        documents.push(...docsToAdd)
+      }
+    }
+  }
+
+  return documents
+}
+
+export const GET_DOCUMENTS_TOOL = definePaginatedTool<typeof GetDocumentsSchema, FormattedDocument>({
+  name: 'grist_get_documents',
+  title: 'Get Documents',
+  description: 'Find documents by ID, name, or workspace',
+  purpose: 'Find documents by ID, name, or workspace',
+  category: 'discovery',
+  inputSchema: GetDocumentsSchema,
+  outputSchema: GetDocumentsOutputSchema,
+  annotations: READ_ONLY_ANNOTATIONS,
+  core: true,
+
+  async fetchItems(ctx, params) {
+    const baseUrl = ctx.client.getBaseUrl()
 
     if (params.docId) {
-      const doc = await this.client.get<DocumentInfo>(`/docs/${params.docId}`)
-      return [this.formatDocument(doc, params.detail_level, baseUrl)]
+      const doc = await ctx.client.get<DocumentInfo>(`/docs/${params.docId}`)
+      return [formatDocument(doc, params.detail_level, baseUrl)]
     }
 
     if (params.workspaceId) {
-      const response = await this.client.get<{ docs: DocumentInfo[] }>(
+      const response = await ctx.client.get<{ docs: DocumentInfo[] }>(
         `/workspaces/${params.workspaceId}`
       )
       const docs = response.docs || []
-      return docs.map((doc) => this.formatDocument(doc, params.detail_level, baseUrl))
+      return docs.map((doc) => formatDocument(doc, params.detail_level, baseUrl))
     }
 
-    return await this.fetchAllDocuments(baseUrl, params.detail_level)
-  }
+    return await fetchAllDocuments(ctx, params.detail_level)
+  },
 
-  protected filterItems(
-    items: FormattedDocument[],
-    params: GetDocumentsInput
-  ): FormattedDocument[] {
+  filterItems(items, params) {
     if (!params.name_contains) {
       return items
     }
 
     const searchTerm = params.name_contains.toLowerCase()
     return items.filter((doc) => doc.name.toLowerCase().includes(searchTerm))
-  }
+  },
 
-  private async fetchAllDocuments(
-    baseUrl: string,
-    detailLevel: string,
-    maxDocuments = 1000
-  ): Promise<FormattedDocument[]> {
-    const documents: FormattedDocument[] = []
-    const orgs = await this.client.get<Array<{ id: number }>>('/orgs')
-
-    for (const org of orgs) {
-      if (documents.length >= maxDocuments) {
-        console.error(
-          `[GetDocuments] Reached max documents during fetch: ${documents.length}/${maxDocuments}`
-        )
-        break
-      }
-
-      const workspaces = await this.client.get<WorkspaceInfo[]>(`/orgs/${org.id}/workspaces`)
-
-      for (const ws of workspaces) {
-        if (documents.length >= maxDocuments) break
-
-        if (ws.docs) {
-          const docsToAdd = ws.docs
-            .slice(0, maxDocuments - documents.length)
-            .map((doc) => this.formatDocument(doc, detailLevel, baseUrl))
-          documents.push(...docsToAdd)
-        }
-      }
-    }
-
-    return documents
-  }
-
-  private formatDocument(
-    doc: DocumentInfo,
-    detailLevel: string,
-    baseUrl: string
-  ): FormattedDocument {
-    if (detailLevel === 'summary') {
-      return {
-        docId: doc.id,
-        name: doc.name,
-        workspace: doc.workspace?.name,
-        workspaceId: doc.workspace?.id,
-        access: doc.access
-      }
-    }
-
-    return {
-      docId: doc.id,
-      name: doc.name,
-      workspace: doc.workspace,
-      access: doc.access,
-      url: `${baseUrl}/doc/${doc.id}`,
-      isPinned: doc.isPinned || false,
-      createdAt: doc.createdAt,
-      updatedAt: doc.updatedAt,
-      public: doc.public || false
-    }
-  }
-
-  protected async afterExecute(
-    result: PaginatedResponse<FormattedDocument>,
-    params: GetDocumentsInput
-  ): Promise<PaginatedResponse<FormattedDocument> & { nextSteps?: string[] }> {
+  async afterExecute(result, params, _ctx) {
     const firstDoc = result.items[0]
 
     return {
@@ -294,14 +307,30 @@ export class GetDocumentsTool extends PaginatedGristTool<
         .addPaginationHint(result.pagination, 'documents')
         .build()
     }
+  },
+
+  docs: {
+    overview:
+      'Find documents by ID (fastest), name search, workspace filter, or browse all. Detail levels: summary (name, id, workspace, access ~50 tokens/doc) or detailed (+ permissions, timestamps, urls ~150 tokens/doc).',
+    examples: [
+      { desc: 'Get by ID', input: { docId: 'qBbArddFDSrKd2jpv3uZTj' } },
+      { desc: 'Search by name', input: { name_contains: 'CRM', limit: 5 } },
+      { desc: 'Filter by workspace', input: { workspaceId: 3, limit: 10 } }
+    ],
+    errors: [
+      { error: 'Document not found', solution: 'Use grist_get_documents without filters' },
+      { error: 'Workspace not found', solution: 'Use grist_get_workspaces to find IDs' }
+    ]
   }
-  // formatResponse override removed - base class handles truncation automatically
-}
+})
 
 export async function getDocuments(context: ToolContext, params: GetDocumentsInput) {
-  const tool = new GetDocumentsTool(context)
-  return tool.execute(params)
+  return GET_DOCUMENTS_TOOL.handler(context, params)
 }
+
+// =============================================================================
+// Get Tables Tool
+// =============================================================================
 
 export const GetTablesSchema = z.strictObject({
   docId: DocIdSchema,
@@ -329,30 +358,119 @@ interface FormattedTable {
       }>
 }
 
-export class GetTablesTool extends GristTool<
-  typeof GetTablesSchema,
-  {
-    docId: string
-    tableCount: number
-    items: FormattedTable[]
-    total: number
-    offset: number
-    limit: number
-    hasMore: boolean
-    nextOffset: number | null
-    pageNumber: number
-    totalPages: number
-    itemsInPage: number
-  }
-> {
-  constructor(context: ToolContext) {
-    super(context, GetTablesSchema)
+interface GetTablesOutput {
+  docId: string
+  tableCount: number
+  items: FormattedTable[]
+  total: number
+  offset: number
+  limit: number
+  hasMore: boolean
+  nextOffset: number | null
+  pageNumber: number
+  totalPages: number
+  itemsInPage: number
+  nextSteps?: string[]
+}
+
+async function formatTables(
+  ctx: ToolContext,
+  tables: Array<{ id: string }>,
+  params: GetTablesInput
+): Promise<FormattedTable[]> {
+  if (params.detail_level === 'names') {
+    return tables.map((t) => ({ id: t.id }))
   }
 
-  protected async executeInternal(params: GetTablesInput) {
-    const response = await this.client.get<import('../types.js').TablesApiResponse>(
-      `/docs/${params.docId}/tables`
+  if (params.detail_level === 'columns' || params.detail_level === 'full_schema') {
+    interface ColumnApiResponse {
+      id: string
+      fields: {
+        label?: string
+        type: string
+        isFormula?: boolean
+        formula?: string | null
+        widgetOptions?: string | Record<string, unknown>
+        visibleCol?: number
+      }
+    }
+
+    return Promise.all(
+      tables.map(async (t) => {
+        const columnsResponse = await ctx.client.get<{
+          columns: ColumnApiResponse[]
+        }>(`/docs/${params.docId}/tables/${t.id}/columns`)
+        const columns = columnsResponse.columns || []
+
+        if (params.detail_level === 'columns') {
+          return {
+            id: t.id,
+            columns: columns.map((c) => c.id)
+          }
+        }
+
+        return {
+          id: t.id,
+          columns: await Promise.all(
+            columns.map(async (c) => {
+              let parsedWidgetOptions: string | Record<string, unknown> | null = null
+              if (c.fields.widgetOptions && c.fields.widgetOptions !== '') {
+                parsedWidgetOptions =
+                  typeof c.fields.widgetOptions === 'string'
+                    ? JSON.parse(c.fields.widgetOptions)
+                    : c.fields.widgetOptions
+              }
+
+              let visibleColName: string | null = null
+              if (c.fields.visibleCol && isReferenceType(c.fields.type)) {
+                const foreignTable = extractForeignTable(c.fields.type)
+                if (foreignTable) {
+                  try {
+                    visibleColName = await getColumnNameFromId(
+                      ctx.client,
+                      params.docId,
+                      foreignTable,
+                      c.fields.visibleCol
+                    )
+                  } catch {
+                    visibleColName = null
+                  }
+                }
+              }
+
+              return {
+                id: c.id,
+                label: c.fields.label ?? c.id,
+                type: c.fields.type,
+                isFormula: c.fields.isFormula ?? false,
+                formula: c.fields.formula ?? null,
+                widgetOptions: parsedWidgetOptions,
+                visibleCol: c.fields.visibleCol ?? null,
+                visibleColName: visibleColName
+              }
+            })
+          )
+        }
+      })
     )
+  }
+
+  return tables.map((t) => ({ id: t.id }))
+}
+
+export const GET_TABLES_TOOL = defineStandardTool<typeof GetTablesSchema, GetTablesOutput>({
+  name: 'grist_get_tables',
+  title: 'Get Grist Table Structure',
+  description: 'Get table and column schema',
+  purpose: 'Get table structure and schema',
+  category: 'discovery',
+  inputSchema: GetTablesSchema,
+  outputSchema: GetTablesOutputSchema,
+  annotations: READ_ONLY_ANNOTATIONS,
+  core: true,
+
+  async execute(ctx, params) {
+    const response = await ctx.client.get<TablesApiResponse>(`/docs/${params.docId}/tables`)
     let tableList = response.tables || []
 
     if (params.tableId) {
@@ -365,7 +483,7 @@ export class GetTablesTool extends GristTool<
       }
     }
 
-    const formattedTables = await this.formatTables(tableList, params)
+    const formattedTables = await formatTables(ctx, tableList, params)
     const paginated = paginate(formattedTables, params)
     const pageNumber = Math.floor(paginated.offset / paginated.limit) + 1
     const totalPages = Math.ceil(paginated.total / paginated.limit)
@@ -383,24 +501,9 @@ export class GetTablesTool extends GristTool<
       totalPages,
       itemsInPage: paginated.items.length
     }
-  }
+  },
 
-  protected async afterExecute(
-    result: {
-      docId: string
-      tableCount: number
-      items: FormattedTable[]
-      total: number
-      offset: number
-      limit: number
-      hasMore: boolean
-      nextOffset: number | null
-      pageNumber: number
-      totalPages: number
-      itemsInPage: number
-    },
-    params: GetTablesInput
-  ) {
+  async afterExecute(result, params, _ctx) {
     const firstTable = result.items[0]
 
     return {
@@ -414,179 +517,39 @@ export class GetTablesTool extends GristTool<
         .addPaginationHint(result, 'tables')
         .build()
     }
-  }
+  },
 
-  private async formatTables(
-    tables: Array<{ id: string }>,
-    params: GetTablesInput
-  ): Promise<FormattedTable[]> {
-    if (params.detail_level === 'names') {
-      return tables.map((t) => ({ id: t.id }))
-    }
-
-    if (params.detail_level === 'columns' || params.detail_level === 'full_schema') {
-      interface ColumnApiResponse {
-        id: string
-        fields: {
-          label?: string
-          type: string
-          isFormula?: boolean
-          formula?: string | null
-          widgetOptions?: string | Record<string, unknown>
-          visibleCol?: number
-        }
+  docs: {
+    overview:
+      'Get table structure and schema. Detail levels: names (table IDs only ~20 tokens/table), columns (+ column names ~50 tokens/table), or full_schema (+ types, formulas, widget options ~200 tokens/table). Note: widgetOptions only returned with full_schema.',
+    examples: [
+      { desc: 'List table names', input: { docId: 'abc123', detail_level: 'names' } },
+      {
+        desc: 'Get column names',
+        input: { docId: 'abc123', tableId: 'Contacts', detail_level: 'columns' }
+      },
+      {
+        desc: 'Full schema',
+        input: { docId: 'abc123', tableId: 'Products', detail_level: 'full_schema' }
       }
-
-      return Promise.all(
-        tables.map(async (t) => {
-          const columnsResponse = await this.client.get<{
-            columns: ColumnApiResponse[]
-          }>(`/docs/${params.docId}/tables/${t.id}/columns`)
-          const columns = columnsResponse.columns || []
-
-          if (params.detail_level === 'columns') {
-            return {
-              id: t.id,
-              columns: columns.map((c) => c.id)
-            }
-          }
-
-          return {
-            id: t.id,
-            columns: await Promise.all(
-              columns.map(async (c) => {
-                let parsedWidgetOptions: string | Record<string, unknown> | null = null
-                if (c.fields.widgetOptions && c.fields.widgetOptions !== '') {
-                  parsedWidgetOptions =
-                    typeof c.fields.widgetOptions === 'string'
-                      ? JSON.parse(c.fields.widgetOptions)
-                      : c.fields.widgetOptions
-                }
-
-                let visibleColName: string | null = null
-                if (c.fields.visibleCol && isReferenceType(c.fields.type)) {
-                  const foreignTable = extractForeignTable(c.fields.type)
-                  if (foreignTable) {
-                    try {
-                      visibleColName = await getColumnNameFromId(
-                        this.client,
-                        params.docId,
-                        foreignTable,
-                        c.fields.visibleCol
-                      )
-                    } catch {
-                      visibleColName = null
-                    }
-                  }
-                }
-
-                return {
-                  id: c.id,
-                  label: c.fields.label ?? c.id,
-                  type: c.fields.type,
-                  isFormula: c.fields.isFormula ?? false,
-                  formula: c.fields.formula ?? null,
-                  widgetOptions: parsedWidgetOptions,
-                  visibleCol: c.fields.visibleCol ?? null,
-                  visibleColName: visibleColName
-                }
-              })
-            )
-          }
-        })
-      )
-    }
-
-    return tables.map((t) => ({ id: t.id }))
+    ],
+    errors: [
+      { error: 'Document not found', solution: 'Use grist_get_documents to find IDs' },
+      { error: 'Table not found', solution: 'Use grist_get_tables without tableId' }
+    ]
   }
-}
+})
 
 export async function getTables(context: ToolContext, params: GetTablesInput) {
-  const tool = new GetTablesTool(context)
-  return tool.execute(params)
+  return GET_TABLES_TOOL.handler(context, params)
 }
 
+// =============================================================================
+// Tool Definitions Export
+// =============================================================================
+
 export const DISCOVERY_TOOLS: ReadonlyArray<ToolDefinition> = [
-  {
-    name: 'grist_get_workspaces',
-    title: 'Get Workspaces',
-    description: 'List accessible workspaces',
-    purpose: 'List and filter workspaces',
-    category: 'discovery',
-    inputSchema: GetWorkspacesSchema,
-    outputSchema: GetWorkspacesOutputSchema,
-    annotations: READ_ONLY_ANNOTATIONS,
-    handler: getWorkspaces,
-    core: true,
-    docs: {
-      overview:
-        'List workspaces with filtering. Use browse mode ({limit: 20}) to see all, or search mode ({name_contains: "Sales"}) to filter. Detail levels: summary (name, ID, access, doc count ~50 tokens) or detailed (+ timestamps ~150 tokens).',
-      examples: [
-        { desc: 'List all workspaces', input: { limit: 20, detail_level: 'summary' } },
-        { desc: 'Search by name', input: { name_contains: 'Sales', limit: 5 } }
-      ],
-      errors: [
-        {
-          error: 'No workspaces found matching "X"',
-          solution: 'Remove name_contains to see all accessible workspaces'
-        }
-      ]
-    }
-  },
-  {
-    name: 'grist_get_documents',
-    title: 'Get Documents',
-    description: 'Find documents by ID, name, or workspace',
-    purpose: 'Find documents by ID, name, or workspace',
-    category: 'discovery',
-    inputSchema: GetDocumentsSchema,
-    outputSchema: GetDocumentsOutputSchema,
-    annotations: READ_ONLY_ANNOTATIONS,
-    handler: getDocuments,
-    core: true,
-    docs: {
-      overview:
-        'Find documents by ID (fastest), name search, workspace filter, or browse all. Detail levels: summary (name, id, workspace, access ~50 tokens/doc) or detailed (+ permissions, timestamps, urls ~150 tokens/doc).',
-      examples: [
-        { desc: 'Get by ID', input: { docId: 'qBbArddFDSrKd2jpv3uZTj' } },
-        { desc: 'Search by name', input: { name_contains: 'CRM', limit: 5 } },
-        { desc: 'Filter by workspace', input: { workspaceId: 3, limit: 10 } }
-      ],
-      errors: [
-        { error: 'Document not found', solution: 'Use grist_get_documents without filters' },
-        { error: 'Workspace not found', solution: 'Use grist_get_workspaces to find IDs' }
-      ]
-    }
-  },
-  {
-    name: 'grist_get_tables',
-    title: 'Get Grist Table Structure',
-    description: 'Get table and column schema',
-    purpose: 'Get table structure and schema',
-    category: 'discovery',
-    inputSchema: GetTablesSchema,
-    outputSchema: GetTablesOutputSchema,
-    annotations: READ_ONLY_ANNOTATIONS,
-    handler: getTables,
-    core: true,
-    docs: {
-      overview:
-        'Get table structure and schema. Detail levels: names (table IDs only ~20 tokens/table), columns (+ column names ~50 tokens/table), or full_schema (+ types, formulas, widget options ~200 tokens/table). Note: widgetOptions only returned with full_schema.',
-      examples: [
-        { desc: 'List table names', input: { docId: 'abc123', detail_level: 'names' } },
-        {
-          desc: 'Get column names',
-          input: { docId: 'abc123', tableId: 'Contacts', detail_level: 'columns' }
-        },
-        {
-          desc: 'Full schema',
-          input: { docId: 'abc123', tableId: 'Products', detail_level: 'full_schema' }
-        }
-      ],
-      errors: [
-        { error: 'Document not found', solution: 'Use grist_get_documents to find IDs' },
-        { error: 'Table not found', solution: 'Use grist_get_tables without tableId' }
-      ]
-    }
-  }
+  GET_WORKSPACES_TOOL,
+  GET_DOCUMENTS_TOOL,
+  GET_TABLES_TOOL
 ] as const

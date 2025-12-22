@@ -13,12 +13,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { inject } from 'vitest'
 import { ALL_TOOLS } from '../../src/registry/tool-definitions.js'
 import { registerToolsBatch, silentStrategy } from '../../src/registry/tool-registry.js'
-import { registerSchemas } from '../../src/schemas/registry.js'
-import { setupToolsListHandler } from '../../src/schemas/schema-utils.js'
 import { createGristMcpServer, type ServerInstance } from '../../src/server.js'
-
-// Register schemas once at module load - mirrors production behavior in src/index.ts
-registerSchemas()
 
 /**
  * Test context containing MCP client and server instance.
@@ -96,10 +91,8 @@ export async function createMCPTestClient(
   })
 
   // Register all tools (silently - no console output)
+  // SDK's registerTool() automatically sets up tools/list handler
   await registerToolsBatch(serverInstance.server, serverInstance.context, ALL_TOOLS, silentStrategy)
-
-  // Setup tools/list handler - uses SAME function as production (no duplication)
-  setupToolsListHandler(serverInstance.server, ALL_TOOLS)
 
   // Connect server to transport
   await serverInstance.server.connect(serverTransport)

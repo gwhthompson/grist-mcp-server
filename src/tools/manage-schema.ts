@@ -23,11 +23,7 @@ import {
   renameColumn as renameColumnOp,
   renameTable as renameTableOp
 } from '../domain/operations/schema.js'
-import {
-  type ToolContext,
-  type ToolDefinition,
-  WRITE_IDEMPOTENT_ANNOTATIONS
-} from '../registry/types.js'
+import type { ToolContext, ToolDefinition } from '../registry/types.js'
 import { ApplyResponseSchema } from '../schemas/api-responses.js'
 import {
   createBatchOutputSchema,
@@ -76,44 +72,33 @@ import { nextSteps } from './utils/next-steps.js'
 const CreateTableOperationSchema = z
   .object({
     action: z.literal('create_table'),
-    name: z.string().min(1).max(100).describe('Table name (becomes tableId after normalization)'),
-    columns: z
-      .array(ColumnDefinitionSchema)
-      .min(0)
-      .max(100)
-      .default([])
-      .describe('Column definitions with type-specific options')
+    name: z.string().min(1).max(100).describe('becomes tableId'),
+    columns: z.array(ColumnDefinitionSchema).min(0).max(100).default([])
   })
-  .describe('Create a new table with optional columns')
+  .describe('create table')
 
 const RenameTableOperationSchema = z
   .object({
     action: z.literal('rename_table'),
     tableId: TableIdSchema,
-    newTableId: z.string().min(1).max(100).describe('New table name')
+    newTableId: z.string().min(1).max(100)
   })
-  .describe('Rename an existing table')
+  .describe('rename table')
 
 const DeleteTableOperationSchema = z
   .object({
     action: z.literal('delete_table'),
     tableId: TableIdSchema
   })
-  .describe('Delete a table and all its data (DESTRUCTIVE)')
+  .describe('delete table')
 
 const UpdateTableOperationSchema = z
   .object({
     action: z.literal('update_table'),
     tableId: TableIdSchema,
-    rowRules: z
-      .array(BaseConditionalRuleSchema)
-      .optional()
-      .describe(
-        'Conditional formatting for entire rows. Replaces all existing row rules. ' +
-          'Rules apply to Raw Data view. Each rule: {formula: "$Status == \\"Overdue\\"", style: {fillColor: "#FFCCCC"}}'
-      )
+    rowRules: z.array(BaseConditionalRuleSchema).optional().describe('replaces existing row rules')
   })
-  .describe('Update table properties including row conditional formatting')
+  .describe('update table')
 
 // =============================================================================
 // Column Operation Schemas
@@ -123,52 +108,42 @@ const AddColumnOperationSchema = z
   .object({
     action: z.literal('add_column'),
     tableId: TableIdSchema,
-    column: ColumnDefinitionSchema.describe('Column definition')
+    column: ColumnDefinitionSchema
   })
-  .describe('Add a column to an existing table')
+  .describe('add column')
 
 const ModifyColumnOperationSchema = z
   .object({
     action: z.literal('modify_column'),
     tableId: TableIdSchema,
     colId: ColIdSchema,
-    updates: z
-      .object({
-        type: ColumnTypeLiteralSchema.optional().describe('New column type'),
-        refTable: z.string().optional().describe('For Ref/RefList: target table'),
-        label: z.string().optional().describe('Human-readable label'),
-        isFormula: z.boolean().optional().describe('Formula column flag'),
-        formula: z.string().optional().describe('Python formula'),
-        visibleCol: VisibleColSchema.optional().describe('Display column for Ref'),
-        untieColIdFromLabel: z
-          .boolean()
-          .optional()
-          .describe('Prevent colId auto-update on label change'),
-        // Type-specific options
-        widget: z.string().optional(),
-        wrap: z.boolean().optional(),
-        numMode: z.string().nullable().optional(),
-        currency: z.string().optional(),
-        numSign: z.string().nullable().optional(),
-        decimals: z.number().optional(),
-        maxDecimals: z.number().optional(),
-        dateFormat: z.string().optional(),
-        isCustomDateFormat: z.boolean().optional(),
-        timeFormat: z.string().optional(),
-        isCustomTimeFormat: z.boolean().optional(),
-        choices: z.array(z.string()).optional(),
-        choiceOptions: ChoiceOptionsSchema,
-        height: z.number().optional(),
-        // Style with conditional formatting
-        style: ColumnStyleSchema.optional().describe(
-          'Visual styling including conditional formatting rules. ' +
-            'For rulesOptions, each rule requires {formula, style} where formula is a Python expression ' +
-            '(e.g., "$Price > 1000") and style contains formatting (fillColor, textColor, fontBold, etc.).'
-        )
-      })
-      .describe('Properties to update')
+    updates: z.object({
+      type: ColumnTypeLiteralSchema.optional(),
+      refTable: z.string().optional().describe('for Ref/RefList'),
+      label: z.string().optional(),
+      isFormula: z.boolean().optional(),
+      formula: z.string().optional().describe('Python expression'),
+      visibleCol: VisibleColSchema.optional().describe('display column for Ref'),
+      untieColIdFromLabel: z.boolean().optional(),
+      // Type-specific options
+      widget: z.string().optional(),
+      wrap: z.boolean().optional(),
+      numMode: z.string().nullable().optional(),
+      currency: z.string().optional(),
+      numSign: z.string().nullable().optional(),
+      decimals: z.number().optional(),
+      maxDecimals: z.number().optional(),
+      dateFormat: z.string().optional(),
+      isCustomDateFormat: z.boolean().optional(),
+      timeFormat: z.string().optional(),
+      isCustomTimeFormat: z.boolean().optional(),
+      choices: z.array(z.string()).optional(),
+      choiceOptions: ChoiceOptionsSchema,
+      height: z.number().optional(),
+      style: ColumnStyleSchema.optional().describe('styling + rulesOptions')
+    })
   })
-  .describe('Modify an existing column')
+  .describe('modify column')
 
 const RemoveColumnOperationSchema = z
   .object({
@@ -176,16 +151,16 @@ const RemoveColumnOperationSchema = z
     tableId: TableIdSchema,
     colId: ColIdSchema
   })
-  .describe('Remove a column from a table')
+  .describe('remove column')
 
 const RenameColumnOperationSchema = z
   .object({
     action: z.literal('rename_column'),
     tableId: TableIdSchema,
     colId: ColIdSchema,
-    newColId: z.string().min(1).describe('New column identifier')
+    newColId: z.string().min(1)
   })
-  .describe('Rename a column')
+  .describe('rename column')
 
 // =============================================================================
 // Summary Table Operation Schema
@@ -194,11 +169,11 @@ const RenameColumnOperationSchema = z
 const CreateSummaryOperationSchema = z
   .object({
     action: z.literal('create_summary'),
-    sourceTable: z.string().min(1).describe('Source table name'),
-    groupByColumns: z.array(z.string().min(1)).min(1).describe('Columns to group by'),
-    keepPage: z.boolean().default(false).describe('Keep the auto-created page visible')
+    sourceTable: z.string().min(1),
+    groupByColumns: z.array(z.string().min(1)).min(1),
+    keepPage: z.boolean().default(false).describe('keep auto-created page')
   })
-  .describe('Create a summary table for aggregations')
+  .describe('create summary')
 
 // =============================================================================
 // Discriminated Union and Main Schema
@@ -218,11 +193,7 @@ const SchemaOperationSchema = z.discriminatedUnion('action', [
 
 export const ManageSchemaSchema = z.strictObject({
   docId: DocIdSchema,
-  operations: z
-    .array(SchemaOperationSchema)
-    .min(1)
-    .max(MAX_COLUMN_OPERATIONS)
-    .describe('Schema operations to perform in sequence'),
+  operations: z.array(SchemaOperationSchema).min(1).max(MAX_COLUMN_OPERATIONS),
   response_format: ResponseFormatSchema
 })
 
@@ -1115,7 +1086,12 @@ export const MANAGE_SCHEMA_TOOL: ToolDefinition = {
   category: 'tables',
   inputSchema: ManageSchemaSchema,
   outputSchema: ManageSchemaOutputSchema,
-  annotations: WRITE_IDEMPOTENT_ANNOTATIONS,
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true, // Can delete tables/columns
+    idempotentHint: false, // create_table is not idempotent
+    openWorldHint: true
+  },
   handler: manageSchema,
   docs: {
     overview:

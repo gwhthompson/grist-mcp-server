@@ -20,45 +20,24 @@ import { sharedLogger } from './utils/shared-logger.js'
  */
 const SERVER_INSTRUCTIONS = `## Grist MCP Server
 
-Grist is a modern relational spreadsheet with database features. This server provides 11 tools organized into discovery, reading, and management categories.
+11 tools for Grist relational spreadsheets. Use grist_help for full documentation.
 
-### Workflow Prerequisites
-- Call grist_get_workspaces before grist_get_documents (to get workspaceId)
-- Call grist_get_tables before grist_manage_records (to understand schema)
-- Use grist_help to get detailed documentation and examples for any tool
+### Workflow
+1. grist_get_workspaces → grist_get_documents → grist_get_tables (follow order)
+2. grist_query_sql for JOINs/aggregations, grist_get_records for simple filters
+3. grist_manage_records (CRUD), grist_manage_schema (tables/columns), grist_manage_pages (UI)
 
-### Tool Categories
-- **Discovery**: grist_get_workspaces → grist_get_documents → grist_get_tables (follow this order)
-- **Reading**: grist_query_sql (JOINs, aggregations), grist_get_records (simple filters)
-- **Management**: grist_manage_records (CRUD), grist_manage_schema (tables/columns), grist_manage_pages (UI)
+### Parameters
+- response_format: json (programmatic), markdown (display), concise (IDs only)
+- detail_level: summary (basic), detailed (+permissions/timestamps), full_schema (+types)
+- docId: 22-char Base58 (excludes 0OIl)
+- tableId: Uppercase start, Python identifier
+- colId: Python identifier, no gristHelper_ prefix
 
-### Cross-Tool Relationships
-- Tables created via grist_manage_schema appear immediately for grist_manage_pages
-- Summary tables produce tableId like "Source_summary_GroupBy1_GroupBy2"
-- Widgets reference tables by tableId, not display name
-- Use operations arrays to batch related changes in single calls
-
-### ID Formats & Constraints
-- docId: Base58, exactly 22 chars (excludes 0, O, I, l for readability)
-- tableId: Must start with uppercase letter, valid Python identifier
-- colId: Valid Python identifier, cannot start with "gristHelper_"
-- Max 500 records per add/update operation, max 10 operations per batch
-
-### Token Efficiency
-- Use response_format="json" for programmatic processing, "markdown" for display
-- Paginate large record sets with limit/offset instead of fetching all
-- Use grist_help with topic="overview" (~500B) before "full" documentation
-
-### Batching Guidance
-- Group related record operations in single grist_manage_records call
-- Combine table creation with columns in single grist_manage_schema call
-- Create multiple pages/widgets together in single grist_manage_pages call
-
-### Error Recovery
-- For partial batch failures, completed operations persist (no rollback)
-- Check operationIndex in error response to know where to resume
-- If widget linking fails, verify both widgets exist on same page first
-- If column modification fails, check column type compatibility`
+### Batching
+- Use operations arrays for related changes (max 500 records, 10 operations)
+- Summary tables: "Source_summary_GroupBy1_GroupBy2"
+- Partial failures persist completed ops - check operationIndex to resume`
 
 /**
  * Configuration for creating a Grist MCP server.

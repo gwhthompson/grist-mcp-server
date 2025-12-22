@@ -23,10 +23,7 @@ export { AlignmentSchema, HexColorSchema } from './common.js'
 
 // JSON Schema validation only - transform is done in action builder
 // Using .pipe() separates JSON Schema input from runtime output type
-export const CurrencyCodeInputSchema = z
-  .string()
-  .length(3)
-  .describe('ISO 4217 currency code (e.g., "USD", "EUR")')
+export const CurrencyCodeInputSchema = z.string().length(3).describe('e.g. USD, EUR')
 
 // Full validation with transform for runtime use
 export const CurrencyCodeSchema = CurrencyCodeInputSchema.transform((code) =>
@@ -49,9 +46,7 @@ const RuleStyleBaseSchema = z.object({
   fontStrikethrough: z.boolean()
 })
 
-export const RuleStyleSchema = RuleStyleBaseSchema.partial().describe(
-  'Conditional formatting style'
-)
+export const RuleStyleSchema = RuleStyleBaseSchema.partial()
 
 // =============================================================================
 // Column Style Schema (universal styling, nested in `style` property)
@@ -74,14 +69,10 @@ const ColumnStyleBaseSchema = z.object({
   alignment: AlignmentSchema,
   rulesOptions: z
     .array(BaseConditionalRuleSchema)
-    .describe(
-      'Conditional formatting rules. Each rule requires {formula, style} where formula is a Python expression ' +
-        'returning boolean (e.g., "$Price > 1000", "$Status == \\"Active\\"") and style contains formatting ' +
-        '(fillColor, textColor, fontBold, etc.). Rules are evaluated in order; first matching rule wins.'
-    )
+    .describe('{formula, style} rules, first match wins')
 })
 
-export const ColumnStyleSchema = ColumnStyleBaseSchema.partial().describe('Visual styling options')
+export const ColumnStyleSchema = ColumnStyleBaseSchema.partial()
 
 export type ColumnStyle = z.infer<typeof ColumnStyleSchema>
 
@@ -111,17 +102,19 @@ export const ColumnTypeLiteralSchema = z.enum([
 export type ColumnTypeLiteral = z.infer<typeof ColumnTypeLiteralSchema>
 
 // Widget type enum for Text, Bool, and Numeric columns
-export const WidgetTypeSchema = z
-  .enum(['TextBox', 'Markdown', 'HyperLink', 'Spinner', 'CheckBox', 'Switch'])
-  .describe(
-    'Widget type. Text: TextBox/Markdown/HyperLink. Bool: CheckBox/Switch. Numeric/Int: Spinner'
-  )
+export const WidgetTypeSchema = z.enum([
+  'TextBox',
+  'Markdown',
+  'HyperLink',
+  'Spinner',
+  'CheckBox',
+  'Switch'
+])
 
 // Numeric format mode enum
 export const NumModeSchema = z
   .enum(['currency', 'decimal', 'percent', 'scientific', 'text'])
   .nullable()
-  .describe('Numeric/Int only: number format mode')
 
 // =============================================================================
 // Choice Styling Schema
@@ -137,12 +130,9 @@ const ChoiceStyleBaseSchema = z.object({
   fontStrikethrough: z.boolean()
 })
 
-const ChoiceStyleSchema = ChoiceStyleBaseSchema.partial().describe('Per-choice styling')
+const ChoiceStyleSchema = ChoiceStyleBaseSchema.partial()
 
-export const ChoiceOptionsSchema = z
-  .record(z.string(), ChoiceStyleSchema)
-  .optional()
-  .describe('Choice/ChoiceList only: style per choice value')
+export const ChoiceOptionsSchema = z.record(z.string(), ChoiceStyleSchema).optional()
 
 // Table name schema for refTable field
 export const RefTableSchema = z
@@ -150,7 +140,6 @@ export const RefTableSchema = z
   .min(1)
   .max(64)
   .regex(/^[A-Z_][A-Za-z0-9_]*$/)
-  .describe('Ref/RefList only: target table name')
 
 // visibleCol can be column name (string) or column ID (number)
 export const VisibleColSchema = z.union([z.string(), z.number()])
@@ -181,73 +170,38 @@ export const VisibleColSchema = z.union([z.string(), z.number()])
 export const ColumnDefinitionSchema = z.object({
   // Core properties (all column types)
   colId: ColIdSchema,
-  type: ColumnTypeLiteralSchema.describe('Column type. Determines which options below are valid'),
-  label: z.string().optional().describe('Human-readable label'),
-  isFormula: z.boolean().default(false).describe('Formula column flag'),
-  formula: z.string().optional().describe('Python formula (e.g., "$Price * $Quantity")'),
+  type: ColumnTypeLiteralSchema,
+  label: z.string().optional(),
+  isFormula: z.boolean().default(false),
+  formula: z.string().optional().describe('e.g. $Price * $Quantity'),
 
   // Text options
   widget: WidgetTypeSchema.optional(),
-  wrap: z.boolean().optional().describe('Text only: enable text wrapping'),
+  wrap: z.boolean().optional(),
 
   // Numeric/Int options
   numMode: NumModeSchema.optional(),
-  currency: CurrencyCodeInputSchema.optional().describe(
-    'Numeric/Int only: currency code (requires numMode:"currency")'
-  ),
-  numSign: z
-    .enum(['parens'])
-    .nullable()
-    .optional()
-    .describe('Numeric/Int only: parentheses for negatives'),
-  decimals: z
-    .number()
-    .int()
-    .min(0)
-    .max(20)
-    .optional()
-    .describe('Numeric/Int only: min decimal places'),
-  maxDecimals: z
-    .number()
-    .int()
-    .min(0)
-    .max(20)
-    .optional()
-    .describe('Numeric/Int only: max decimal places'),
+  currency: CurrencyCodeInputSchema.optional(),
+  numSign: z.enum(['parens']).nullable().optional(),
+  decimals: z.number().int().min(0).max(20).optional(),
+  maxDecimals: z.number().int().min(0).max(20).optional(),
 
   // Date/DateTime options
-  dateFormat: z
-    .string()
-    .max(100)
-    .optional()
-    .describe('Date/DateTime only: format (e.g., "YYYY-MM-DD")'),
-  isCustomDateFormat: z
-    .boolean()
-    .optional()
-    .describe('Date/DateTime only: custom date format flag'),
-  timeFormat: z.string().max(100).optional().describe('DateTime only: format (e.g., "HH:mm:ss")'),
-  isCustomTimeFormat: z.boolean().optional().describe('DateTime only: custom time format flag'),
+  dateFormat: z.string().max(100).optional().describe('e.g. YYYY-MM-DD'),
+  isCustomDateFormat: z.boolean().optional(),
+  timeFormat: z.string().max(100).optional().describe('e.g. HH:mm:ss'),
+  isCustomTimeFormat: z.boolean().optional(),
 
   // Choice/ChoiceList options
-  choices: z
-    .array(z.string().min(1).max(255))
-    .max(1000)
-    .optional()
-    .describe('Choice/ChoiceList only: available choices'),
+  choices: z.array(z.string().min(1).max(255)).max(1000).optional(),
   choiceOptions: ChoiceOptionsSchema,
 
   // Ref/RefList options
   refTable: RefTableSchema.optional(),
-  visibleCol: VisibleColSchema.optional().describe('Ref/RefList only: display column'),
+  visibleCol: VisibleColSchema.optional(),
 
   // Attachments options
-  height: z
-    .number()
-    .int()
-    .min(1)
-    .max(5000)
-    .optional()
-    .describe('Attachments only: display height in pixels'),
+  height: z.number().int().min(1).max(5000).optional().describe('preview height px'),
 
   // Universal styling (all column types)
   style: ColumnStyleSchema.optional()

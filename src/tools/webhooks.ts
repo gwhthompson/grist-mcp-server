@@ -1,4 +1,4 @@
-import { type ToolContext, type ToolDefinition, WRITE_SAFE_ANNOTATIONS } from '../registry/types.js'
+import type { ToolContext, ToolDefinition } from '../registry/types.js'
 import { ManageWebhooksOutputSchema } from '../schemas/output-schemas.js'
 import {
   type ManageWebhooksInput,
@@ -658,7 +658,12 @@ export const WEBHOOK_TOOLS: ReadonlyArray<ToolDefinition> = [
     category: 'webhooks',
     inputSchema: ManageWebhooksSchema,
     outputSchema: ManageWebhooksOutputSchema,
-    annotations: WRITE_SAFE_ANNOTATIONS,
+    annotations: {
+      readOnlyHint: false,
+      destructiveHint: true, // Can delete webhooks
+      idempotentHint: false,
+      openWorldHint: true
+    },
     handler: manageWebhooks,
     docs: {
       overview:

@@ -5,13 +5,6 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import packageJson from '../package.json' with { type: 'json' }
 import { DEFAULT_BASE_URL, STRICT_MODE } from './constants.js'
 import { ALL_TOOLS } from './registry/tool-definitions.js'
-import { registerSchemas } from './schemas/registry.js'
-import { setupToolsListHandler } from './schemas/schema-utils.js'
-
-// Register schemas with z.globalRegistry for named JSON Schema $refs
-// Must be called before any schema generation (tools/list)
-registerSchemas()
-
 import {
   consoleLoggingStrategy,
   getToolStatsByCategory,
@@ -117,9 +110,8 @@ async function main(): Promise<void> {
 
   await registerTools(serverInstance.server, serverInstance.context)
 
-  // Setup tools/list handler with optimized JSON Schema ($defs, validation)
-  // This is the single source of truth - same function used by tests
-  setupToolsListHandler(serverInstance.server, ALL_TOOLS)
+  // SDK's registerTool() automatically sets up tools/list handler
+  // with MCP-compliant JSON Schema output
 
   await connectServer(serverInstance.server)
   logStartupInfo(config)

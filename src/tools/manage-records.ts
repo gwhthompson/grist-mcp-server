@@ -43,24 +43,16 @@ import { nextSteps } from './utils/next-steps.js'
 
 export const RecordDataSchema = z.record(z.string(), CellValueSchema)
 
-/**
- * Add operation: Insert new records
- */
+/** Add operation: Insert new records */
 const AddRecordOperationSchema = z
   .object({
     action: z.literal('add'),
     tableId: TableIdSchema,
-    records: z
-      .array(RecordDataSchema)
-      .min(1)
-      .max(MAX_RECORDS_PER_BATCH)
-      .describe('Records to add [{col: value}]')
+    records: z.array(RecordDataSchema).min(1).max(MAX_RECORDS_PER_BATCH)
   })
-  .describe('Insert new records into the table')
+  .describe('add records')
 
-/**
- * Update operation: Modify existing records by row ID
- */
+/** Update operation: Modify existing records by row ID */
 const UpdateRecordOperationSchema = z
   .object({
     action: z.literal('update'),
@@ -68,32 +60,22 @@ const UpdateRecordOperationSchema = z
     records: z
       .array(
         z.object({
-          id: z.number().int().positive().describe('Row ID to update'),
-          fields: RecordDataSchema.describe('Column values to update')
+          id: z.number().int().positive(),
+          fields: RecordDataSchema
         })
       )
       .min(1)
       .max(MAX_RECORDS_PER_BATCH)
-      .describe('Records to update [{id, fields}]')
   })
-  .describe('Update existing records by row ID')
+  .describe('update records')
 
-/**
- * Delete operation: Remove records by row ID or filter
- */
+/** Delete operation: Remove records by row ID or filter */
 const DeleteRecordOperationSchema = z
   .object({
     action: z.literal('delete'),
     tableId: TableIdSchema,
-    rowIds: z
-      .array(z.number().int().positive())
-      .min(1)
-      .max(MAX_RECORDS_PER_BATCH)
-      .optional()
-      .describe('Row IDs to delete (use this OR filters, not both)'),
-    filters: FilterSchema.describe(
-      'Delete records matching criteria (use this OR rowIds, not both). Example: {Status: "Cancelled"}'
-    )
+    rowIds: z.array(z.number().int().positive()).min(1).max(MAX_RECORDS_PER_BATCH).optional(),
+    filters: FilterSchema.describe('use rowIds OR filters, not both')
   })
   .refine((data) => data.rowIds || data.filters, {
     message: 'Either rowIds or filters must be provided for delete'
@@ -101,11 +83,9 @@ const DeleteRecordOperationSchema = z
   .refine((data) => !(data.rowIds && data.filters), {
     message: 'Provide either rowIds OR filters, not both'
   })
-  .describe('Delete records by row ID or filter')
+  .describe('delete records')
 
-/**
- * Upsert operation: Add or update by unique key
- */
+/** Upsert operation: Add or update by unique key */
 const UpsertRecordOperationSchema = z
   .object({
     action: z.literal('upsert'),
@@ -113,29 +93,21 @@ const UpsertRecordOperationSchema = z
     records: z
       .array(
         z.object({
-          require: RecordDataSchema.describe(
-            'Match criteria to find existing records. Example: {Email: "x@y.com"}'
-          ),
-          fields: RecordDataSchema.optional().describe(
-            'Values to set on matched/new records. Example: {Name: "Updated", Status: "Active"}'
-          )
+          require: RecordDataSchema.describe('match criteria'),
+          fields: RecordDataSchema.optional().describe('values to set')
         })
       )
       .min(1)
-      .max(MAX_RECORDS_PER_BATCH)
-      .describe('Records with {require: match criteria, fields: values to set}'),
+      .max(MAX_RECORDS_PER_BATCH),
     onMany: z
       .enum(['first', 'none', 'all'])
       .default('first')
-      .describe('If multiple records match: "first"=update first, "none"=error, "all"=update all'),
-    allowEmptyRequire: z
-      .boolean()
-      .default(false)
-      .describe('Allow empty require (DANGER: updates all rows if true)'),
-    add: z.boolean().default(true).describe('Insert new record if no match found'),
-    update: z.boolean().default(true).describe('Update existing record if match found')
+      .describe('first/none/all on multiple'),
+    allowEmptyRequire: z.boolean().default(false).describe('DANGER: updates all rows'),
+    add: z.boolean().default(true).describe('insert if no match'),
+    update: z.boolean().default(true).describe('update if match')
   })
-  .describe('Add or update records by unique key (idempotent sync)')
+  .describe('upsert records')
 
 /**
  * Discriminated union of all record operations
@@ -147,16 +119,10 @@ const RecordOperationSchema = z.discriminatedUnion('action', [
   UpsertRecordOperationSchema
 ])
 
-/**
- * Main schema for grist_manage_records
- */
+/** Main schema for grist_manage_records */
 export const ManageRecordsSchema = z.strictObject({
   docId: DocIdSchema,
-  operations: z
-    .array(RecordOperationSchema)
-    .min(1)
-    .max(10)
-    .describe('Array of record operations to perform in sequence'),
+  operations: z.array(RecordOperationSchema).min(1).max(10),
   response_format: ResponseFormatSchema
 })
 
@@ -603,39 +569,34 @@ export async function manageRecords(context: ToolContext, params: ManageRecordsI
 // =============================================================================
 
 export const ManageRecordsOutputSchema = z.object({
-  success: z.boolean().describe('true if all operations completed without errors'),
-  docId: z.string().describe('Document that was modified'),
-  tablesAffected: z.array(z.string()).describe('Tables modified (for cache invalidation)'),
-  operationsCompleted: z.number().describe('Count of successful operations'),
-  totalRecordsAffected: z.number().describe('Total records added/updated/deleted'),
-  results: z
-    .array(
-      z.object({
-        action: z.string().describe('Operation type: add/update/delete/upsert'),
-        tableId: z.string().describe('Table this operation modified'),
-        success: z.boolean().describe('true if this operation succeeded'),
-        recordsAffected: z.number().describe('Records affected by this operation'),
-        recordIds: z.array(z.number()).optional().describe('Row IDs of affected records'),
-        error: z.string().optional().describe('Error message if operation failed'),
-        filtersUsed: z
-          .record(z.string(), z.unknown())
-          .optional()
-          .describe('Filters used for delete'),
-        verified: z.boolean().optional().describe('true if operation was verified by reading back')
-      })
-    )
-    .describe('Per-operation results with recordIds for follow-up queries'),
-  message: z.string().describe('Human-readable summary'),
+  success: z.boolean(),
+  docId: z.string(),
+  tablesAffected: z.array(z.string()),
+  operationsCompleted: z.number(),
+  totalRecordsAffected: z.number(),
+  results: z.array(
+    z.object({
+      action: z.string().describe('add/update/delete/upsert'),
+      tableId: z.string(),
+      success: z.boolean(),
+      recordsAffected: z.number(),
+      recordIds: z.array(z.number()).optional(),
+      error: z.string().optional(),
+      filtersUsed: z.record(z.string(), z.unknown()).optional(),
+      verified: z.boolean().optional()
+    })
+  ),
+  message: z.string(),
   partialFailure: z
     .object({
-      operationIndex: z.number().describe('Index of failed operation (0-based)'),
-      tableId: z.string().describe('Table where failure occurred'),
-      error: z.string().describe('What went wrong'),
-      completedOperations: z.number().describe('Operations that succeeded before failure')
+      operationIndex: z.number(),
+      tableId: z.string(),
+      error: z.string(),
+      completedOperations: z.number()
     })
     .optional()
-    .describe('Present if operations stopped mid-batch'),
-  nextSteps: z.array(z.string()).optional().describe('Suggested next actions')
+    .describe('present if batch stopped early'),
+  nextSteps: z.array(z.string()).optional().describe('suggested next actions')
 })
 
 // =============================================================================

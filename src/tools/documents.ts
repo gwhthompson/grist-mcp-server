@@ -5,17 +5,9 @@ import { CreateDocumentOutputSchema } from '../schemas/output-schemas.js'
 import { GristTool } from './base/GristTool.js'
 
 export const CreateDocumentSchema = z.strictObject({
-  name: z
-    .string()
-    .min(1)
-    .max(200)
-    .describe(
-      'Name for the new document. Example: "Customer CRM", "Q4 Sales Report", "Project Tracker"'
-    ),
+  name: z.string().min(1).max(200),
   workspaceId: WorkspaceIdSchema,
-  forkFromDocId: DocIdSchema.optional().describe(
-    'Optional: Document ID to fork from. Creates a copy with same structure and data. Omit to create blank document'
-  ),
+  forkFromDocId: DocIdSchema.optional().describe('copy from existing doc'),
   response_format: ResponseFormatSchema
 })
 

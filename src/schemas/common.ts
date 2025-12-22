@@ -6,21 +6,17 @@ import { z } from 'zod'
 export const ResponseFormatSchema = z
   .enum(['json', 'markdown', 'concise'])
   .default('json')
-  .describe(
-    'json: full structured data. markdown: formatted text. concise: minimal with counts/IDs only'
-  )
+  .describe('json: programmatic. markdown: display. concise: IDs only')
 
 export const DetailLevelWorkspaceSchema = z
   .enum(['summary', 'detailed'])
   .default('summary')
-  .describe('summary: name and basic info. detailed: adds permissions, timestamps')
+  .describe('summary: basic. detailed: +permissions, timestamps')
 
 export const DetailLevelTableSchema = z
   .enum(['names', 'columns', 'full_schema'])
   .default('columns')
-  .describe(
-    'names: table names only. columns: adds column names. full_schema: adds column types and options'
-  )
+  .describe('names: IDs. columns: +names. full_schema: +types, options')
 
 // =============================================================================
 // Base Visual Schemas (registered for named $refs, used by column-types and widget-options)
@@ -31,12 +27,12 @@ export const HexColorSchema = z
   .regex(/^#[0-9A-Fa-f]{6}$/)
   .describe('Hex color (#RRGGBB)')
 
-export const AlignmentSchema = z.enum(['left', 'center', 'right']).describe('Text alignment')
+export const AlignmentSchema = z.enum(['left', 'center', 'right'])
 
 /**
  * Generic JSON object schema for arbitrary key-value data
  */
-export const JsonObjectSchema = z.record(z.string(), z.unknown()).describe('Arbitrary JSON object')
+export const JsonObjectSchema = z.record(z.string(), z.unknown())
 
 /**
  * Create a pagination schema with configurable max limit.
@@ -55,14 +51,8 @@ export function createPaginationSchema(options: { maxLimit?: number; defaultLimi
   const { maxLimit = 1000, defaultLimit = 100 } = options
 
   return z.strictObject({
-    offset: z.number().int().min(0).default(0).describe('Start position'),
-    limit: z
-      .number()
-      .int()
-      .min(1)
-      .max(maxLimit)
-      .default(defaultLimit)
-      .describe(`Max items to return (1-${maxLimit})`)
+    offset: z.number().int().min(0).default(0),
+    limit: z.number().int().min(1).max(maxLimit).default(defaultLimit)
   })
 }
 
@@ -122,7 +112,6 @@ export const DocIdSchema = z
     error:
       'Document ID must be Base58 format (22 chars, excludes 0OIl which are visually ambiguous)'
   })
-  .describe('Document ID (from grist_get_documents)')
   .brand<'DocId'>()
 
 /** Branded DocId type - use DocIdSchema.parse() to create */
@@ -140,17 +129,12 @@ export const TableIdSchema = z
     error:
       'Table ID cannot be a Python keyword (for, class, if, def, etc.) because Grist uses Python for formulas'
   })
-  .describe('Table name (from grist_get_tables)')
   .brand<'TableId'>()
 
 /** Branded TableId type - use TableIdSchema.parse() to create */
 export type TableId = z.infer<typeof TableIdSchema>
 
-export const WorkspaceIdSchema = z.coerce
-  .number()
-  .int()
-  .positive()
-  .describe('Workspace ID (from grist_get_workspaces)')
+export const WorkspaceIdSchema = z.coerce.number().int().positive()
 
 export const ColIdSchema = z
   .string()
@@ -167,7 +151,6 @@ export const ColIdSchema = z
   .refine((id) => !id.startsWith('gristHelper_'), {
     error: 'Column ID cannot start with gristHelper_ (reserved prefix for Grist internal columns)'
   })
-  .describe('Column ID')
   .brand<'ColId'>()
 
 /** Branded ColId type - use ColIdSchema.parse() to create */
@@ -178,76 +161,44 @@ export type ColId = z.infer<typeof ColIdSchema>
 
 // visibleCol is top-level, NOT in widgetOptions
 export const RefWidgetOptionsSchema = z.strictObject({
-  showColumn: z
-    .union([z.string(), z.boolean()])
-    .optional()
-    .describe('UI visibility control (hide/show in views).')
+  showColumn: z.union([z.string(), z.boolean()]).optional().describe('show/hide in views')
 })
 
 export const ChoiceWidgetOptionsSchema = z.strictObject({
-  choices: z
-    .array(z.string())
-    .optional()
-    .describe(
-      'Available options. Examples: ["Red", "Blue", "Green"], ["High", "Medium", "Low"], ["Yes", "No", "Maybe"]'
-    ),
-  choiceColors: z
-    .record(z.string(), z.string())
-    .optional()
-    .describe(
-      'Color each option. Example: {"High": "#FF0000", "Low": "#00FF00"} colors High priority red and Low priority green'
-    )
+  choices: z.array(z.string()).optional().describe('e.g. ["High","Medium","Low"]'),
+  choiceColors: z.record(z.string(), z.string()).optional().describe('{"High":"#FF0000"}')
 })
 
 export const NumericWidgetOptionsSchema = z.strictObject({
-  numMode: z
-    .enum(['currency', 'decimal', 'percent', 'scientific'])
-    .optional()
-    .describe('Number display mode'),
-  numSign: z.enum(['parens']).optional().describe('Use parentheses for negative numbers'),
-  decimals: z
-    .number()
-    .int()
-    .min(0)
-    .max(20)
-    .optional()
-    .describe('Number of decimal places to display'),
-  maxDecimals: z
-    .number()
-    .int()
-    .min(0)
-    .max(20)
-    .optional()
-    .describe('Maximum number of decimal places'),
-  currency: z
-    .string()
-    .length(3)
-    .optional()
-    .describe('3-letter currency code like "USD", "EUR", "GBP", "JPY", "CAD"')
+  numMode: z.enum(['currency', 'decimal', 'percent', 'scientific']).optional(),
+  numSign: z.enum(['parens']).optional().describe('parens for negatives'),
+  decimals: z.number().int().min(0).max(20).optional(),
+  maxDecimals: z.number().int().min(0).max(20).optional(),
+  currency: z.string().length(3).optional().describe('e.g. USD, EUR')
 })
 
 export const DateWidgetOptionsSchema = z.strictObject({
-  dateFormat: z.string().optional().describe('Date format string (e.g., "YYYY-MM-DD")'),
-  isCustomDateFormat: z.boolean().optional().describe('Whether using custom date format'),
-  timeFormat: z.string().optional().describe('Time format string (e.g., "h:mma")'),
-  isCustomTimeFormat: z.boolean().optional().describe('Whether using custom time format')
+  dateFormat: z.string().optional().describe('e.g. YYYY-MM-DD'),
+  isCustomDateFormat: z.boolean().optional(),
+  timeFormat: z.string().optional().describe('e.g. h:mma'),
+  isCustomTimeFormat: z.boolean().optional()
 })
 
 export const TextWidgetOptionsSchema = z.strictObject({
-  alignment: z.enum(['left', 'center', 'right']).optional().describe('Text alignment'),
-  wrap: z.boolean().optional().describe('Enable text wrapping'),
-  fontBold: z.boolean().optional().describe('Bold text'),
-  fontItalic: z.boolean().optional().describe('Italic text'),
-  fontUnderline: z.boolean().optional().describe('Underline text'),
-  fontStrikethrough: z.boolean().optional().describe('Strikethrough text')
+  alignment: z.enum(['left', 'center', 'right']).optional(),
+  wrap: z.boolean().optional(),
+  fontBold: z.boolean().optional(),
+  fontItalic: z.boolean().optional(),
+  fontUnderline: z.boolean().optional(),
+  fontStrikethrough: z.boolean().optional()
 })
 
 export const BoolWidgetOptionsSchema = z.strictObject({
-  widget: z.enum(['TextBox', 'CheckBox']).optional().describe('Widget type for boolean display')
+  widget: z.enum(['TextBox', 'CheckBox']).optional()
 })
 
 export const AttachmentsWidgetOptionsSchema = z.strictObject({
-  height: z.number().int().positive().optional().describe('Height of attachment preview in pixels')
+  height: z.number().int().positive().optional().describe('preview height px')
 })
 
 export const EmptyWidgetOptionsSchema = z.strictObject({})
@@ -291,11 +242,7 @@ export function createWidgetOptionsSchema(columnType: string): z.ZodType<any, an
 // Note: ColumnDefinitionSchema is defined in column-types.ts with flat options structure
 // It's registered as 'ColumnDefinition' for JSON Schema $refs
 
-export const RowIdsSchema = z
-  .array(z.number().int().positive())
-  .min(1)
-  .max(500)
-  .describe('Row IDs (max 500, from grist_get_records)')
+export const RowIdsSchema = z.array(z.number().int().positive()).min(1).max(500)
 
 const FilterValueSchema = z.union([
   z.string(),
@@ -305,15 +252,9 @@ const FilterValueSchema = z.union([
   z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
 ])
 
-export const FilterSchema = z
-  .record(z.string(), FilterValueSchema)
-  .optional()
-  .describe('Column value filters')
+export const FilterSchema = z.record(z.string(), FilterValueSchema).optional()
 
-export const ColumnSelectionSchema = z
-  .array(z.string())
-  .optional()
-  .describe('Columns to return (omit for all)')
+export const ColumnSelectionSchema = z.array(z.string()).optional().describe('omit for all')
 
 export const StandardToolParams = z.object({
   response_format: ResponseFormatSchema

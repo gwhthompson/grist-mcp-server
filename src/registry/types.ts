@@ -16,21 +16,14 @@ export interface ToolContext {
 }
 
 /**
- * Tool behavior hints for MCP clients.
- *
- * Extends the MCP SDK's ToolAnnotations with:
- * - Required boolean hints (not optional) - forces explicit behavior declaration
- * - Custom `progressHint` for long-running operations
- *
- * @see MCPToolAnnotations from @modelcontextprotocol/sdk/types.js
+ * MCP tool behavior hints (2025-11-25 spec).
+ * Uses required booleans instead of optional to force explicit declaration.
  */
 export interface ToolAnnotations extends Omit<MCPToolAnnotations, 'title'> {
   readonly readOnlyHint: boolean
   readonly destructiveHint: boolean
   readonly idempotentHint: boolean
   readonly openWorldHint: boolean
-  /** Custom extension: hints that the operation may take significant time */
-  readonly progressHint?: boolean
 }
 
 /**
@@ -144,28 +137,4 @@ export const DESTRUCTIVE_ANNOTATIONS: ToolAnnotations = {
   destructiveHint: true,
   idempotentHint: true,
   openWorldHint: true
-} as const
-
-export const SLOW_OPERATION_ANNOTATIONS: ToolAnnotations = {
-  readOnlyHint: false,
-  destructiveHint: false,
-  idempotentHint: false,
-  openWorldHint: true,
-  progressHint: true
-} as const
-
-export const SLOW_READ_ANNOTATIONS: ToolAnnotations = {
-  readOnlyHint: true,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: true,
-  progressHint: true
-} as const
-
-export const SLOW_IDEMPOTENT_ANNOTATIONS: ToolAnnotations = {
-  readOnlyHint: false,
-  destructiveHint: false,
-  idempotentHint: true,
-  openWorldHint: true,
-  progressHint: true
 } as const

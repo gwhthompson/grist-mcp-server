@@ -1,10 +1,5 @@
 import { z } from 'zod'
-import {
-  READ_ONLY_ANNOTATIONS,
-  SLOW_READ_ANNOTATIONS,
-  type ToolContext,
-  type ToolDefinition
-} from '../registry/types.js'
+import { READ_ONLY_ANNOTATIONS, type ToolContext, type ToolDefinition } from '../registry/types.js'
 import { decodeCellValue } from '../schemas/api-responses.js'
 import { decodeFromApi } from '../schemas/cell-codecs.js'
 import {
@@ -86,15 +81,11 @@ export const QuerySQLSchema = z.strictObject({
     .string()
     .min(1, 'SQL query cannot be empty')
     .max(10000, 'SQL query too long (max 10,000 characters)')
-    .describe(
-      'SQL query to execute. Supports SELECT, JOINs, WHERE, GROUP BY, ORDER BY. Table names should match Grist table IDs. Example: "SELECT Name, Email FROM Contacts WHERE Status = \'Active\'"'
-    ),
+    .describe('SQLite query'),
   parameters: z
     .array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
     .optional()
-    .describe(
-      'Optional parameterized query values. Use ? placeholders in SQL (SQLite style). Example SQL: "WHERE Status = ? AND Priority > ?" with parameters: ["Active", 1]'
-    ),
+    .describe('? placeholder values'),
   response_format: ResponseFormatSchema,
   ...PaginationSchema.shape
 })
@@ -425,7 +416,7 @@ export const READING_TOOLS: ReadonlyArray<ToolDefinition> = [
     category: 'reading',
     inputSchema: QuerySQLSchema,
     outputSchema: QuerySqlOutputSchema,
-    annotations: SLOW_READ_ANNOTATIONS,
+    annotations: READ_ONLY_ANNOTATIONS,
     handler: querySql,
     docs: {
       overview:

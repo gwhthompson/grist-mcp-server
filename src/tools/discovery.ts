@@ -33,7 +33,7 @@ export const GetWorkspacesSchema = z.strictObject({
     .min(1, 'Search term must be at least 1 character')
     .max(100, 'Search term cannot exceed 100 characters')
     .optional()
-    .describe('Filter by name (partial match)'),
+    .describe('substring match'),
   detail_level: DetailLevelWorkspaceSchema,
   response_format: ResponseFormatSchema,
   ...PaginationSchema.shape
@@ -168,18 +168,18 @@ export async function getWorkspaces(context: ToolContext, params: GetWorkspacesI
 }
 
 export const GetDocumentsSchema = z.strictObject({
-  docId: DocIdSchema.optional().describe('Get specific document by ID'),
+  docId: DocIdSchema.optional(),
   name_contains: z
     .string()
     .min(1, 'Search term must be at least 1 character')
     .max(100, 'Search term cannot exceed 100 characters')
     .optional()
-    .describe('Filter by name (partial match)'),
-  workspaceId: WorkspaceIdSchema.optional().describe('Filter to workspace'),
+    .describe('substring match'),
+  workspaceId: WorkspaceIdSchema.optional().describe('filter to workspace'),
   detail_level: z
     .enum(['summary', 'detailed'])
     .default('summary')
-    .describe('summary: basic. detailed: +permissions, timestamps, urls'),
+    .describe('summary: basic. detailed: +permissions, timestamps'),
   response_format: ResponseFormatSchema,
   ...PaginationSchema.shape
 })

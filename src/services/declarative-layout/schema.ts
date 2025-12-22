@@ -290,36 +290,38 @@ export type LayoutNode =
  * Recursive schema for layout nodes.
  * Uses z.lazy() with explicit type annotation for proper recursion.
  */
-export const LayoutNodeSchema: z.ZodType<LayoutNode> = z.lazy(() =>
-  z.union([
-    // Section ID
-    z
-      .number()
-      .int()
-      .positive(),
+export const LayoutNodeSchema: z.ZodType<LayoutNode> = z
+  .lazy(() =>
+    z.union([
+      // Section ID
+      z
+        .number()
+        .int()
+        .positive(),
 
-    // Weighted section: [id, weight]
-    z.tuple([z.number().int().positive(), z.number().positive()]),
+      // Weighted section: [id, weight]
+      z.tuple([z.number().int().positive(), z.number().positive()]),
 
-    // Existing pane with options
-    ExistingPaneSchema,
+      // Existing pane with options
+      ExistingPaneSchema,
 
-    // New widget definition
-    NewPaneSchema,
+      // New widget definition
+      NewPaneSchema,
 
-    // Column split
-    z.strictObject({
-      cols: z.array(LayoutNodeSchema).min(2).max(10),
-      weight: z.number().positive().optional()
-    }),
+      // Column split
+      z.strictObject({
+        cols: z.array(LayoutNodeSchema).min(2).max(10),
+        weight: z.number().positive().optional()
+      }),
 
-    // Row split
-    z.strictObject({
-      rows: z.array(LayoutNodeSchema).min(2).max(10),
-      weight: z.number().positive().optional()
-    })
-  ])
-)
+      // Row split
+      z.strictObject({
+        rows: z.array(LayoutNodeSchema).min(2).max(10),
+        weight: z.number().positive().optional()
+      })
+    ])
+  )
+  .meta({ id: 'LayoutNode' })
 
 // =============================================================================
 // Type Guards

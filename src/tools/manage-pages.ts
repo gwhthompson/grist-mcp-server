@@ -9,7 +9,7 @@
 
 import { z } from 'zod'
 import { reorderPages as reorderPagesOp } from '../domain/operations/pages.js'
-import { type ToolContext, type ToolDefinition, WRITE_SAFE_ANNOTATIONS } from '../registry/types.js'
+import type { ToolContext, ToolDefinition } from '../registry/types.js'
 import { ApplyResponseSchema } from '../schemas/api-responses.js'
 import {
   createBatchOutputSchema,
@@ -60,31 +60,26 @@ export const PageRefSchema = z.union([z.string().min(1), z.number().int().positi
 const CreatePageOperationSchema = z
   .object({
     action: z.literal('create_page'),
-    name: z.string().min(1).max(100).describe('Page name'),
-    layout: LayoutNodeSchema.describe('Declarative layout with widgets and arrangement')
+    name: z.string().min(1).max(100),
+    layout: LayoutNodeSchema
   })
-  .describe('Create a new page with declarative layout')
+  .describe('create page')
 
 const SetLayoutOperationSchema = z
   .object({
     action: z.literal('set_layout'),
-    page: PageRefSchema.describe('Page name or viewId'),
-    layout: LayoutNodeSchema.describe(
-      'New layout (must include all existing widgets or remove them)'
-    ),
-    remove: z
-      .array(z.number().int().positive())
-      .optional()
-      .describe('Section IDs to remove from the page')
+    page: PageRefSchema.describe('name or viewId'),
+    layout: LayoutNodeSchema,
+    remove: z.array(z.number().int().positive()).optional().describe('sectionIds to remove')
   })
-  .describe('Update page layout. All existing widgets must be in layout or remove array.')
+  .describe('update layout')
 
 const GetLayoutOperationSchema = z
   .object({
     action: z.literal('get_layout'),
-    page: PageRefSchema.describe('Page name or viewId')
+    page: PageRefSchema.describe('name or viewId')
   })
-  .describe('Get page layout in declarative format')
+  .describe('get layout')
 
 // =============================================================================
 // Metadata Operation Schemas
@@ -93,25 +88,25 @@ const GetLayoutOperationSchema = z
 const RenamePageOperationSchema = z
   .object({
     action: z.literal('rename_page'),
-    page: z.string().min(1).describe('Current page name'),
-    newName: z.string().min(1).max(100).describe('New page name')
+    page: z.string().min(1),
+    newName: z.string().min(1).max(100)
   })
-  .describe('Rename an existing page')
+  .describe('rename page')
 
 const DeletePageOperationSchema = z
   .object({
     action: z.literal('delete_page'),
-    page: z.string().min(1).describe('Page name to delete'),
-    deleteData: z.boolean().default(false).describe('Also delete underlying tables (DESTRUCTIVE)')
+    page: z.string().min(1),
+    deleteData: z.boolean().default(false).describe('also delete tables')
   })
-  .describe('Delete a page and optionally its data')
+  .describe('delete page')
 
 const ReorderPagesOperationSchema = z
   .object({
     action: z.literal('reorder_pages'),
-    order: z.array(z.string().min(1)).min(1).describe('Page names in desired order')
+    order: z.array(z.string().min(1)).min(1).describe('page names in order')
   })
-  .describe('Reorder pages in navigation')
+  .describe('reorder pages')
 
 // =============================================================================
 // Config Operation Schema
@@ -120,45 +115,37 @@ const ReorderPagesOperationSchema = z
 const ConfigureWidgetOperationSchema = z
   .object({
     action: z.literal('configure_widget'),
-    page: z.string().min(1).describe('Page name'),
-    widget: z.string().min(1).describe('Widget title'),
-    title: z.string().optional().describe('New title'),
+    page: z.string().min(1),
+    widget: z.string().min(1).describe('widget title'),
+    title: z.string().optional(),
     sortBy: z
       .array(z.union([z.number(), z.string()]))
       .optional()
-      .describe('Sort columns (e.g., ["-Date", "Amount"])')
+      .describe('e.g. ["-Date", "Amount"]')
   })
-  .describe('Configure widget properties (title, sorting)')
+  .describe('configure widget')
 
 // =============================================================================
 // Link Operation Schema (Architecture B)
 // =============================================================================
 
-/**
- * Link specification for connecting two widgets.
- * Both source and target must be sectionIds from the same page.
- */
+/** Link specification for connecting two widgets */
 const LinkSpecSchema = z
   .object({
-    source: WidgetIdSchema.describe('Source widget sectionId'),
-    target: WidgetIdSchema.describe('Target widget sectionId to configure link on'),
-    link: LinkSchema.describe('Link type and configuration')
+    source: WidgetIdSchema,
+    target: WidgetIdSchema,
+    link: LinkSchema
   })
-  .describe('Specification for linking two widgets')
+  .describe('widget link spec')
 
-/**
- * Architecture B: Separate operation for configuring widget links.
- *
- * Use after create_page/set_layout to establish relationships between widgets.
- * All widget references use real sectionIds from previous responses.
- */
+/** Architecture B: Configure widget links using sectionIds from create_page response */
 const LinkWidgetsOperationSchema = z
   .object({
     action: z.literal('link_widgets'),
-    viewId: z.number().int().positive().describe('Page viewId containing the widgets'),
-    links: z.array(LinkSpecSchema).min(1).max(20).describe('Links to establish between widgets')
+    viewId: z.number().int().positive(),
+    links: z.array(LinkSpecSchema).min(1).max(20)
   })
-  .describe('Configure links between widgets on a page. Use sectionIds from create_page response.')
+  .describe('link widgets')
 
 // =============================================================================
 // Discriminated Union and Main Schema
@@ -177,11 +164,7 @@ const PageOperationSchema = z.discriminatedUnion('action', [
 
 export const ManagePagesSchema = z.strictObject({
   docId: DocIdSchema,
-  operations: z
-    .array(PageOperationSchema)
-    .min(1)
-    .max(20)
-    .describe('Page/widget operations to perform in sequence'),
+  operations: z.array(PageOperationSchema).min(1).max(20),
   response_format: ResponseFormatSchema
 })
 
@@ -889,7 +872,12 @@ export const MANAGE_PAGES_TOOL: ToolDefinition = {
   category: 'document_structure',
   inputSchema: ManagePagesSchema,
   outputSchema: ManagePagesOutputSchema,
-  annotations: WRITE_SAFE_ANNOTATIONS,
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: true, // Can delete pages
+    idempotentHint: false,
+    openWorldHint: true
+  },
   handler: managePages,
   docs: {
     overview:

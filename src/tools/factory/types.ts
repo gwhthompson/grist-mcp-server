@@ -29,9 +29,12 @@ export interface PaginationMetadata {
   nextOffset: number | null
 }
 
-export interface PaginatedResponse<TItem> {
+/**
+ * Flat paginated response structure matching output schemas.
+ * Pagination fields are at the top level, not nested under 'pagination'.
+ */
+export interface PaginatedResponse<TItem> extends PaginationMetadata {
   items: TItem[]
-  pagination: PaginationMetadata
 }
 
 /**

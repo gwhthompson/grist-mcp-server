@@ -204,16 +204,16 @@ export function definePaginatedTool<TInput extends ToolInputSchema, TItem>(
       const offset = getOffset(params) ?? 0
       const limit = getLimit(params) ?? pageSize
       const paginatedItems = items.slice(offset, offset + limit)
+      const hasMore = offset + limit < items.length
 
+      // Return flat structure matching output schemas
       let result: PaginatedResponse<TItem> & { nextSteps?: string[] } = {
         items: paginatedItems,
-        pagination: {
-          total: items.length,
-          offset,
-          limit,
-          hasMore: offset + limit < items.length,
-          nextOffset: offset + limit < items.length ? offset + limit : null
-        }
+        total: items.length,
+        offset,
+        limit,
+        hasMore,
+        nextOffset: hasMore ? offset + limit : null
       }
 
       if (config.afterExecute) {

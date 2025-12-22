@@ -131,7 +131,7 @@ export const GET_WORKSPACES_TOOL = definePaginatedTool<
           !!firstWs,
           `Use grist_get_documents with workspaceId=${firstWs?.id} to list documents in "${firstWs?.name}"`
         )
-        .addPaginationHint(result.pagination, 'workspaces')
+        .addPaginationHint(result, 'workspaces')
         .build()
     }
   },
@@ -308,7 +308,7 @@ export const GET_DOCUMENTS_TOOL = definePaginatedTool<typeof GetDocumentsSchema,
             !!params.docId && result.items.length === 1,
             'Use grist_get_records to query data from tables'
           )
-          .addPaginationHint(result.pagination, 'documents')
+          .addPaginationHint(result, 'documents')
           .build()
       }
     },

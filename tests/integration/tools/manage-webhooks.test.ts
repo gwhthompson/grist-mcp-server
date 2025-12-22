@@ -249,7 +249,14 @@ describe('grist_manage_webhooks', () => {
         }
       })
 
-      expect(result.isError).toBe(true)
+      // Batch tools return partial failure as success=false in content, not isError=true
+      expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(false)
+      expect(parsed.partialFailure).toBeDefined()
     })
   })
 
@@ -321,7 +328,14 @@ describe('grist_manage_webhooks', () => {
         }
       })
 
-      expect(result.isError).toBe(true)
+      // Batch tools return partial failure as success=false in content, not isError=true
+      expect(result.isError).toBeFalsy()
+
+      const text = (result.content[0] as { text: string }).text
+      const parsed = JSON.parse(text)
+
+      expect(parsed.success).toBe(false)
+      expect(parsed.partialFailure).toBeDefined()
     })
   })
 

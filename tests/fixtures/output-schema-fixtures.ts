@@ -660,7 +660,7 @@ export const WebhookListFixtures = {
     operationsCompleted: 1,
     results: [
       {
-        operation: 'list' as const,
+        action: 'list' as const,
         webhookCount: 0,
         total: 0,
         offset: 0,
@@ -681,7 +681,7 @@ export const WebhookListFixtures = {
     operationsCompleted: 1,
     results: [
       {
-        operation: 'list' as const,
+        action: 'list' as const,
         webhookCount: 2,
         total: 2,
         offset: 0,
@@ -726,7 +726,7 @@ export const WebhookCreateFixtures = {
     operationsCompleted: 1,
     results: [
       {
-        operation: 'create' as const,
+        action: 'create' as const,
         webhookId: 'new-webhook-uuid',
         webhookUrl: 'https://hooks.example.com/new',
         tableId: 'Customers',
@@ -744,7 +744,7 @@ export const WebhookUpdateFixtures = {
     operationsCompleted: 1,
     results: [
       {
-        operation: 'update' as const,
+        action: 'update' as const,
         webhookId: 'webhook-uuid-1234',
         fieldsUpdated: ['url', 'enabled']
       }
@@ -760,7 +760,7 @@ export const WebhookDeleteFixtures = {
     operationsCompleted: 1,
     results: [
       {
-        operation: 'delete' as const,
+        action: 'delete' as const,
         webhookId: 'webhook-uuid-1234'
       }
     ],
@@ -775,8 +775,8 @@ export const WebhookClearQueueFixtures = {
     operationsCompleted: 1,
     results: [
       {
-        operation: 'clear_queue' as const,
-        action: 'cleared_webhook_queue' as const
+        action: 'clear_queue' as const,
+        success: true
       }
     ],
     message: 'Successfully cleared webhook queue'

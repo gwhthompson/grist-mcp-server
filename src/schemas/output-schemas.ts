@@ -503,7 +503,7 @@ export const ManageWebhooksOutputSchema = z.looseObject({
   operationsCompleted: z.number(),
   results: z.array(
     z.looseObject({
-      operation: z.enum(['list', 'create', 'update', 'delete', 'clear_queue'])
+      action: z.enum(['list', 'create', 'update', 'delete', 'clear_queue'])
     })
   ),
   message: z.string(),

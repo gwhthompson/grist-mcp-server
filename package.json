@@ -1,6 +1,6 @@
 {
   "name": "grist-mcp-server",
-  "version": "2.0.30",
+  "version": "2.0.31",
   "description": "11 tools for managing Grist documents with AI",
   "repository": {
     "type": "git",
@@ -30,7 +30,8 @@
     "lint": "biome check .",
     "pack": "npx @anthropic-ai/mcpb@2.0.1 pack",
     "pack:validate": "npx @anthropic-ai/mcpb@2.0.1 validate .",
-    "bundle": "npm run build && npm ci --omit=dev && npm run pack",
+    "bundle:vite": "vite build",
+    "bundle": "npm run build && npm run bundle:vite && npm run pack",
     "prepare": "husky || true"
   },
   "keywords": [
@@ -59,6 +60,7 @@
     "husky": "^9.1.7",
     "tsx": "^4.21.0",
     "typescript": "^5.7.2",
+    "vite": "^7.3.0",
     "vitest": "^4.0.15"
   }
 }

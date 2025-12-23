@@ -166,14 +166,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build project
-        run: npm run build
-
-      - name: Install production dependencies only
-        run: npm ci --omit=dev
-
-      - name: Create MCPB bundle
-        run: npx @anthropic-ai/mcpb pack
+      - name: Create bundle (Vite tree-shaking + MCPB)
+        run: npm run bundle
 
       - name: Verify bundle was created
         run: |
@@ -184,7 +178,7 @@ jobs:
 
           BUNDLE_SIZE=$(du -h grist-mcp-server.mcpb | cut -f1)
           echo "✅ MCPB bundle created successfully"
-          echo "📦 Bundle size: $BUNDLE_SIZE"
+          echo "📦 Bundle size: $BUNDLE_SIZE (tree-shaken with Vite)"
           ls -lh grist-mcp-server.mcpb
 
       - name: Upload MCPB bundle

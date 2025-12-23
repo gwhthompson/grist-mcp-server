@@ -130,8 +130,8 @@ npm test  # Docker required - container lifecycle is automatic
 
 Tool descriptions are concise. Use `grist_help` for details:
 
-- `grist_help tool_name="grist_manage_records" topic="examples"`
-- `grist_help tool_name="grist_query_sql" topic="errors"`
+- `grist_help({tools: ["grist_manage_records"], only: ["examples"]})`
+- `grist_help({tools: ["grist_query_sql"], only: ["errors"]})`
 
 See [CHANGELOG.md](CHANGELOG.md) for version history.
 

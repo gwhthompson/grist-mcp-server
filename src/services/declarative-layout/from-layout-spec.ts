@@ -5,6 +5,7 @@
  * Note: Round-trip loses exact weights (returns nested binary structure).
  */
 
+import { fromGristWidgetType, type GristWidgetType } from '../../schemas/pages-widgets.js'
 import type { LayoutSpec } from '../../types.js'
 import type { LayoutNode } from './schema.js'
 
@@ -106,7 +107,7 @@ export function formatGetLayoutResult(
   const widgetList = [...widgets.values()].map((w) => ({
     section: w.sectionId,
     table: w.tableId,
-    widget: w.widgetType,
+    widget: fromGristWidgetType(w.widgetType as GristWidgetType),
     ...(w.title ? { title: w.title } : {})
   }))
 

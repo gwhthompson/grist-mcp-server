@@ -72,7 +72,7 @@ const ColumnStyleBaseSchema = z.object({
     .describe('{formula, style} rules, first match wins')
 })
 
-export const ColumnStyleSchema = ColumnStyleBaseSchema.partial()
+export const ColumnStyleSchema = ColumnStyleBaseSchema.partial().meta({ id: 'ColumnStyle' })
 
 export type ColumnStyle = z.infer<typeof ColumnStyleSchema>
 
@@ -134,7 +134,10 @@ const ChoiceStyleBaseSchema = z.object({
 
 const ChoiceStyleSchema = ChoiceStyleBaseSchema.partial()
 
-export const ChoiceOptionsSchema = z.record(z.string(), ChoiceStyleSchema).optional()
+export const ChoiceOptionsSchema = z
+  .record(z.string(), ChoiceStyleSchema)
+  .optional()
+  .meta({ id: 'ChoiceOptions' })
 
 // Table name schema for refTable field
 export const RefTableSchema = z
@@ -144,7 +147,7 @@ export const RefTableSchema = z
   .regex(/^[A-Z_][A-Za-z0-9_]*$/)
 
 // visibleCol can be column name (string) or column ID (number)
-export const VisibleColSchema = z.union([z.string(), z.number()])
+export const VisibleColSchema = z.union([z.string(), z.number()]).meta({ id: 'VisibleCol' })
 
 // =============================================================================
 // Column Definition Schema (shared by grist_create_table and grist_manage_columns)
@@ -179,32 +182,58 @@ export const ColumnDefinitionSchema = z
     formula: z.string().optional().describe('e.g. $Price * $Quantity'),
 
     // Text options
-    widget: WidgetTypeSchema.optional(),
-    wrap: z.boolean().optional(),
+    widget: WidgetTypeSchema.optional().describe('(Text/Bool/Numeric) display widget'),
+    wrap: z.boolean().optional().describe('(Text) enable word wrap'),
 
     // Numeric/Int options
-    numMode: NumModeSchema.optional(),
-    currency: CurrencyCodeInputSchema.optional(),
-    numSign: z.enum(['parens']).nullable().optional(),
-    decimals: z.number().int().min(0).max(20).optional(),
-    maxDecimals: z.number().int().min(0).max(20).optional(),
+    numMode: NumModeSchema.optional().describe(
+      '(Numeric/Int) currency, decimal, percent, scientific, text'
+    ),
+    currency: CurrencyCodeInputSchema.optional().describe('(Numeric/Int) ISO 4217 code'),
+    numSign: z.enum(['parens']).nullable().optional().describe('(Numeric/Int) negative format'),
+    decimals: z
+      .number()
+      .int()
+      .min(0)
+      .max(20)
+      .optional()
+      .describe('(Numeric/Int) fixed decimal places'),
+    maxDecimals: z
+      .number()
+      .int()
+      .min(0)
+      .max(20)
+      .optional()
+      .describe('(Numeric/Int) max decimal places'),
 
     // Date/DateTime options
-    dateFormat: z.string().max(100).optional().describe('e.g. YYYY-MM-DD'),
-    isCustomDateFormat: z.boolean().optional(),
-    timeFormat: z.string().max(100).optional().describe('e.g. HH:mm:ss'),
-    isCustomTimeFormat: z.boolean().optional(),
+    dateFormat: z.string().max(100).optional().describe('(Date/DateTime) e.g. YYYY-MM-DD'),
+    isCustomDateFormat: z.boolean().optional().describe('(Date/DateTime) use custom format'),
+    timeFormat: z.string().max(100).optional().describe('(DateTime) e.g. HH:mm:ss'),
+    isCustomTimeFormat: z.boolean().optional().describe('(DateTime) use custom format'),
 
     // Choice/ChoiceList options
-    choices: z.array(z.string().min(1).max(255)).max(1000).optional(),
-    choiceOptions: ChoiceOptionsSchema,
+    choices: z
+      .array(z.string().min(1).max(255))
+      .max(1000)
+      .optional()
+      .describe('(Choice/ChoiceList) available options'),
+    choiceOptions: ChoiceOptionsSchema.describe(
+      '(Choice/ChoiceList) option styles {fillColor, textColor}'
+    ),
 
     // Ref/RefList options
-    refTable: RefTableSchema.optional(),
-    visibleCol: VisibleColSchema.optional(),
+    refTable: RefTableSchema.optional().describe('(Ref/RefList) target table name - REQUIRED'),
+    visibleCol: VisibleColSchema.optional().describe('(Ref/RefList) display column name or ID'),
 
     // Attachments options
-    height: z.number().int().min(1).max(5000).optional().describe('preview height px'),
+    height: z
+      .number()
+      .int()
+      .min(1)
+      .max(5000)
+      .optional()
+      .describe('(Attachments) preview height px 1-5000'),
 
     // Universal styling (all column types)
     style: ColumnStyleSchema.optional()

@@ -668,14 +668,14 @@ describe('MANAGE_RECORDS_TOOL definition', () => {
     expect(MANAGE_RECORDS_TOOL.docs.errors).toBeDefined()
   })
 
-  it('has examples covering all operations', () => {
+  it('has examples covering key patterns', () => {
     const examples = MANAGE_RECORDS_TOOL.docs.examples
-    expect(examples.length).toBeGreaterThan(0)
+    expect(examples.length).toBeGreaterThanOrEqual(2)
 
-    // Check that examples cover different operations
+    // Check that examples cover key patterns (add, cross-table, upsert)
+    // Update/delete are simple and discoverable from schema
     const exampleDescriptions = examples.map((e) => e.desc.toLowerCase())
     expect(exampleDescriptions.some((d) => d.includes('add'))).toBe(true)
-    expect(exampleDescriptions.some((d) => d.includes('update') || d.includes('delete'))).toBe(true)
     expect(exampleDescriptions.some((d) => d.includes('upsert'))).toBe(true)
   })
 

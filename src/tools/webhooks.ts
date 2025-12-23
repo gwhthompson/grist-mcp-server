@@ -389,59 +389,23 @@ export const MANAGE_WEBHOOKS_TOOL = defineBatchTool<
 
   docs: {
     overview:
-      'Manages webhooks for real-time notifications when table data changes. ' +
-      'Batch multiple create/update/delete operations in a single call. ' +
-      'Note: list and clear_queue must be the only operation if used.',
+      'Batch webhook CRUD for real-time notifications. list and clear_queue must be solo operations.',
     examples: [
       {
-        desc: 'Create multiple webhooks',
+        desc: 'Create webhook',
         input: {
           docId: 'abc123',
           operations: [
             {
               action: 'create',
-              fields: {
-                url: 'https://api.example.com/customers',
-                tableId: 'Customers',
-                eventTypes: ['add', 'update'],
-                name: 'Customer Sync'
-              }
-            },
-            {
-              action: 'create',
-              fields: {
-                url: 'https://api.example.com/orders',
-                tableId: 'Orders',
-                eventTypes: ['add'],
-                name: 'Order Notifications'
-              }
+              fields: { url: 'https://api.example.com/hook', tableId: 'Tasks', eventTypes: ['add'] }
             }
           ]
         }
       },
       {
         desc: 'List webhooks',
-        input: {
-          docId: 'abc123',
-          operations: [{ action: 'list' }]
-        }
-      },
-      {
-        desc: 'Update and delete webhooks',
-        input: {
-          docId: 'abc123',
-          operations: [
-            { action: 'update', webhookId: 'uuid-1', fields: { enabled: false } },
-            { action: 'delete', webhookId: 'uuid-2' }
-          ]
-        }
-      },
-      {
-        desc: 'Clear backed-up queue',
-        input: {
-          docId: 'abc123',
-          operations: [{ action: 'clear_queue' }]
-        }
+        input: { docId: 'abc123', operations: [{ action: 'list' }] }
       }
     ],
     errors: [

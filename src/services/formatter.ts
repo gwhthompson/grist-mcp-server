@@ -149,7 +149,7 @@ function formatArrayAsMarkdown<T>(items: T[]): string {
     return 'No items found'
   }
 
-  return items.map((item, index) => `${index + 1}. ${formatItemAsMarkdown(item)}`).join('\n\n')
+  return items.map((item, index) => `${index + 1}. ${formatItemAsMarkdown(item)}`).join('\n')
 }
 
 function formatItemAsMarkdown<T>(item: T): string {
@@ -159,8 +159,8 @@ function formatItemAsMarkdown<T>(item: T): string {
 
   if (typeof item === 'object' && item !== null) {
     return Object.entries(item)
-      .map(([key, value]) => `  - **${key}**: ${formatValue(value)}`)
-      .join('\n')
+      .map(([key, value]) => `${key}: ${formatValue(value)}`)
+      .join(', ')
   }
 
   return JSON.stringify(item)
@@ -170,11 +170,11 @@ function formatObjectAsMarkdown<T extends Record<string, unknown>>(obj: T): stri
   return Object.entries(obj)
     .map(([key, value]) => {
       if (Array.isArray(value)) {
-        return `**${key}**:\n${formatArrayAsMarkdown(value)}`
+        return `${key}:\n${formatArrayAsMarkdown(value)}`
       }
-      return `**${key}**: ${formatValue(value)}`
+      return `${key}: ${formatValue(value)}`
     })
-    .join('\n\n')
+    .join('\n')
 }
 
 interface PaginationData {
@@ -206,9 +206,9 @@ function formatHeader(items: unknown, total: number | undefined): string {
   const itemsLength = Array.isArray(items) ? items.length : 0
 
   if (total !== undefined) {
-    return `# Results (${itemsLength} of ${total} total)`
+    return `${itemsLength} of ${total} results`
   }
-  return `# Results (${itemsLength} items)`
+  return `${itemsLength} results`
 }
 
 function formatPaginationFooter(hasMore: boolean, nextOffset: unknown): string[] {
@@ -216,24 +216,16 @@ function formatPaginationFooter(hasMore: boolean, nextOffset: unknown): string[]
     return []
   }
 
-  return ['', '---', '', `**More results available**. Use \`offset=${nextOffset}\` to continue.`]
+  return ['', `More: offset=${nextOffset}`]
 }
 
 function formatTruncationWarning(
   truncationReason: string | undefined,
   suggestions: unknown
 ): string[] {
-  const lines: string[] = [
-    '',
-    '---',
-    '',
-    '⚠️ **Response Truncated**',
-    '',
-    truncationReason || 'Response exceeded character limit'
-  ]
+  const lines: string[] = ['', truncationReason || 'Truncated: exceeded character limit']
 
   if (Array.isArray(suggestions) && suggestions.length > 0) {
-    lines.push('', '**Suggestions:**')
     suggestions.forEach((suggestion) => {
       if (typeof suggestion === 'string') {
         lines.push(`- ${suggestion}`)
@@ -414,22 +406,20 @@ function generateTruncationSuggestions(
   const suggestions: string[] = []
 
   if ('offset' in data && typeof data.offset === 'number') {
-    suggestions.push(
-      `Use offset=${data.offset + itemsIncluded} to continue from where truncation occurred`
-    )
+    suggestions.push(`offset=${data.offset + itemsIncluded} to continue`)
   } else {
-    suggestions.push(`Use offset=${itemsIncluded} to continue from where truncation occurred`)
+    suggestions.push(`offset=${itemsIncluded} to continue`)
   }
 
   if (
     'detail_level' in data &&
     (data.detail_level === 'detailed' || data.detail_level === 'full_schema')
   ) {
-    suggestions.push(`Reduce detail_level to 'summary' or 'names' for more concise output`)
+    suggestions.push(`detail_level='summary' for less data`)
   }
 
   if (!('columns' in data) || data.columns === '*') {
-    suggestions.push(`Select specific columns instead of all columns to reduce data size`)
+    suggestions.push(`select specific columns`)
   }
 
   const filters = 'filters' in data ? data.filters : undefined
@@ -439,13 +429,11 @@ function generateTruncationSuggestions(
       filters !== null &&
       Object.keys(filters as Record<string, unknown>).length === 0)
   ) {
-    suggestions.push(`Add filters to reduce the result set`)
+    suggestions.push(`add filters`)
   }
 
   if ('limit' in data && typeof data.limit === 'number' && data.limit > 50) {
-    suggestions.push(
-      `Reduce limit parameter (currently ${data.limit}) to request fewer items per page`
-    )
+    suggestions.push(`reduce limit (currently ${data.limit})`)
   }
 
   return suggestions

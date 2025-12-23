@@ -32,7 +32,7 @@ function getResponseFormat(params: unknown): ResponseFormat {
   if (typeof params === 'object' && params !== null && 'response_format' in params) {
     const record = params as Record<string, unknown>
     const format = record.response_format
-    if (format === 'json' || format === 'markdown') {
+    if (format === 'json' || format === 'markdown' || format === 'concise') {
       return format
     }
   }

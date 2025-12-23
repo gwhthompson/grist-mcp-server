@@ -112,7 +112,9 @@ export const DateWidgetOptionsSchema = z
       .string()
       .max(100)
       .optional()
-      .describe('Date format string (e.g., "YYYY-MM-DD", "MMM D, YYYY") - max 100 chars'),
+      .describe(
+        'Date format (Moment.js tokens): YYYY/YY (year), MM/MMM/MMMM (month), DD/D (day). Examples: "YYYY-MM-DD", "MMM D, YYYY", "DD/MM/YYYY"'
+      ),
     isCustomDateFormat: z.boolean().optional().describe('Whether the date format is custom'),
     alignment: AlignmentSchema.describe('Date alignment'),
     rulesOptions: z
@@ -136,13 +138,19 @@ export const DateTimeWidgetOptionsSchema = z
   .strictObject({
     ...StylePropertiesSchema.shape,
     ...HeaderStylePropertiesSchema.shape,
-    dateFormat: z.string().max(100).optional().describe('Date format string - max 100 chars'),
+    dateFormat: z
+      .string()
+      .max(100)
+      .optional()
+      .describe('Date format (Moment.js): YYYY/YY, MM/MMM/MMMM, DD/D'),
     isCustomDateFormat: z.boolean().optional().describe('Whether the date format is custom'),
     timeFormat: z
       .string()
       .max(100)
       .optional()
-      .describe('Time format string (e.g., "HH:mm:ss", "h:mm A") - max 100 chars'),
+      .describe(
+        'Time format (Moment.js tokens): HH/hh (hour), mm (min), ss (sec), A/a (AM/PM). Examples: "HH:mm:ss", "h:mm A"'
+      ),
     isCustomTimeFormat: z.boolean().optional().describe('Whether the time format is custom'),
     alignment: AlignmentSchema.describe('DateTime alignment'),
     rulesOptions: z

@@ -43,7 +43,7 @@ describe('grist_help - New API', () => {
 
   describe('Single tool mode', () => {
     it('returns tool help with schema', async () => {
-      const result = await HELP_TOOL.handler(context, { tools: VALID_TOOL })
+      const result = await HELP_TOOL.handler(context, { tools: [VALID_TOOL] })
 
       expect(result.structuredContent?.tools).toBeDefined()
       const tools = result.structuredContent?.tools as Record<string, unknown>
@@ -61,7 +61,7 @@ describe('grist_help - New API', () => {
     })
 
     it('filters sections with only param', async () => {
-      const result = await HELP_TOOL.handler(context, { tools: VALID_TOOL, only: ['schema'] })
+      const result = await HELP_TOOL.handler(context, { tools: [VALID_TOOL], only: ['schema'] })
 
       const tools = result.structuredContent?.tools as Record<string, unknown>
       const toolHelp = tools[VALID_TOOL] as { schema: unknown; overview: unknown }
@@ -234,7 +234,7 @@ describe('getHelp', () => {
       schemaCache: {} as ToolContext['schemaCache']
     }
 
-    const result = await getHelp(context, { tools: VALID_TOOL })
+    const result = await getHelp(context, { tools: [VALID_TOOL] })
 
     const tools = result.structuredContent?.tools as Record<string, unknown>
     expect(tools[VALID_TOOL]).toBeDefined()

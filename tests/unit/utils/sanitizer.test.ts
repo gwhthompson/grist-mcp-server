@@ -40,7 +40,7 @@ describe('sanitizeMessage', () => {
     it('redacts api_key values', () => {
       const message = 'api_key=test_abc123def456ghi789jkl012mno345'
       expect(sanitizeMessage(message)).toContain('api_key=***')
-      expect(sanitizeMessage(message)).not.toContain('sk_live')
+      expect(sanitizeMessage(message)).not.toContain('test_abc')
     })
 
     it('redacts api-key values', () => {

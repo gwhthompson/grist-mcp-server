@@ -125,7 +125,7 @@ async function buildDiscoveryResponse(): Promise<DiscoveryResponse> {
       category: t.category
     })),
     workflow: 'workspaces → documents → tables → records',
-    tip: 'Use grist_help({tools: "tool_name"}) for full documentation and schema'
+    tip: 'Use grist_help({tools: ["tool1", "tool2"]}) for full tool docs and schemas'
   }
 }
 
@@ -156,7 +156,7 @@ async function buildToolHelpResponse(
       name,
       ...(includeOverview && { overview: tool.docs.overview }),
       ...(includeExamples && {
-        examples: tool.docs.examples.map(
+        examples: tool.docs.examples.slice(0, 2).map(
           (ex): ToolExample => ({
             description: ex.desc,
             input: ex.input as Record<string, unknown>
@@ -302,9 +302,8 @@ export const HELP_TOOL = defineStandardTool<typeof HelpSchema, HelpResponse | He
   title: 'Get Tool Help',
   description:
     'Get documentation and schemas for Grist tools.\n' +
-    'Omit params to list all tools. Use tools param for detailed help.\n' +
-    'Ex: {} → list all, {tools:"grist_manage_records"} → full docs + schema\n' +
-    '{tools:["grist_manage_schema","grist_manage_records"]} → batch with dedup',
+    'Omit params to list all tools. Use tools array for detailed help.\n' +
+    'Ex: {} → list all, {tools:["grist_manage_schema","grist_manage_records"]} → docs + schemas',
   purpose: 'Discover tools and get detailed documentation with JSON schemas',
   category: 'utility',
   inputSchema: HelpSchema,
@@ -313,12 +312,8 @@ export const HELP_TOOL = defineStandardTool<typeof HelpSchema, HelpResponse | He
   core: true,
 
   async execute(_ctx, params) {
-    // Determine mode: new API vs legacy API
-    const hasNewApi = params.tools !== undefined
-    const hasLegacyApi = params.tool_name !== undefined
-
-    // Legacy mode: tool_name + topic
-    if (hasLegacyApi && !hasNewApi && params.tool_name) {
+    // Legacy mode: tool_name + topic (deprecated)
+    if (params.tool_name && !params.tools) {
       const topic = params.topic || 'full'
       const documentation = await formatLegacyDocumentation(params.tool_name, topic)
 
@@ -331,20 +326,15 @@ export const HELP_TOOL = defineStandardTool<typeof HelpSchema, HelpResponse | He
     }
 
     // New API: Discovery mode (no tools specified)
-    if (!hasNewApi) {
+    if (!params.tools) {
       return {
         discovery: await buildDiscoveryResponse()
       }
     }
 
     // New API: Tool help mode
-    const rawTools = Array.isArray(params.tools) ? params.tools : [params.tools]
-    const toolNames = rawTools.filter(
-      (name): name is NonNullable<typeof name> => name !== undefined
-    )
     const sections = params.only || [...HELP_SECTIONS]
-
-    return await buildToolHelpResponse(toolNames as string[], sections)
+    return await buildToolHelpResponse(params.tools, sections)
   },
 
   async afterExecute(result, params, _ctx) {
@@ -379,16 +369,12 @@ export const HELP_TOOL = defineStandardTool<typeof HelpSchema, HelpResponse | He
         input: {}
       },
       {
-        desc: 'Get full docs + schema for one tool',
-        input: { tools: 'grist_manage_schema' }
-      },
-      {
-        desc: 'Get schemas for multiple tools (with deduplication)',
+        desc: 'Get docs + schemas for multiple tools',
         input: { tools: ['grist_manage_schema', 'grist_manage_records'] }
       },
       {
-        desc: 'Get only schema (no docs)',
-        input: { tools: 'grist_manage_pages', only: ['schema'] }
+        desc: 'Get schema only (no docs)',
+        input: { tools: ['grist_manage_pages'], only: ['schema'] }
       }
     ],
     errors: [{ error: 'Tool not found', solution: 'Check tool name spelling (case-sensitive)' }]

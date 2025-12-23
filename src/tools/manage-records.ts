@@ -27,6 +27,7 @@ import { encodeRecordForApi } from '../schemas/cell-codecs.js'
 import {
   DocIdSchema,
   FilterSchema,
+  jsonSafe,
   jsonSafeArray,
   ResponseFormatSchema,
   TableIdSchema
@@ -46,7 +47,7 @@ import { nextSteps } from './utils/next-steps.js'
 // Record Operation Schemas - discriminated union on 'action' field
 // =============================================================================
 
-export const RecordDataSchema = z.record(z.string(), CellValueSchema)
+export const RecordDataSchema = z.record(z.string(), CellValueSchema).meta({ id: 'RecordData' })
 
 /** Add operation: Insert new records */
 const AddRecordOperationSchema = z
@@ -79,7 +80,9 @@ const DeleteRecordOperationSchema = z
   .object({
     action: z.literal('delete'),
     tableId: TableIdSchema,
-    rowIds: z.array(z.number().int().positive()).min(1).max(MAX_RECORDS_PER_BATCH).optional(),
+    rowIds: jsonSafe(
+      z.array(z.number().int().positive()).min(1).max(MAX_RECORDS_PER_BATCH)
+    ).optional(),
     filters: FilterSchema.describe('use rowIds OR filters, not both')
   })
   .refine((data) => data.rowIds || data.filters, {
@@ -556,22 +559,9 @@ export const MANAGE_RECORDS_TOOL = defineBatchTool<
 
   docs: {
     overview:
-      'Record operations: add, update, delete, upsert. Single records or batches. ' +
-      'Operations execute sequentially, enabling cross-table dependencies.\n\n' +
-      'DATA FORMAT BY COLUMN TYPE:\n' +
-      '- Text: "string value"\n' +
-      '- Numeric/Int: 42 or 3.14 (number, not string)\n' +
-      '- Bool: true or false (not "true"/"false" strings)\n' +
-      '- Date: "2024-03-15" (ISO format string)\n' +
-      '- DateTime: "2024-03-15T14:30:00Z" (ISO format)\n' +
-      '- Choice: "Option1" (must match defined choice exactly)\n' +
-      '- ChoiceList: ["Option1", "Option2"] (array of strings)\n' +
-      '- Ref: 42 (row ID number of referenced record)\n' +
-      '- RefList: [1, 2, 3] (array of row ID numbers)\n\n' +
-      'IMPORTANT - List formats:\n' +
-      '- ChoiceList: ["a", "b"] NOT ["L", "a", "b"]\n' +
-      '- RefList: [1, 2] NOT ["L", 1, 2]\n' +
-      '- The "L" prefix is internal Grist format - never use it in API calls',
+      'CRUD for records: add, update, delete, upsert. Batched operations execute sequentially for cross-table dependencies. Use natural formats (no "L" prefix for lists).',
+    parameters:
+      'DATA TYPES: Text="string", Numeric=42, Bool=true, Date="2024-03-15", DateTime="2024-03-15T14:30:00Z", Choice="Option1", ChoiceList=["a","b"], Ref=42 (row ID), RefList=[1,2]. Never use "L" prefix.',
     examples: [
       {
         desc: 'Add a single record',
@@ -587,60 +577,26 @@ export const MANAGE_RECORDS_TOOL = defineBatchTool<
         }
       },
       {
-        desc: 'Add records to multiple tables',
+        desc: 'Add to multiple tables (cross-table refs)',
         input: {
           docId: 'abc123',
           operations: [
-            {
-              action: 'add',
-              tableId: 'Companies',
-              records: [{ Name: 'Acme Corp' }]
-            },
-            {
-              action: 'add',
-              tableId: 'Contacts',
-              records: [{ Name: 'John', Company: 1 }]
-            }
+            { action: 'add', tableId: 'Companies', records: [{ Name: 'Acme' }] },
+            { action: 'add', tableId: 'Contacts', records: [{ Name: 'John', Company: 1 }] }
           ]
         }
       },
       {
-        desc: 'Update and delete in same table',
-        input: {
-          docId: 'abc123',
-          operations: [
-            {
-              action: 'update',
-              tableId: 'Tasks',
-              records: [
-                { id: 1, fields: { Status: 'Complete' } },
-                { id: 2, fields: { Status: 'Complete' } }
-              ]
-            },
-            { action: 'delete', tableId: 'Tasks', rowIds: [3, 4] }
-          ]
-        }
-      },
-      {
-        desc: 'Upsert by email',
+        desc: 'Upsert by unique key',
         input: {
           docId: 'abc123',
           operations: [
             {
               action: 'upsert',
               tableId: 'Users',
-              records: [
-                { require: { Email: 'alice@example.com' }, fields: { Name: 'Alice', Active: true } }
-              ]
+              records: [{ require: { Email: 'a@b.com' }, fields: { Name: 'Alice' } }]
             }
           ]
-        }
-      },
-      {
-        desc: 'Delete by filter',
-        input: {
-          docId: 'abc123',
-          operations: [{ action: 'delete', tableId: 'Logs', filters: { Status: 'Archived' } }]
         }
       }
     ],

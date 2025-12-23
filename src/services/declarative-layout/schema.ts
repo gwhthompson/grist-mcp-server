@@ -21,7 +21,7 @@ import { z } from 'zod'
  * String IDs were removed to eliminate input/output divergence - LLMs now use
  * the same IDs they receive in responses.
  */
-export const WidgetIdSchema = z.number().int().positive()
+export const WidgetIdSchema = z.number().int().positive().meta({ id: 'WidgetId' })
 
 export type WidgetId = z.infer<typeof WidgetIdSchema>
 
@@ -46,7 +46,9 @@ export type LinkTarget = WidgetId
  */
 const ChildOfLinkSchema = z.strictObject({
   type: z.literal('child_of'),
-  source_widget: WidgetIdSchema.describe('Parent widget that drives this link'),
+  source_widget: WidgetIdSchema.optional().describe(
+    'Parent widget (auto-populated from source if omitted)'
+  ),
   target_column: z.string().min(1).describe('Ref column in THIS table that points to source table')
 })
 
@@ -60,7 +62,9 @@ const ChildOfLinkSchema = z.strictObject({
  */
 const MatchedByLinkSchema = z.strictObject({
   type: z.literal('matched_by'),
-  source_widget: WidgetIdSchema.describe('Widget to match column values with'),
+  source_widget: WidgetIdSchema.optional().describe(
+    'Widget to match (auto-populated from source if omitted)'
+  ),
   source_column: z.string().min(1).describe('Column in source table'),
   target_column: z.string().min(1).describe('Column in THIS table that must match')
 })
@@ -75,7 +79,9 @@ const MatchedByLinkSchema = z.strictObject({
  */
 const DetailOfLinkSchema = z.strictObject({
   type: z.literal('detail_of'),
-  source_widget: WidgetIdSchema.describe('Summary widget to show detail records for')
+  source_widget: WidgetIdSchema.optional().describe(
+    'Summary widget (auto-populated from source if omitted)'
+  )
 })
 
 /**
@@ -88,7 +94,9 @@ const DetailOfLinkSchema = z.strictObject({
  */
 const BreakdownOfLinkSchema = z.strictObject({
   type: z.literal('breakdown_of'),
-  source_widget: WidgetIdSchema.describe('Less-detailed summary widget to drill down from')
+  source_widget: WidgetIdSchema.optional().describe(
+    'Summary widget (auto-populated from source if omitted)'
+  )
 })
 
 /**
@@ -101,7 +109,9 @@ const BreakdownOfLinkSchema = z.strictObject({
  */
 const ListedInLinkSchema = z.strictObject({
   type: z.literal('listed_in'),
-  source_widget: WidgetIdSchema.describe('Widget containing the RefList column'),
+  source_widget: WidgetIdSchema.optional().describe(
+    'RefList widget (auto-populated from source if omitted)'
+  ),
   source_column: z.string().min(1).describe('RefList column in source table')
 })
 
@@ -115,7 +125,9 @@ const ListedInLinkSchema = z.strictObject({
  */
 const SyncedWithLinkSchema = z.strictObject({
   type: z.literal('synced_with'),
-  source_widget: WidgetIdSchema.describe('Widget showing the same table to sync cursor with')
+  source_widget: WidgetIdSchema.optional().describe(
+    'Sync widget (auto-populated from source if omitted)'
+  )
 })
 
 /**
@@ -128,7 +140,9 @@ const SyncedWithLinkSchema = z.strictObject({
  */
 const ReferencedByLinkSchema = z.strictObject({
   type: z.literal('referenced_by'),
-  source_widget: WidgetIdSchema.describe('Widget containing the Ref column'),
+  source_widget: WidgetIdSchema.optional().describe(
+    'Ref widget (auto-populated from source if omitted)'
+  ),
   source_column: z.string().min(1).describe('Ref column in source table that points to THIS table')
 })
 

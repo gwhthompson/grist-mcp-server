@@ -29,18 +29,20 @@ export const ConditionalFormatOptionsSchema = StylePropertiesSchema
 
 export type ConditionalFormatOptions = z.infer<typeof ConditionalFormatOptionsSchema>
 
-export const BaseConditionalRuleSchema = z.strictObject({
-  formula: RuleFormulaSchema,
-  style: ConditionalFormatOptionsSchema,
-  sectionId: z
-    .number()
-    .int()
-    .positive()
-    .optional()
-    .describe(
-      'Optional: Scope rule to specific widget section. If omitted, rule applies across all views.'
-    )
-})
+export const BaseConditionalRuleSchema = z
+  .strictObject({
+    formula: RuleFormulaSchema,
+    style: ConditionalFormatOptionsSchema,
+    sectionId: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        'Optional: Scope rule to specific widget section. If omitted, rule applies across all views.'
+      )
+  })
+  .meta({ id: 'ConditionalRule' })
 
 export type BaseConditionalRule = z.infer<typeof BaseConditionalRuleSchema>
 

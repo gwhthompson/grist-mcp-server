@@ -3,6 +3,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js'
+import { z } from 'zod'
 import packageJson from '../package.json' with { type: 'json' }
 import { DEFAULT_BASE_URL, STRICT_MODE } from './constants.js'
 import { ALL_TOOLS, type ToolDefinition } from './registry/tool-definitions.js'
@@ -110,20 +111,51 @@ function buildRichDescription(tool: ToolDefinition): string {
     const exampleJson = JSON.stringify(firstExample.input)
     // Keep description under ~300 chars for conciseness
     if (overview.length + exampleJson.length < 280) {
-      return `${overview}\n\nExample: ${exampleJson}\n\nUse grist_help({tools:"${tool.name}"}) for full schema.`
+      return `${overview}\n\nExample: ${exampleJson}\n\nUse grist_help({tools:["${tool.name}"]}) for full schema.`
     }
   }
 
-  return `${overview}\n\nUse grist_help({tools:"${tool.name}"}) for full schema.`
+  return `${overview}\n\nUse grist_help({tools:["${tool.name}"]}) for full schema.`
 }
 
 /**
- * Override tools/list with minimal schemas for progressive disclosure.
+ * Generate minimal typed schema with just top-level property types.
+ * This gives LLMs type hints (especially that operations is an array)
+ * without exposing full discriminated union complexity.
+ */
+function generateMinimalSchema(tool: ToolDefinition): object {
+  const fullSchema = z.toJSONSchema(tool.inputSchema, {
+    reused: 'inline', // No $refs - inline everything for simplicity
+    io: 'input',
+    target: 'draft-7'
+  }) as { type: string; properties?: Record<string, object>; required?: string[] }
+
+  // Extract only top-level property types (no nested details)
+  const minimalProps: Record<string, { type: string }> = {}
+  if (fullSchema.properties) {
+    for (const [key, value] of Object.entries(fullSchema.properties)) {
+      const prop = value as { type?: string | string[] }
+      // Simplify to base type only
+      const baseType = Array.isArray(prop.type) ? prop.type[0] : prop.type
+      minimalProps[key] = { type: baseType || 'string' }
+    }
+  }
+
+  return {
+    type: 'object',
+    properties: minimalProps,
+    required: fullSchema.required
+  }
+}
+
+/**
+ * Override tools/list with minimal typed schemas for progressive disclosure.
  *
  * This reduces upfront token usage by ~90% (from ~52KB to ~5KB).
  * Full schemas are available on-demand via grist_help({tools: "tool_name"}).
  *
- * MCP spec allows minimal inputSchema with just {type: "object"}.
+ * Minimal schemas include top-level property types to guide LLMs
+ * (e.g., operations: array) without full discriminated union details.
  */
 function overrideToolsList(server: McpServer): void {
   // Access the underlying Server instance to override the handler
@@ -137,7 +169,7 @@ function overrideToolsList(server: McpServer): void {
         name: tool.name,
         title: tool.title,
         description: buildRichDescription(tool),
-        inputSchema: { type: 'object' as const }, // Minimal MCP-compliant schema
+        inputSchema: generateMinimalSchema(tool),
         annotations: {
           readOnlyHint: tool.annotations.readOnlyHint,
           destructiveHint: tool.annotations.destructiveHint,

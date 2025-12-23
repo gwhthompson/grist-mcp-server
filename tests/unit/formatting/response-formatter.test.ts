@@ -11,7 +11,7 @@ describe('Formatter Service', () => {
   describe('formatToolResponse', () => {
     it.each([
       ['json', '"name": "Alice"', '"age": 30'],
-      ['markdown', '**name**: Alice', '**age**: 30']
+      ['markdown', 'name: Alice', 'age: 30']
     ] as const)('should format data as %s with expected patterns', (format, expectedPattern1, expectedPattern2) => {
       const data = { name: 'Alice', age: 30 }
       const result = formatToolResponse(data, format as ResponseFormat)
@@ -109,10 +109,10 @@ describe('Formatter Service', () => {
         const result = formatAsMarkdown(data)
 
         expect(result).toContain('1.')
-        expect(result).toContain('**name**: Alice')
-        expect(result).toContain('**age**: 30')
+        expect(result).toContain('name: Alice')
+        expect(result).toContain('age: 30')
         expect(result).toContain('2.')
-        expect(result).toContain('**name**: Bob')
+        expect(result).toContain('name: Bob')
       })
 
       it('should number items sequentially for multi-item arrays', () => {
@@ -126,12 +126,12 @@ describe('Formatter Service', () => {
     })
 
     describe('objects', () => {
-      it('should format simple object with bold keys', () => {
+      it('should format simple object with keys', () => {
         const data = { name: 'Alice', email: 'alice@example.com' }
         const result = formatAsMarkdown(data)
 
-        expect(result).toContain('**name**: Alice')
-        expect(result).toContain('**email**: alice@example.com')
+        expect(result).toContain('name: Alice')
+        expect(result).toContain('email: alice@example.com')
       })
 
       it('should format nested arrays in objects', () => {
@@ -141,8 +141,8 @@ describe('Formatter Service', () => {
         }
         const result = formatAsMarkdown(data)
 
-        expect(result).toContain('**name**: Team')
-        expect(result).toContain('**members**:')
+        expect(result).toContain('name: Team')
+        expect(result).toContain('members:')
         expect(result).toContain('1. Alice')
         expect(result).toContain('2. Bob')
       })
@@ -151,9 +151,9 @@ describe('Formatter Service', () => {
         const data = { name: 'Alice', age: null, email: 'alice@example.com' }
         const result = formatAsMarkdown(data)
 
-        expect(result).toContain('**name**: Alice')
-        expect(result).toContain('**age**: null')
-        expect(result).toContain('**email**: alice@example.com')
+        expect(result).toContain('name: Alice')
+        expect(result).toContain('age: null')
+        expect(result).toContain('email: alice@example.com')
       })
     })
 
@@ -165,8 +165,7 @@ describe('Formatter Service', () => {
         }
         const result = formatAsMarkdown(data)
 
-        expect(result).toContain('# Results')
-        expect(result).toContain('2 of 10 total')
+        expect(result).toContain('2 of 10 results')
       })
 
       it('should show more results available with offset', () => {
@@ -178,8 +177,7 @@ describe('Formatter Service', () => {
         }
         const result = formatAsMarkdown(data)
 
-        expect(result).toContain('More results available')
-        expect(result).toContain('offset=1')
+        expect(result).toContain('More: offset=1')
       })
 
       it('should format truncation warning with suggestions', () => {
@@ -191,9 +189,7 @@ describe('Formatter Service', () => {
         }
         const result = formatAsMarkdown(data)
 
-        expect(result).toContain('Response Truncated')
         expect(result).toContain('Too many items')
-        expect(result).toContain('Suggestions:')
         expect(result).toContain('Use pagination')
         expect(result).toContain('Reduce limit')
       })
@@ -205,7 +201,7 @@ describe('Formatter Service', () => {
         const result = formatAsMarkdown(data)
 
         // Short arrays (<=3 items) are formatted inline
-        expect(result).toContain('**tags**')
+        expect(result).toContain('tags:')
       })
 
       it('should format long arrays with numbered list', () => {
@@ -213,7 +209,7 @@ describe('Formatter Service', () => {
         const result = formatAsMarkdown(data)
 
         // Arrays > 3 items use numbered list format
-        expect(result).toContain('**tags**:')
+        expect(result).toContain('tags:')
       })
 
       it('should format nested objects as structured data', () => {
@@ -222,7 +218,7 @@ describe('Formatter Service', () => {
         }
         const result = formatAsMarkdown(data)
 
-        expect(result).toContain('**metadata**')
+        expect(result).toContain('metadata:')
       })
     })
   })
@@ -320,7 +316,7 @@ describe('Formatter Service', () => {
     describe('format handling', () => {
       it.each([
         ['json', '"items"', '"id"'],
-        ['markdown', /\*\*|\d\./, null]
+        ['markdown', /\d\./, null]
       ] as const)('should handle %s format correctly', (format, expectedPattern1, expectedPattern2) => {
         const items = [{ id: 1 }]
         const result = truncateIfNeeded(items, format as ResponseFormat, {})

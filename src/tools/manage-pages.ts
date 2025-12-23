@@ -17,7 +17,7 @@ import {
   type GenericOperationResult,
   GenericOperationResultSchema
 } from '../schemas/batch-operation-schemas.js'
-import { DocIdSchema, jsonSafeArray, ResponseFormatSchema } from '../schemas/common.js'
+import { DocIdSchema, jsonSafe, jsonSafeArray, ResponseFormatSchema } from '../schemas/common.js'
 import {
   buildLinkActions,
   executeCreatePage,
@@ -70,7 +70,9 @@ function resetBatchState(): void {
 // =============================================================================
 
 /** Page reference: name (string) or viewId (number) */
-export const PageRefSchema = z.union([z.string().min(1), z.number().int().positive()])
+export const PageRefSchema = z
+  .union([z.string().min(1), z.number().int().positive()])
+  .meta({ id: 'PageRef' })
 
 // =============================================================================
 // Layout Operation Schemas
@@ -89,7 +91,9 @@ const SetLayoutOperationSchema = z
     action: z.literal('set_layout'),
     page: PageRefSchema.describe('name or viewId'),
     layout: LayoutNodeSchema,
-    remove: z.array(z.number().int().positive()).optional().describe('sectionIds to remove')
+    remove: jsonSafe(z.array(z.number().int().positive()))
+      .optional()
+      .describe('sectionIds to remove')
   })
   .describe('update layout')
 
@@ -123,7 +127,7 @@ const DeletePageOperationSchema = z
 const ReorderPagesOperationSchema = z
   .object({
     action: z.literal('reorder_pages'),
-    order: z.array(z.string().min(1)).min(1).describe('page names in order')
+    order: jsonSafe(z.array(z.string().min(1)).min(1)).describe('page names in order')
   })
   .describe('reorder pages')
 
@@ -162,7 +166,7 @@ const LinkWidgetsOperationSchema = z
   .object({
     action: z.literal('link_widgets'),
     viewId: z.number().int().positive(),
-    links: z.array(LinkSpecSchema).min(1).max(20)
+    links: jsonSafeArray(LinkSpecSchema, { min: 1, max: 20 })
   })
   .describe('link widgets')
 
@@ -835,72 +839,34 @@ export const MANAGE_PAGES_TOOL = defineBatchTool<
 
   docs: {
     overview:
-      'Create pages with declarative layouts specifying widget arrangement (cols/rows splits). ' +
-      'Use link_widgets to establish relationships between widgets after creation. ' +
-      'Operations: create_page, set_layout, get_layout, link_widgets, rename_page, delete_page, reorder_pages, configure_widget.\n\n' +
-      'ARCHITECTURE B (Two-Step Flow):\n' +
-      '1. create_page returns sectionIds: { viewId: 42, sectionIds: [101, 102] }\n' +
-      '2. link_widgets uses those sectionIds to establish links\n\n' +
-      'LINK TYPE DECISION TABLE - Choose based on your data relationship:\n' +
-      '┌─────────────┬──────────────────────────────────────────────────────────┐\n' +
-      '│ Relationship│ Use This Link Type                                       │\n' +
-      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
-      '│ Foreign key │ child_of - Target has Ref column to source table         │\n' +
-      '│             │ Example: Contacts.Company → Companies                    │\n' +
-      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
-      '│ Same lookup │ matched_by - Both reference same third table             │\n' +
-      '│             │ Example: Both have Project column referencing Projects   │\n' +
-      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
-      '│ Summary→Raw │ detail_of - Click summary row, see grouped records       │\n' +
-      '│             │ Source MUST be summary table                             │\n' +
-      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
-      '│ Summary→Sum │ breakdown_of - Drill into more detailed summary          │\n' +
-      '│             │ BOTH must be summary tables (source less granular)       │\n' +
-      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
-      '│ RefList     │ listed_in - Show records in source RefList column        │\n' +
-      '│             │ Source column MUST be RefList type                       │\n' +
-      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
-      '│ Same table  │ synced_with - Sync cursor position between widgets       │\n' +
-      '│             │ BOTH widgets must show the same table                    │\n' +
-      '├─────────────┼──────────────────────────────────────────────────────────┤\n' +
-      '│ Follow ref  │ referenced_by - Cursor jumps to referenced record        │\n' +
-      '│             │ Source column MUST be Ref pointing to target table       │\n' +
-      '└─────────────┴──────────────────────────────────────────────────────────┘\n\n' +
-      'LAYOUT CONSTRAINTS:\n' +
-      '- cols/rows arrays need 2+ items (use weights for single-widget full-width)\n' +
-      '- weight: controls relative size (default 1). weight:2 = twice as wide/tall\n' +
-      '- set_layout: ALL existing widgets must appear in layout OR remove array\n' +
-      '- Nesting: cols can contain rows, rows can contain cols (max 3 levels)\n\n' +
-      'CHART CONFIGURATION:\n' +
-      '- chartType: "bar", "pie", "line", "area", "kaplan_meier", "donut"\n' +
-      '- x_axis: Column name for X-axis (categories)\n' +
-      '- y_axis: Array of column names for Y-axis values\n' +
-      '- For pie/donut: x_axis=labels, y_axis=[values]\n' +
-      '- For bar/line: x_axis=categories, y_axis=series columns\n\n' +
-      'RELATED TOOLS:\n' +
-      '- Row rules: grist_manage_schema update_table with rowRules\n' +
-      '- Column rules: grist_manage_schema modify_column with style.rulesOptions',
+      'Declarative page layouts with cols/rows splits. create_page returns sectionIds; use link_widgets to connect. Actions: create_page, set_layout, link_widgets, rename/delete/reorder pages.',
+    parameters:
+      'LINK TYPES (in link object, source auto-populated): ' +
+      'child_of {target_column} - master→detail via Ref. ' +
+      'matched_by {source_column, target_column} - match column values. ' +
+      'detail_of {} - summary→source records. ' +
+      'breakdown_of {} - coarse→fine summary. ' +
+      'listed_in {source_column} - RefList display. ' +
+      'synced_with {} - cursor sync (same table). ' +
+      'referenced_by {source_column} - follow Ref cursor. ' +
+      'CHARTS: bar/pie/line/area/donut with x_axis + y_axis[]. ' +
+      'OPTIONS by type: bar (multiseries, stacked, orientation), line (lineConnectGaps, lineMarkers), pie/donut (showTotal, donutHoleSize).',
     examples: [
       {
-        desc: 'Create page then link widgets (master-detail)',
+        desc: 'Create page with two widgets',
         input: {
           docId: 'abc123',
           operations: [
             {
               action: 'create_page',
-              name: 'Company Dashboard',
-              layout: {
-                cols: [
-                  { table: 'Companies', widget: 'grid' },
-                  { table: 'Contacts', widget: 'card_list' }
-                ]
-              }
+              name: 'Dashboard',
+              layout: { cols: [{ table: 'Companies', widget: 'grid' }, { table: 'Contacts' }] }
             }
           ]
         }
       },
       {
-        desc: 'Link widgets using sectionIds from create_page response',
+        desc: 'Link widgets (master-detail)',
         input: {
           docId: 'abc123',
           operations: [
@@ -908,85 +874,8 @@ export const MANAGE_PAGES_TOOL = defineBatchTool<
               action: 'link_widgets',
               viewId: 42,
               links: [
-                {
-                  source: 101,
-                  target: 102,
-                  link: { type: 'child_of', source_widget: 101, target_column: 'Company' }
-                }
+                { source: 101, target: 102, link: { type: 'child_of', target_column: 'Company' } }
               ]
-            }
-          ]
-        }
-      },
-      {
-        desc: 'Create page with chart and configure axes',
-        input: {
-          docId: 'abc123',
-          operations: [
-            {
-              action: 'create_page',
-              name: 'Sales Dashboard',
-              layout: {
-                cols: [
-                  { table: 'Sales', widget: 'grid' },
-                  {
-                    table: 'Sales',
-                    widget: 'chart',
-                    chartType: 'bar',
-                    x_axis: 'Region',
-                    y_axis: ['Revenue', 'Cost']
-                  }
-                ]
-              }
-            }
-          ]
-        }
-      },
-      {
-        desc: 'Get and modify layout',
-        input: {
-          docId: 'abc123',
-          operations: [{ action: 'get_layout', page: 'Dashboard' }]
-        }
-      },
-      {
-        desc: 'Update layout with new widget',
-        input: {
-          docId: 'abc123',
-          operations: [
-            {
-              action: 'set_layout',
-              page: 'Dashboard',
-              layout: {
-                rows: [
-                  { cols: [5, 6] },
-                  { table: 'Summary', widget: 'chart', chartType: 'bar', weight: 2 }
-                ]
-              }
-            }
-          ]
-        }
-      },
-      {
-        desc: 'Rename and reorder pages',
-        input: {
-          docId: 'abc123',
-          operations: [
-            { action: 'rename_page', page: 'Old Name', newName: 'New Name' },
-            { action: 'reorder_pages', order: ['Dashboard', 'New Name', 'Settings'] }
-          ]
-        }
-      },
-      {
-        desc: 'Configure widget sorting',
-        input: {
-          docId: 'abc123',
-          operations: [
-            {
-              action: 'configure_widget',
-              page: 'Dashboard',
-              widget: 'Transactions',
-              sortBy: ['-Date', 'Amount']
             }
           ]
         }

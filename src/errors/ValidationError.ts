@@ -109,7 +109,7 @@ export class ValidationError extends GristError {
     const issues = error.issues || []
     const firstIssue = issues[0]
     const schemaHint = toolName
-      ? `Use grist_help({tools: "${toolName}"}) for full parameter documentation.`
+      ? `Use grist_help({tools: ["${toolName}"]}) for full parameter documentation.`
       : undefined
 
     if (firstIssue) {

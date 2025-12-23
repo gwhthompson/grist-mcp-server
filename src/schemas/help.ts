@@ -16,6 +16,27 @@ export type HelpSection = (typeof HELP_SECTIONS)[number]
 export const HELP_TOPICS = ['overview', 'examples', 'errors', 'parameters', 'full'] as const
 export type HelpTopic = (typeof HELP_TOPICS)[number]
 
+/**
+ * Parse tool names from various LLM formats:
+ * - JSON string: '["grist_help", "grist_manage_records"]'
+ * - Comma-separated: 'grist_help,grist_manage_records'
+ * - Single string: 'grist_help'
+ */
+function parseToolNames(val: unknown): unknown {
+  if (typeof val === 'string') {
+    // Try JSON first
+    try {
+      return JSON.parse(val)
+    } catch {
+      // Then comma-separated
+      if (val.includes(',')) {
+        return val.split(',').map((s) => s.trim())
+      }
+    }
+  }
+  return val
+}
+
 // =============================================================================
 // Help Input Schema
 // =============================================================================
@@ -33,17 +54,20 @@ export type HelpTopic = (typeof HELP_TOPICS)[number]
  */
 export const HelpSchema = z
   .object({
-    // New progressive disclosure API
+    // Tool names array for detailed help
     tools: z
       .preprocess(
-        parseJsonString, // Handle JSON string arrays: "[\"grist_help\"]" → ["grist_help"]
-        z.union([z.enum(TOOL_NAMES), z.array(z.enum(TOOL_NAMES)).min(1).max(11)])
+        parseToolNames, // Handle JSON strings AND comma-separated: "a,b" → ["a","b"]
+        z.array(z.enum(TOOL_NAMES)).min(1).max(11)
       )
       .optional()
-      .describe('Tool name(s) for detailed help. Omit to list all tools.'),
+      .describe('Tool names array for detailed help. Omit to list all tools.'),
 
     only: z
-      .array(z.enum(HELP_SECTIONS))
+      .preprocess(
+        parseJsonString, // Handle stringified arrays: '["schema"]' → ["schema"]
+        z.array(z.enum(HELP_SECTIONS))
+      )
       .optional()
       .describe('Filter to specific sections. Default: all sections.'),
 

@@ -88,13 +88,15 @@ export function decodeRecords(
  * Transformation to API format is done separately via encodeForApi from cell-codecs.ts
  * with column type information (so ISO dates only transform for Date/DateTime columns).
  */
-export const CellValueInputSchema = z.union([
-  z.null().describe('Empty cell'),
-  z.string().describe('Text, or ISO date/datetime for Date/DateTime columns'),
-  z.number().describe('Number, timestamp, or row ID for Ref columns'),
-  z.boolean().describe('True or false'),
-  z.array(z.union([z.string(), z.number()])).describe('Array for ChoiceList/RefList/Attachments')
-])
+export const CellValueInputSchema = z
+  .union([
+    z.null().describe('Empty cell'),
+    z.string().describe('Text, or ISO date/datetime for Date/DateTime columns'),
+    z.number().describe('Number, timestamp, or row ID for Ref columns'),
+    z.boolean().describe('True or false'),
+    z.array(z.union([z.string(), z.number()])).describe('Array for ChoiceList/RefList/Attachments')
+  ])
+  .meta({ id: 'CellValue' })
 
 /**
  * CellValueSchema - validation only, no transformation.

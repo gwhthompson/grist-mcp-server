@@ -12,7 +12,9 @@ import { describe, expect, it } from 'vitest'
 import {
   BuildPageSchema,
   ConfigureWidgetSchema,
+  fromGristWidgetType,
   LayoutSpecSchema,
+  toGristWidgetType,
   UpdatePageSchema
 } from '../../../src/schemas/pages-widgets.js'
 
@@ -848,6 +850,40 @@ describe('Pages & Widgets Schema Validation', () => {
 
       const result = ConfigureWidgetSchema.safeParse(input)
       expect(result.success).toBe(false)
+    })
+  })
+
+  describe('Widget Type Mapping Functions', () => {
+    it('should convert user types to Grist types', () => {
+      expect(toGristWidgetType('grid')).toBe('record')
+      expect(toGristWidgetType('card')).toBe('single')
+      expect(toGristWidgetType('card_list')).toBe('detail')
+      expect(toGristWidgetType('chart')).toBe('chart')
+      expect(toGristWidgetType('form')).toBe('form')
+      expect(toGristWidgetType('custom')).toBe('custom')
+    })
+
+    it('should convert Grist types to user types', () => {
+      expect(fromGristWidgetType('record')).toBe('grid')
+      expect(fromGristWidgetType('single')).toBe('card')
+      expect(fromGristWidgetType('detail')).toBe('card_list')
+      expect(fromGristWidgetType('chart')).toBe('chart')
+      expect(fromGristWidgetType('form')).toBe('form')
+      expect(fromGristWidgetType('custom')).toBe('custom')
+    })
+
+    it('should round-trip user types correctly', () => {
+      const userTypes = ['grid', 'card', 'card_list', 'chart', 'form', 'custom'] as const
+      for (const userType of userTypes) {
+        const gristType = toGristWidgetType(userType)
+        const roundTripped = fromGristWidgetType(gristType)
+        expect(roundTripped).toBe(userType)
+      }
+    })
+
+    it('should default to grid for unknown Grist types', () => {
+      // Type assertion to test unknown type handling
+      expect(fromGristWidgetType('unknown' as 'record')).toBe('grid')
     })
   })
 })

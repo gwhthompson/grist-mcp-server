@@ -447,7 +447,28 @@ describe('ManagePagesSchema - configure_widget Operation', () => {
 })
 
 describe('ManagePagesSchema - link_widgets Operation', () => {
-  it('accepts link_widgets with single link', () => {
+  it('accepts link_widgets without source_widget (auto-populated from source)', () => {
+    // source_widget is optional - it gets auto-populated from the top-level source field
+    const result = ManagePagesSchema.safeParse({
+      docId: VALID_DOC_ID,
+      operations: [
+        {
+          action: 'link_widgets',
+          viewId: 42,
+          links: [
+            {
+              source: 101,
+              target: 102,
+              link: { type: 'child_of', target_column: 'Company' }
+            }
+          ]
+        }
+      ]
+    })
+    expect(result.success).toBe(true)
+  })
+
+  it('accepts link_widgets with explicit source_widget (backward compatible)', () => {
     const result = ManagePagesSchema.safeParse({
       docId: VALID_DOC_ID,
       operations: [
@@ -478,12 +499,12 @@ describe('ManagePagesSchema - link_widgets Operation', () => {
             {
               source: 101,
               target: 102,
-              link: { type: 'child_of', source_widget: 101, target_column: 'Company' }
+              link: { type: 'child_of', target_column: 'Company' }
             },
             {
               source: 102,
               target: 103,
-              link: { type: 'synced_with', source_widget: 102 }
+              link: { type: 'synced_with' }
             }
           ]
         }
@@ -663,8 +684,9 @@ describe('MANAGE_PAGES_TOOL definition', () => {
   })
 
   it('documentation mentions link types', () => {
-    const overview = MANAGE_PAGES_TOOL.docs.overview
-    expect(overview).toContain('child_of')
-    expect(overview).toContain('synced_with')
+    // Link types moved to docs.parameters for brevity
+    const parameters = MANAGE_PAGES_TOOL.docs.parameters || ''
+    expect(parameters).toContain('child_of')
+    expect(parameters).toContain('synced_with')
   })
 })

@@ -78,11 +78,11 @@ describe('Help Tool - Schema Validation', () => {
       expect(result.success).toBe(true)
     })
 
-    it('should accept single tool name as string', () => {
-      const result = HelpSchema.safeParse({ tools: 'grist_manage_schema' })
+    it('should accept array with single tool name', () => {
+      const result = HelpSchema.safeParse({ tools: ['grist_manage_schema'] })
       expect(result.success).toBe(true)
       if (result.success) {
-        expect(result.data.tools).toBe('grist_manage_schema')
+        expect(result.data.tools).toEqual(['grist_manage_schema'])
       }
     })
 
@@ -96,8 +96,13 @@ describe('Help Tool - Schema Validation', () => {
       }
     })
 
+    it('should reject single string (must be array)', () => {
+      const result = HelpSchema.safeParse({ tools: 'grist_manage_schema' })
+      expect(result.success).toBe(false)
+    })
+
     it('should reject invalid tool names', () => {
-      const result = HelpSchema.safeParse({ tools: 'invalid_tool' })
+      const result = HelpSchema.safeParse({ tools: ['invalid_tool'] })
       expect(result.success).toBe(false)
     })
 
@@ -110,7 +115,7 @@ describe('Help Tool - Schema Validation', () => {
   describe('New API: only parameter', () => {
     it('should accept valid section filters', () => {
       const result = HelpSchema.safeParse({
-        tools: 'grist_manage_schema',
+        tools: ['grist_manage_schema'],
         only: ['schema']
       })
       expect(result.success).toBe(true)
@@ -121,7 +126,7 @@ describe('Help Tool - Schema Validation', () => {
 
     it('should accept multiple sections', () => {
       const result = HelpSchema.safeParse({
-        tools: 'grist_manage_schema',
+        tools: ['grist_manage_schema'],
         only: ['overview', 'examples', 'schema']
       })
       expect(result.success).toBe(true)
@@ -129,7 +134,7 @@ describe('Help Tool - Schema Validation', () => {
 
     it('should reject invalid section names', () => {
       const result = HelpSchema.safeParse({
-        tools: 'grist_manage_schema',
+        tools: ['grist_manage_schema'],
         only: ['invalid_section']
       })
       expect(result.success).toBe(false)

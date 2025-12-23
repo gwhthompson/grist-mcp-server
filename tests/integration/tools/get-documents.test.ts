@@ -67,8 +67,8 @@ describe('grist_get_documents', () => {
       expect(result.isError).toBeFalsy()
 
       const text = (result.content[0] as { text: string }).text
-      // Markdown format should contain headers or formatting
-      expect(text).toMatch(/[#*-]|document/i)
+      // Markdown format should contain 'results' (not JSON format)
+      expect(text).toMatch(/results/i)
     })
 
     it('supports summary detail level', async () => {

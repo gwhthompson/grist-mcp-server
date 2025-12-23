@@ -63,7 +63,10 @@ export async function resolveLink(
   registry: WidgetRegistry,
   getWidgetInfo: (sectionId: number) => Promise<WidgetInfo>
 ): Promise<ResolvedLink> {
-  // All link types have source_widget - resolve it via registry
+  // source_widget is optional in schema (auto-populated from top-level source by caller)
+  if (link.source_widget === undefined) {
+    throw new ValidationError('link', link, 'source_widget must be set before calling resolveLink')
+  }
   const sourceSectionId = resolveWidgetId(link.source_widget, registry)
 
   // Self-link check

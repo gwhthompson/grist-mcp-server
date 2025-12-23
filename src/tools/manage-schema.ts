@@ -46,6 +46,7 @@ import {
 import {
   ColIdSchema,
   DocIdSchema,
+  jsonSafe,
   jsonSafeArray,
   ResponseFormatSchema,
   TableIdSchema
@@ -81,7 +82,7 @@ const CreateTableOperationSchema = z
   .object({
     action: z.literal('create_table'),
     name: z.string().min(1).max(100).describe('becomes tableId'),
-    columns: z.array(ColumnDefinitionSchema).min(0).max(100).default([])
+    columns: jsonSafeArray(ColumnDefinitionSchema, { min: 0, max: 100 }).default([])
   })
   .describe('create table')
 
@@ -104,7 +105,9 @@ const UpdateTableOperationSchema = z
   .object({
     action: z.literal('update_table'),
     tableId: TableIdSchema,
-    rowRules: z.array(BaseConditionalRuleSchema).optional().describe('replaces existing row rules')
+    rowRules: jsonSafeArray(BaseConditionalRuleSchema)
+      .optional()
+      .describe('replaces existing row rules')
   })
   .describe('update table')
 
@@ -145,7 +148,7 @@ const ModifyColumnOperationSchema = z
       isCustomDateFormat: z.boolean().optional(),
       timeFormat: z.string().optional(),
       isCustomTimeFormat: z.boolean().optional(),
-      choices: z.array(z.string()).optional(),
+      choices: jsonSafe(z.array(z.string())).optional(),
       choiceOptions: ChoiceOptionsSchema,
       height: z.number().optional(),
       style: ColumnStyleSchema.optional().describe('styling + rulesOptions')
@@ -178,7 +181,7 @@ const CreateSummaryOperationSchema = z
   .object({
     action: z.literal('create_summary'),
     sourceTable: z.string().min(1),
-    groupByColumns: z.array(z.string().min(1)).min(1),
+    groupByColumns: jsonSafe(z.array(z.string().min(1)).min(1)),
     keepPage: z.boolean().default(false).describe('keep auto-created page')
   })
   .describe('create summary')
@@ -1075,29 +1078,11 @@ export const MANAGE_SCHEMA_TOOL = defineBatchTool<
 
   docs: {
     overview:
-      'Batch schema operations: tables (create, rename, delete), columns (add, modify, remove, rename), ' +
-      'and summary tables. Operations execute sequentially. ' +
-      '**Ref columns:** Use `type: "Ref"` with `refTable: "TableName"`.\n\n' +
-      '**Summary tables:** Named `{SourceTable}_summary_{GroupByColumns}` ' +
-      '(e.g., Tasks_summary_Status for Tasks grouped by Status).\n\n' +
-      'FORMULA SYNTAX (Python expressions):\n' +
-      '- Column references: $ColumnName (e.g., $Price * $Quantity)\n' +
-      '- Cross-table lookups: $RefColumn.FieldName (e.g., $Company.Name)\n' +
-      '- Conditionals: "High" if $Amount > 1000 else "Low"\n' +
-      '- Date math: $DueDate - TODAY() (returns timedelta)\n' +
-      '- String ops: $Name.upper(), $Email.split("@")[0]\n' +
-      '- Aggregations in summary: SUM($group.Amount), COUNT($group)\n' +
-      '- Common functions: ROUND(), MAX(), MIN(), LEN(), NOW(), TODAY()\n' +
-      '- Set isFormula:true for dynamic formulas, isFormula:false for defaults\n\n' +
-      'FORMULA EXAMPLES:\n' +
-      '- Total: "$Quantity * $UnitPrice"\n' +
-      '- Full name: "$FirstName + \\" \\" + $LastName"\n' +
-      '- Days until: "($DueDate - TODAY()).days if $DueDate else None"\n' +
-      '- Status color: "\\"red\\" if $Overdue else \\"green\\""\n' +
-      '- Lookup: "$Customer.Email if $Customer else \\"\\""\n\n' +
-      'RELATED TOOLS:\n' +
-      '- Conditional formatting: grist_manage_conditional_rules (column/row/field scope)\n' +
-      '- Page layouts: grist_manage_pages (widget arrangement and linking)',
+      'Batch schema operations: tables (create/rename/delete), columns (add/modify/remove), and summary tables. Ref columns need refTable. Summary tables auto-named {Source}_summary_{GroupBy}.',
+    parameters:
+      'FORMULAS: Python expressions with $ColName refs. Examples: "$Price * $Qty", "$Due - TODAY()", "SUM($group.Amount)". Set isFormula:true for computed, false for defaults. ' +
+      'CHOICE STYLING: Use choiceOptions: {"High": {fillColor: "#FF0000", textColor: "#FFFFFF"}}. ' +
+      'DATE FORMATS: YYYY-MM-DD, MMM D YYYY, DD/MM/YYYY (Moment.js tokens). TIME: HH:mm, h:mm A.',
     examples: [
       {
         desc: 'Create table with columns',
@@ -1108,8 +1093,7 @@ export const MANAGE_SCHEMA_TOOL = defineBatchTool<
               action: 'create_table',
               name: 'Contacts',
               columns: [
-                { colId: 'Name', type: 'Text', label: 'Full Name' },
-                { colId: 'Email', type: 'Text' },
+                { colId: 'Name', type: 'Text' },
                 { colId: 'Status', type: 'Choice', choices: ['Active', 'Inactive'] }
               ]
             }
@@ -1117,50 +1101,12 @@ export const MANAGE_SCHEMA_TOOL = defineBatchTool<
         }
       },
       {
-        desc: 'Add column and create summary',
+        desc: 'Add column and create summary table',
         input: {
           docId: 'abc123',
           operations: [
-            {
-              action: 'add_column',
-              tableId: 'Sales',
-              column: { colId: 'Region', type: 'Text' }
-            },
-            {
-              action: 'create_summary',
-              sourceTable: 'Sales',
-              groupByColumns: ['Region']
-            }
-          ]
-        }
-      },
-      {
-        desc: 'Modify column type',
-        input: {
-          docId: 'abc123',
-          operations: [
-            {
-              action: 'modify_column',
-              tableId: 'Products',
-              colId: 'Price',
-              updates: {
-                type: 'Numeric',
-                numMode: 'currency',
-                currency: 'USD',
-                decimals: 2
-              }
-            }
-          ]
-        }
-      },
-      {
-        desc: 'Rename and delete operations',
-        input: {
-          docId: 'abc123',
-          operations: [
-            { action: 'rename_table', tableId: 'OldName', newTableId: 'NewName' },
-            { action: 'rename_column', tableId: 'NewName', colId: 'Old', newColId: 'New' },
-            { action: 'remove_column', tableId: 'NewName', colId: 'Unused' }
+            { action: 'add_column', tableId: 'Sales', column: { colId: 'Region', type: 'Text' } },
+            { action: 'create_summary', sourceTable: 'Sales', groupByColumns: ['Region'] }
           ]
         }
       }

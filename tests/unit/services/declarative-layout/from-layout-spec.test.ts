@@ -245,11 +245,12 @@ describe('formatGetLayoutResult', () => {
     const result = formatGetLayoutResult(spec, widgets)
 
     expect(result.layout).toBe(5)
+    // Widget type 'record' should be converted to user-facing 'grid'
     expect(result.widgets).toEqual([
       {
         section: 5,
         table: 'Products',
-        widget: 'record',
+        widget: 'grid',
         title: 'Products Grid'
       }
     ])
@@ -274,16 +275,17 @@ describe('formatGetLayoutResult', () => {
     expect(result.layout).toEqual({
       cols: [5, 10]
     })
+    // Widget types should be converted: 'record' -> 'grid', 'single' -> 'card'
     expect(result.widgets).toEqual([
       {
         section: 5,
         table: 'Products',
-        widget: 'record'
+        widget: 'grid'
       },
       {
         section: 10,
         table: 'Orders',
-        widget: 'single',
+        widget: 'card',
         title: 'Order Details'
       }
     ])
@@ -300,7 +302,7 @@ describe('formatGetLayoutResult', () => {
     expect(result.widgets[0]).toEqual({
       section: 5,
       table: 'Products',
-      widget: 'record'
+      widget: 'grid'
     })
     expect(result.widgets[0]).not.toHaveProperty('title')
   })
@@ -356,6 +358,26 @@ describe('formatGetLayoutResult', () => {
 
     // Map iteration order is insertion order
     expect(result.widgets.map((w) => w.section)).toEqual([10, 5, 15])
+  })
+
+  it('should convert all Grist widget types to user-facing types', () => {
+    const spec: LayoutSpec = { type: 'leaf', leaf: 1 }
+    const widgetTypes = [
+      { grist: 'record', user: 'grid' },
+      { grist: 'single', user: 'card' },
+      { grist: 'detail', user: 'card_list' },
+      { grist: 'chart', user: 'chart' },
+      { grist: 'form', user: 'form' },
+      { grist: 'custom', user: 'custom' }
+    ] as const
+
+    for (const { grist, user } of widgetTypes) {
+      const widgets = new Map<number, WidgetInfo>([
+        [1, { sectionId: 1, tableId: 'T', widgetType: grist }]
+      ])
+      const result = formatGetLayoutResult(spec, widgets)
+      expect(result.widgets[0]?.widget).toBe(user)
+    }
   })
 })
 

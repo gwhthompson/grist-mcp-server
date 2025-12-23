@@ -26,6 +26,7 @@ export const HexColorSchema = z
   .string()
   .regex(/^#[0-9A-Fa-f]{6}$/)
   .describe('Hex color (#RRGGBB)')
+  .meta({ id: 'HexColor' })
 
 export const AlignmentSchema = z.enum(['left', 'center', 'right'])
 
@@ -255,7 +256,10 @@ const FilterValueSchema = z.union([
   z.array(z.union([z.string(), z.number(), z.boolean(), z.null()]))
 ])
 
-export const FilterSchema = z.record(z.string(), FilterValueSchema).optional()
+// Handle stringified filter objects from LLMs: '{"Status":"Active"}' → {Status: "Active"}
+export const FilterSchema = z
+  .preprocess(parseJsonString, z.record(z.string(), FilterValueSchema))
+  .optional()
 
 export const ColumnSelectionSchema = z.array(z.string()).optional().describe('omit for all')
 
@@ -324,4 +328,14 @@ export function jsonSafeArray<T extends z.ZodType>(
   // Wrap with array-level preprocessing
   // This handles: "[{...}, {...}]" → [{...}, {...}]
   return z.preprocess(parseJsonString, arraySchema)
+}
+
+/**
+ * Create a JSON-safe schema that handles stringified inputs.
+ * Handles: '{"key":"value"}' → {key: "value"} or '[1,2,3]' → [1,2,3]
+ *
+ * Use for any schema that LLMs might stringify.
+ */
+export function jsonSafe<T extends z.ZodType>(schema: T) {
+  return z.preprocess(parseJsonString, schema)
 }

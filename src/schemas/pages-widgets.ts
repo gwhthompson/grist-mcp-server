@@ -46,6 +46,18 @@ export function toGristWidgetType(userType: UserWidgetType): GristWidgetType {
   return mapping[userType]
 }
 
+export function fromGristWidgetType(gristType: GristWidgetType): UserWidgetType {
+  const mapping: Record<GristWidgetType, UserWidgetType> = {
+    record: 'grid',
+    single: 'card',
+    detail: 'card_list',
+    chart: 'chart',
+    form: 'form',
+    custom: 'custom'
+  }
+  return mapping[gristType] ?? 'grid'
+}
+
 export const WidgetTypeSchema = UserWidgetTypeSchema
 
 export const LayoutSpecSchema: z.ZodType<{

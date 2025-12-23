@@ -80,12 +80,17 @@ export const HelpSchema = z
   })
   .refine(
     (data) => {
-      // If legacy params provided without new params, allow it
-      if (data.tool_name && !data.tools) return true
-      // Otherwise, allow anything (new API or empty for discovery)
+      // topic only works with legacy tool_name param, not with new tools array
+      if (data.topic && data.tools) {
+        return false
+      }
       return true
     },
-    { message: 'Invalid help request' }
+    {
+      message:
+        'Use "only" instead of "topic" with "tools" array. ' +
+        'Example: {tools: ["grist_get_records"], only: ["examples"]}'
+    }
   )
 
 export type HelpInput = z.infer<typeof HelpSchema>

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ValidationError } from '../errors/index.js'
 import { READ_ONLY_ANNOTATIONS, type ToolContext, type ToolDefinition } from '../registry/types.js'
 import { decodeCellValue } from '../schemas/api-responses.js'
 import { decodeFromApi } from '../schemas/cell-codecs.js'
@@ -349,6 +350,21 @@ export const GET_RECORDS_TOOL = defineStandardTool<typeof GetRecordsSchema, GetR
         toTableId(params.tableId)
       )
       const columnTypes = new Map(columns.map((c) => [c.id, c.fields.type]))
+
+      // Validate requested columns exist in the table schema
+      if (params.columns && params.columns.length > 0) {
+        const validColumnIds = new Set(columns.map((c) => c.id))
+        const invalidColumns = params.columns.filter((col) => !validColumnIds.has(col))
+        if (invalidColumns.length > 0) {
+          throw new ValidationError(
+            'columns',
+            invalidColumns,
+            `Column(s) not found: ${invalidColumns.join(', ')}`,
+            { tableId: params.tableId, docId: params.docId },
+            `Available columns: ${Array.from(validColumnIds).join(', ')}`
+          )
+        }
+      }
 
       // Grist API doesn't support offset - implement client-side pagination
       // Fetch offset + limit + 1 records to detect if there are more pages

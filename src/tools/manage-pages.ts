@@ -81,8 +81,10 @@ export const PageRefSchema = z
 const CreatePageOperationSchema = z
   .object({
     action: z.literal('create_page'),
-    name: z.string().min(1).max(100),
-    layout: LayoutNodeSchema
+    name: z.string().min(1).max(100).describe('Page name (not "title")'),
+    layout: LayoutNodeSchema.describe(
+      'Layout: {table: "TableName"} for single widget, or {cols: [...]} / {rows: [...]} for multi-widget'
+    )
   })
   .describe('create page')
 

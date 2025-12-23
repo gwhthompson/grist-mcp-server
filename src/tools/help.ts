@@ -114,6 +114,23 @@ async function generateBatchSchemas(toolNames: string[]): Promise<{
 // =============================================================================
 
 /**
+ * Truncate text at word boundary with ellipsis.
+ */
+function truncateAtWordBoundary(text: string, maxLength: number): string {
+  if (text.length <= maxLength) {
+    return text
+  }
+  // Find last space before maxLength
+  const truncated = text.slice(0, maxLength)
+  const lastSpace = truncated.lastIndexOf(' ')
+  if (lastSpace > maxLength * 0.6) {
+    // Only use word boundary if it's not too far back
+    return `${truncated.slice(0, lastSpace)}...`
+  }
+  return `${truncated}...`
+}
+
+/**
  * Build discovery response (no tools specified).
  */
 async function buildDiscoveryResponse(): Promise<DiscoveryResponse> {
@@ -121,7 +138,7 @@ async function buildDiscoveryResponse(): Promise<DiscoveryResponse> {
   return {
     tools: allTools.map((t) => ({
       name: t.name,
-      summary: t.docs.overview.slice(0, 120),
+      summary: truncateAtWordBoundary(t.docs.overview, 120),
       category: t.category
     })),
     workflow: 'workspaces → documents → tables → records',

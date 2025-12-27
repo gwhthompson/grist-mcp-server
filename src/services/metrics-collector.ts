@@ -11,7 +11,7 @@ export interface MetricsCollectorConfig {
 }
 
 export class MetricsCollector {
-  private intervalId: NodeJS.Timeout | null = null
+  private intervalId: ReturnType<typeof setInterval> | null = null
   private readonly interval: number
   private readonly includeRateLimiter: boolean
   private readonly includeCache: boolean
@@ -48,6 +48,11 @@ export class MetricsCollector {
     this.intervalId = setInterval(() => {
       this.collectMetrics()
     }, this.interval)
+
+    // unref() prevents timer from keeping Node.js process alive; not available in Workers
+    if (typeof this.intervalId.unref === 'function') {
+      this.intervalId.unref()
+    }
 
     this.isRunning = true
   }

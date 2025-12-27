@@ -1,6 +1,7 @@
 {
   "name": "grist-mcp-server",
-  "version": "2.0.32",
+  "version": "2.0.33",
+  "mcpName": "io.github.gwhthompson/grist-mcp-server",
   "description": "11 tools for managing Grist documents with AI",
   "repository": {
     "type": "git",
@@ -32,7 +33,10 @@
     "pack:validate": "npx @anthropic-ai/mcpb@2.0.1 validate .",
     "bundle:vite": "vite build",
     "bundle": "npm run build && npm run bundle:vite && npm run pack",
-    "prepare": "husky || true"
+    "prepare": "husky || true",
+    "worker:dev": "wrangler dev",
+    "worker:deploy": "wrangler deploy",
+    "worker:types": "wrangler types"
   },
   "keywords": [
     "mcp",
@@ -48,19 +52,23 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.24.3",
+    "ai": "^6.0.3",
     "axios": "^1.13.2",
     "zod": "^4.0"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.3.10",
+    "@cloudflare/workers-types": "^4.20251225.0",
     "@types/node": "^25.0.3",
     "@vitest/coverage-v8": "^4.0.16",
     "@vitest/ui": "^4.0.15",
+    "agents": "^0.3.0",
     "dotenv-cli": "^11.0.0",
     "husky": "^9.1.7",
     "tsx": "^4.21.0",
     "typescript": "^5.7.2",
     "vite": "^7.3.0",
-    "vitest": "^4.0.15"
+    "vitest": "^4.0.15",
+    "wrangler": "^4.0.0"
   }
 }

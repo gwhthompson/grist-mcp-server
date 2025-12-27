@@ -57,3 +57,9 @@ inspector-config.json
 evaluations/
 examples/
 temp/
+
+# Cloudflare Workers
+.wrangler/
+
+# MCP Registry tokens
+.mcpregistry_*

@@ -83,7 +83,7 @@ export class SchemaCache {
   private tableRefCache: Map<string, TableRefCacheEntry> = new Map()
   private readonly ttl: number
   private readonly maxSize: number = 500
-  private cleanupTimer?: NodeJS.Timeout
+  private cleanupTimer?: ReturnType<typeof setInterval>
 
   constructor(
     private readonly client: GristClient,
@@ -325,7 +325,10 @@ export class SchemaCache {
       this.pruneExpired()
     }, 60000)
 
-    this.cleanupTimer.unref()
+    // unref() prevents timer from keeping Node.js process alive; not available in Workers
+    if (typeof this.cleanupTimer.unref === 'function') {
+      this.cleanupTimer.unref()
+    }
   }
 
   stopCleanup(): void {

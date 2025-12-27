@@ -11,7 +11,7 @@ export interface MetricsCollectorConfig {
 }
 
 export class MetricsCollector {
-  private intervalId: NodeJS.Timeout | null = null
+  private intervalId: ReturnType<typeof setInterval> | null = null
   private readonly interval: number
   private readonly includeRateLimiter: boolean
   private readonly includeCache: boolean

@@ -22,7 +22,7 @@ export interface ResponseCacheConfig {
 export class ResponseCache<T = unknown> {
   private cache = new Map<string, CacheEntry<T>>()
   private config: ResponseCacheConfig
-  private cleanupTimer?: NodeJS.Timeout
+  private cleanupTimer?: ReturnType<typeof setInterval>
   private stats = {
     hits: 0,
     misses: 0
@@ -132,7 +132,10 @@ export class ResponseCache<T = unknown> {
       }
     }, this.config.cleanupInterval)
 
-    this.cleanupTimer.unref()
+    // unref() prevents timer from keeping Node.js process alive; not available in Workers
+    if (typeof this.cleanupTimer.unref === 'function') {
+      this.cleanupTimer.unref()
+    }
   }
 
   stopCleanup(): void {

@@ -14,7 +14,7 @@ const { mockHandler, mockCreateMcpHandler, mockCreateGristMcpServer, mockRegiste
       Promise.resolve({
         server: { mockServer: true },
         context: { mockContext: true },
-        cleanup: vi.fn()
+        cleanup: vi.fn(() => Promise.resolve())
       })
     )
     const mockRegisterToolsBatch = vi.fn(() => Promise.resolve())
@@ -332,6 +332,19 @@ describe('worker', () => {
       await worker.fetch(request, mockEnv, mockCtx)
 
       expect(mockHandler).toHaveBeenCalledWith(request, mockEnv, mockCtx)
+    })
+
+    it('schedules cleanup via waitUntil', async () => {
+      const request = new Request('https://example.com/mcp', {
+        method: 'POST',
+        headers: { 'X-Grist-API-Key': 'test-key' }
+      })
+
+      await worker.fetch(request, mockEnv, mockCtx)
+
+      // Verify waitUntil was called with a promise (cleanup)
+      expect(mockCtx.waitUntil).toHaveBeenCalledTimes(1)
+      expect(mockCtx.waitUntil).toHaveBeenCalledWith(expect.any(Promise))
     })
   })
 })

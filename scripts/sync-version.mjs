@@ -39,7 +39,8 @@ if (existsSync(serverJsonPath)) {
 const workerPath = './src/worker.ts'
 if (existsSync(workerPath)) {
   const workerContent = readFileSync(workerPath, 'utf8')
-  const versionMatch = workerContent.match(/version:\s*['"]([^'"]+)['"]/)
+  // Match version specifically within createGristMcpServer call to avoid false positives
+  const versionMatch = workerContent.match(/createGristMcpServer\(\{[\s\S]*?version:\s*['"]([^'"]+)['"]/)
   if (versionMatch) {
     const workerVersion = versionMatch[1]
     if (workerVersion !== pkg.version) {

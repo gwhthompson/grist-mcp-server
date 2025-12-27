@@ -110,6 +110,11 @@ export default {
       }
     })
 
-    return handler(request, env, _ctx)
+    const response = await handler(request, env, _ctx)
+
+    // Schedule cleanup to run after response is sent (per Cloudflare best practices)
+    _ctx.waitUntil(instance.cleanup())
+
+    return response
   }
 }

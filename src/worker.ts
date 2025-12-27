@@ -4,6 +4,18 @@
  * Provides a remote MCP server using streamable-http transport at /mcp endpoint.
  * Uses header-based authentication (X-Grist-API-Key).
  *
+ * Architecture notes:
+ * - Stateless design: Each request creates a fresh server instance with the user's
+ *   credentials. This is intentional - Workers are stateless by default and caching
+ *   servers would require Durable Objects, adding complexity. Per-request instantiation
+ *   ensures credentials are never shared between requests.
+ *
+ * - CORS wildcard: The `origin: '*'` is acceptable here because authentication uses
+ *   API keys sent via headers (not cookies). This means there's no CSRF risk - an
+ *   attacker's site cannot make authenticated requests without the user's API key.
+ *   MCP clients connect from various origins (Claude Desktop, Inspector, etc.), so
+ *   restrictive CORS would break legitimate use cases.
+ *
  * @see https://developers.cloudflare.com/agents/model-context-protocol/transport/
  */
 
@@ -28,7 +40,7 @@ export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url)
 
-    // Handle CORS preflight
+    // Handle CORS preflight (per Cloudflare best practices)
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: {
@@ -37,7 +49,8 @@ export default {
           'Access-Control-Allow-Headers':
             'Content-Type, Accept, X-Grist-API-Key, X-Grist-Base-URL, Mcp-Session-Id',
           'Access-Control-Expose-Headers': 'Mcp-Session-Id',
-          'Access-Control-Max-Age': '86400'
+          'Access-Control-Max-Age': '86400',
+          Vary: 'Origin'
         }
       })
     }
@@ -53,6 +66,7 @@ export default {
       request.headers.get('X-Grist-Base-URL') || env.GRIST_BASE_URL || 'https://docs.getgrist.com'
 
     if (!apiKey) {
+      // Return JSON-RPC 2.0 error format (code -32001 is in application-defined range)
       return new Response(
         JSON.stringify({
           jsonrpc: '2.0',
@@ -61,7 +75,13 @@ export default {
         }),
         {
           status: 401,
-          headers: { 'Content-Type': 'application/json' }
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers':
+              'Content-Type, Accept, X-Grist-API-Key, X-Grist-Base-URL, Mcp-Session-Id',
+            Vary: 'Origin'
+          }
         }
       )
     }

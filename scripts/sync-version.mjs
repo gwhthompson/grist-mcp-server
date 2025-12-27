@@ -22,13 +22,32 @@ if (existsSync(serverJsonPath)) {
     serverJson.version = pkg.version
     updated = true
   }
-  if (serverJson.packages?.[0]?.version !== pkg.version) {
-    serverJson.packages[0].version = pkg.version
-    updated = true
+  if (Array.isArray(serverJson.packages) && serverJson.packages.length > 0) {
+    if (serverJson.packages[0].version !== pkg.version) {
+      serverJson.packages[0].version = pkg.version
+      updated = true
+    }
   }
   if (updated) {
     writeFileSync(serverJsonPath, JSON.stringify(serverJson, null, 2) + '\n')
     console.log(`✓ server.json version synced to ${pkg.version}`)
+  }
+}
+
+// Check worker.ts version matches package.json
+// Note: Workers can't do dynamic imports, so version is hardcoded. Validate it here.
+const workerPath = './src/worker.ts'
+if (existsSync(workerPath)) {
+  const workerContent = readFileSync(workerPath, 'utf8')
+  const versionMatch = workerContent.match(/version:\s*['"]([^'"]+)['"]/)
+  if (versionMatch) {
+    const workerVersion = versionMatch[1]
+    if (workerVersion !== pkg.version) {
+      console.error(`✗ worker.ts version (${workerVersion}) does not match package.json (${pkg.version})`)
+      console.error('  Update the version in src/worker.ts to match package.json')
+      process.exit(1)
+    }
+    console.log(`✓ worker.ts version in sync: ${pkg.version}`)
   }
 }
 

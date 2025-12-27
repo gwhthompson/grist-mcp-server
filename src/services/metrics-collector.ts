@@ -49,6 +49,11 @@ export class MetricsCollector {
       this.collectMetrics()
     }, this.interval)
 
+    // unref() prevents timer from keeping Node.js process alive; not available in Workers
+    if (typeof this.intervalId.unref === 'function') {
+      this.intervalId.unref()
+    }
+
     this.isRunning = true
   }
 

@@ -170,6 +170,7 @@ describe('worker', () => {
       expect(response.status).toBe(401)
       expect(response.headers.get('Access-Control-Allow-Origin')).toBe('*')
       expect(response.headers.get('Access-Control-Allow-Headers')).toContain('X-Grist-API-Key')
+      expect(response.headers.get('Access-Control-Expose-Headers')).toBe('Mcp-Session-Id')
       expect(response.headers.get('Vary')).toBe('Origin')
     })
 

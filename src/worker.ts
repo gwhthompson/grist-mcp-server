@@ -80,6 +80,7 @@ export default {
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Headers':
               'Content-Type, Accept, X-Grist-API-Key, X-Grist-Base-URL, Mcp-Session-Id',
+            'Access-Control-Expose-Headers': 'Mcp-Session-Id',
             Vary: 'Origin'
           }
         }

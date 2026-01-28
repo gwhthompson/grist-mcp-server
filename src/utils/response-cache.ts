@@ -1,6 +1,15 @@
 // TTL-based cache for read operations with automatic expiration
 import { sharedLogger } from './shared-logger.js'
 
+/**
+ * Detect Cloudflare Workers runtime (stateless - timers don't make sense).
+ * Workers create fresh instances per request, so cleanup timers are wasteful.
+ */
+function isWorkersRuntime(): boolean {
+  // Workers don't have process.versions; Node.js does
+  return typeof process === 'undefined' || !('versions' in process)
+}
+
 interface CacheEntry<T> {
   value: T
   expiresAt: number
@@ -60,12 +69,12 @@ export class ResponseCache<T = unknown> {
     if (this.cache.size >= this.config.maxSize) {
       const entriesToRemove = Math.ceil(this.config.maxSize * 0.1)
       const entries = Array.from(this.cache.entries())
-      entries
+      const toRemove = entries
         .sort((a, b) => a[1].expiresAt - b[1].expiresAt)
         .slice(0, entriesToRemove)
-        .forEach(([key]) => {
-          this.cache.delete(key)
-        })
+      for (const [entryKey] of toRemove) {
+        this.cache.delete(entryKey)
+      }
     }
 
     const expiresAt = Date.now() + (ttl ?? this.config.defaultTTL)
@@ -125,6 +134,11 @@ export class ResponseCache<T = unknown> {
       return
     }
 
+    // Skip timer in Workers - stateless runtime creates fresh instances per request
+    if (isWorkersRuntime()) {
+      return
+    }
+
     this.cleanupTimer = setInterval(() => {
       const removed = this.cleanup()
       if (removed > 0) {
@@ -132,7 +146,7 @@ export class ResponseCache<T = unknown> {
       }
     }, this.config.cleanupInterval)
 
-    // unref() prevents timer from keeping Node.js process alive; not available in Workers
+    // unref() prevents timer from keeping Node.js process alive
     if (typeof this.cleanupTimer.unref === 'function') {
       this.cleanupTimer.unref()
     }

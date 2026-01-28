@@ -148,7 +148,7 @@ export class VisibleColService {
    * @returns Array of setup results, one per column
    */
   async setupBatch(columns: VisibleColSetupParams[]): Promise<VisibleColSetupResult[]> {
-    return Promise.all(columns.map((col) => this.setup(col)))
+    return await Promise.all(columns.map((col) => this.setup(col)))
   }
 
   /**

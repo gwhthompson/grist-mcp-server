@@ -88,6 +88,57 @@ export async function executeAdd<TInput, TEntity extends { id: unknown }, TResul
 // Update Executor
 // =============================================================================
 
+/** Verification check for update operations */
+interface UpdateCheck {
+  description: string
+  passed: boolean
+  field?: string
+  expected: unknown
+  actual: unknown
+}
+
+/** Build verification checks for a single entity's updated fields */
+function buildEntityUpdateChecks<TInput, TEntity extends { id: unknown }>(
+  entity: TEntity,
+  readEntity: TEntity | null | undefined,
+  input: TInput,
+  entityType: string,
+  getUpdatedFields: (input: TInput, entity: TEntity) => Record<string, unknown>,
+  columnTypes: Map<string, string> | undefined
+): UpdateCheck[] {
+  if (!readEntity) {
+    return [
+      {
+        description: `${entityType} ${String(entity.id)} not found after update`,
+        passed: false,
+        expected: entity,
+        actual: null
+      }
+    ]
+  }
+
+  const checks: UpdateCheck[] = []
+  const updatedFields = getUpdatedFields(input, entity)
+
+  for (const [field, expected] of Object.entries(updatedFields)) {
+    if (expected === undefined) continue
+
+    const actual = (readEntity as Record<string, unknown>)[field]
+    const colType = columnTypes?.get(field)
+    const passed = deepEqual(expected, actual, colType)
+
+    checks.push({
+      description: `${entityType} ${String(entity.id)}.${field}`,
+      passed,
+      field,
+      expected,
+      actual
+    })
+  }
+
+  return checks
+}
+
 /**
  * Execute an update/modify operation with verification.
  *
@@ -119,48 +170,17 @@ export async function executeUpdate<TInput, TEntity extends { id: unknown }, TRe
 
     const readEntities = await config.readBack(ctx, docId, written)
 
-    // Verify each entity's updated fields
-    const checks: Array<{
-      description: string
-      passed: boolean
-      field?: string
-      expected: unknown
-      actual: unknown
-    }> = []
-
-    for (const [index, entity] of entities.entries()) {
-      const readEntity = readEntities[index]
-
-      if (!readEntity) {
-        checks.push({
-          description: `${config.entityType} ${String(entity.id)} not found after update`,
-          passed: false,
-          expected: entity,
-          actual: null
-        })
-        continue
-      }
-
-      // Get the fields that were updated
-      const updatedFields = config.getUpdatedFields(input, entity)
-
-      // Verify only updated fields
-      for (const [field, expected] of Object.entries(updatedFields)) {
-        if (expected === undefined) continue
-
-        const actual = (readEntity as Record<string, unknown>)[field]
-        const colType = columnTypes?.get(field)
-        const passed = deepEqual(expected, actual, colType)
-
-        checks.push({
-          description: `${config.entityType} ${String(entity.id)}.${field}`,
-          passed,
-          field,
-          expected,
-          actual
-        })
-      }
-    }
+    // Build verification checks for all entities
+    const checks = entities.flatMap((entity, index) =>
+      buildEntityUpdateChecks(
+        entity,
+        readEntities[index],
+        input,
+        config.entityType,
+        config.getUpdatedFields,
+        columnTypes
+      )
+    )
 
     const verification: VerificationResult = {
       passed: checks.every((c) => c.passed),

@@ -36,6 +36,7 @@ interface Env {
   GRIST_BASE_URL?: string
 }
 
+// biome-ignore lint/style/noDefaultExport: Cloudflare Workers requires default export with fetch handler
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url)
@@ -47,7 +48,7 @@ export default {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, DELETE, OPTIONS',
           'Access-Control-Allow-Headers':
-            'Content-Type, Accept, X-Grist-API-Key, X-Grist-Base-URL, Mcp-Session-Id',
+            'Content-Type, Accept, X-Grist-API-Key, X-Grist-Base-URL, Mcp-Session-Id, MCP-Protocol-Version',
           'Access-Control-Expose-Headers': 'Mcp-Session-Id',
           'Access-Control-Max-Age': '86400',
           Vary: 'Origin'
@@ -79,7 +80,7 @@ export default {
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Headers':
-              'Content-Type, Accept, X-Grist-API-Key, X-Grist-Base-URL, Mcp-Session-Id',
+              'Content-Type, Accept, X-Grist-API-Key, X-Grist-Base-URL, Mcp-Session-Id, MCP-Protocol-Version',
             'Access-Control-Expose-Headers': 'Mcp-Session-Id',
             Vary: 'Origin'
           }
@@ -105,7 +106,8 @@ export default {
       corsOptions: {
         origin: '*',
         methods: 'GET, POST, DELETE, OPTIONS',
-        headers: 'Content-Type, Accept, X-Grist-API-Key, X-Grist-Base-URL, Mcp-Session-Id',
+        headers:
+          'Content-Type, Accept, X-Grist-API-Key, X-Grist-Base-URL, Mcp-Session-Id, MCP-Protocol-Version',
         exposeHeaders: 'Mcp-Session-Id',
         maxAge: 86400
       }

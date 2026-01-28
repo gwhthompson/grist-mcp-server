@@ -39,9 +39,9 @@ export function buildBulkAddRecordAction(
 
   if (isNonEmpty(records)) {
     const colNames = Object.keys(records[0])
-    colNames.forEach((colId) => {
+    for (const colId of colNames) {
       columns[colId] = records.map((r) => r[colId] ?? null)
-    })
+    }
   }
 
   return {
@@ -60,10 +60,10 @@ export function buildBulkUpdateRecordAction(
 ): BulkUpdateRecordAction {
   const columns: BulkColValues = {}
 
-  Object.keys(updates).forEach((colId) => {
+  for (const colId of Object.keys(updates)) {
     const value = updates[colId]
     columns[colId] = rowIds.map(() => value ?? null)
-  })
+  }
 
   return {
     action: 'BulkUpdateRecord',

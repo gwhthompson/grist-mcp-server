@@ -163,7 +163,7 @@ function overrideToolsList(server: McpServer): void {
   // biome-ignore lint/complexity/noBannedTypes: SDK internal type not exported
   const internalServer = (server as unknown as { server: { setRequestHandler: Function } }).server
 
-  internalServer.setRequestHandler(ListToolsRequestSchema, async () => {
+  internalServer.setRequestHandler(ListToolsRequestSchema, () => {
     return {
       tools: ALL_TOOLS.map((tool) => ({
         name: tool.name,

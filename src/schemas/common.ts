@@ -218,7 +218,7 @@ export const WidgetOptionsSchema = z.union([
   EmptyWidgetOptionsSchema
 ])
 
-export function createWidgetOptionsSchema(columnType: string): z.ZodType<any, any> {
+export function createWidgetOptionsSchema(columnType: string): z.ZodTypeAny {
   if (columnType === 'Ref' || columnType === 'RefList') {
     return RefWidgetOptionsSchema
   }

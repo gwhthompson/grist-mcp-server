@@ -3,6 +3,15 @@ import type { RateLimiter } from '../utils/rate-limiter.js'
 import type { ResponseCache } from '../utils/response-cache.js'
 import { getSessionAnalytics } from './session-analytics.js'
 
+/**
+ * Detect Cloudflare Workers runtime (stateless - timers don't make sense).
+ * Workers create fresh instances per request, so metrics collection timers are wasteful.
+ */
+function isWorkersRuntime(): boolean {
+  // Workers don't have process.versions; Node.js does
+  return typeof process === 'undefined' || !('versions' in process)
+}
+
 export interface MetricsCollectorConfig {
   interval?: number
   includeRateLimiter?: boolean
@@ -36,6 +45,12 @@ export class MetricsCollector {
       return
     }
 
+    // Skip periodic metrics in Workers - stateless runtime creates fresh instances per request
+    if (isWorkersRuntime()) {
+      this.logger.debug('Metrics collector skipped - Workers runtime detected')
+      return
+    }
+
     this.logger.info('Metrics collector started', {
       interval: this.interval,
       includeRateLimiter: this.includeRateLimiter,
@@ -49,7 +64,7 @@ export class MetricsCollector {
       this.collectMetrics()
     }, this.interval)
 
-    // unref() prevents timer from keeping Node.js process alive; not available in Workers
+    // unref() prevents timer from keeping Node.js process alive
     if (typeof this.intervalId.unref === 'function') {
       this.intervalId.unref()
     }

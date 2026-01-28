@@ -159,6 +159,7 @@ export async function createGristMcpServer(
     schemaCache,
     context,
     metrics: metricsCollector,
+    // biome-ignore lint/suspicious/useAwait: Matches interface Promise<void> for await compatibility
     cleanup: async () => {
       // Stop metrics collection
       if (metricsCollector) {

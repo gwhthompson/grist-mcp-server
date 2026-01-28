@@ -1,6 +1,10 @@
 // Static list avoids locale-currency/map import errors (not in package.json exports)
 // Extracted from locale-currency v1.0.0 + SSP (Grist addition)
 // Update: node -e "const m=require('locale-currency/map.js');console.log(Object.values(m))"
+
+/** Regex for validating 3-letter uppercase currency codes */
+const CURRENCY_CODE_REGEX = /^[A-Z]{3}$/
+
 const CURRENCY_CODES_ARRAY = [
   'AED',
   'AFN',
@@ -178,7 +182,7 @@ export function getCurrencyCodeError(code: string): string {
     return `Currency code must be exactly 3 characters (got: ${code.length})`
   }
 
-  if (!/^[A-Z]{3}$/.test(code)) {
+  if (!CURRENCY_CODE_REGEX.test(code)) {
     if (code.toUpperCase() !== code) {
       const upper = code.toUpperCase()
       if (validCurrencies.has(upper)) {

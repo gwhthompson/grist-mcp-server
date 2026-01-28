@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { READ_ONLY_ANNOTATIONS, type ToolContext, type ToolDefinition } from '../registry/types.js'
-
 import {
   DetailLevelTableSchema,
   DetailLevelWorkspaceSchema,
@@ -21,6 +20,7 @@ import {
   isReferenceType
 } from '../services/column-resolver.js'
 import type { DocumentInfo, TablesApiResponse, WorkspaceInfo } from '../types.js'
+import { log } from '../utils/logger.js'
 import { definePaginatedTool, defineStandardTool } from './factory/index.js'
 import { nextSteps } from './utils/next-steps.js'
 import { paginate } from './utils/pagination.js'
@@ -97,9 +97,10 @@ export const GET_WORKSPACES_TOOL = definePaginatedTool<
     const allWorkspaces: WorkspaceInfo[] = []
     for (const org of orgs) {
       if (allWorkspaces.length >= maxWorkspaces) {
-        console.error(
-          `[GetWorkspaces] Reached max workspaces during fetch: ${allWorkspaces.length}/${maxWorkspaces}`
-        )
+        log.warn('GetWorkspaces reached max workspaces during fetch', {
+          fetched: allWorkspaces.length,
+          max: maxWorkspaces
+        })
         break
       }
 
@@ -121,6 +122,7 @@ export const GET_WORKSPACES_TOOL = definePaginatedTool<
     return items.filter((ws) => ws.name.toLowerCase().includes(searchTerm))
   },
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async afterExecute(result, _params, _ctx) {
     const firstWs = result.items[0]
 
@@ -152,7 +154,7 @@ export const GET_WORKSPACES_TOOL = definePaginatedTool<
   }
 })
 
-export async function getWorkspaces(context: ToolContext, params: GetWorkspacesInput) {
+export function getWorkspaces(context: ToolContext, params: GetWorkspacesInput) {
   return GET_WORKSPACES_TOOL.handler(context, params)
 }
 
@@ -231,9 +233,10 @@ async function fetchAllDocuments(
 
   for (const org of orgs) {
     if (documents.length >= maxDocuments) {
-      console.error(
-        `[GetDocuments] Reached max documents during fetch: ${documents.length}/${maxDocuments}`
-      )
+      log.warn('GetDocuments reached max documents during fetch', {
+        fetched: documents.length,
+        max: maxDocuments
+      })
       break
     }
 
@@ -294,6 +297,7 @@ export const GET_DOCUMENTS_TOOL = definePaginatedTool<typeof GetDocumentsSchema,
       return items.filter((doc) => doc.name.toLowerCase().includes(searchTerm))
     },
 
+    // biome-ignore lint/suspicious/useAwait: Factory type requires async return
     async afterExecute(result, params, _ctx) {
       const firstDoc = result.items[0]
 
@@ -329,7 +333,7 @@ export const GET_DOCUMENTS_TOOL = definePaginatedTool<typeof GetDocumentsSchema,
   }
 )
 
-export async function getDocuments(context: ToolContext, params: GetDocumentsInput) {
+export function getDocuments(context: ToolContext, params: GetDocumentsInput) {
   return GET_DOCUMENTS_TOOL.handler(context, params)
 }
 
@@ -400,7 +404,7 @@ async function formatTables(
       }
     }
 
-    return Promise.all(
+    return await Promise.all(
       tables.map(async (t) => {
         const columnsResponse = await ctx.client.get<{
           columns: ColumnApiResponse[]
@@ -437,7 +441,13 @@ async function formatTables(
                       foreignTable,
                       c.fields.visibleCol
                     )
-                  } catch {
+                  } catch (error) {
+                    // Non-critical - visible column name is a convenience enhancement
+                    log.debug(
+                      'Failed to resolve visibleColName',
+                      { docId: params.docId, foreignTable, visibleCol: c.fields.visibleCol },
+                      error instanceof Error ? error : undefined
+                    )
                     visibleColName = null
                   }
                 }
@@ -508,6 +518,7 @@ export const GET_TABLES_TOOL = defineStandardTool<typeof GetTablesSchema, GetTab
     }
   },
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async afterExecute(result, params, _ctx) {
     const firstTable = result.items[0]
 
@@ -545,7 +556,7 @@ export const GET_TABLES_TOOL = defineStandardTool<typeof GetTablesSchema, GetTab
   }
 })
 
-export async function getTables(context: ToolContext, params: GetTablesInput) {
+export function getTables(context: ToolContext, params: GetTablesInput) {
   return GET_TABLES_TOOL.handler(context, params)
 }
 

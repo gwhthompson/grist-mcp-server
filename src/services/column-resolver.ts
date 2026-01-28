@@ -1,5 +1,11 @@
 import type { GristClient } from './grist-client.js'
 
+/** Regex to extract foreign table from Ref/RefList type (e.g., "Ref:People" → "People") */
+const REF_FOREIGN_TABLE_REGEX = /^(?:Ref|RefList):(.+)$/
+
+/** Regex to check if column type is a reference type */
+const REF_TYPE_CHECK_REGEX = /^(?:Ref|RefList):/
+
 export interface ColumnInfo {
   id: string // Column ID (e.g., "Name", "Email")
   fields: {
@@ -66,14 +72,14 @@ export async function resolveVisibleCol(
 
 /** Extracts foreign table name from Ref/RefList column type (e.g., "Ref:People" → "People"). */
 export function extractForeignTable(columnType: string): string | null {
-  const match = columnType.match(/^(?:Ref|RefList):(.+)$/)
+  const match = columnType.match(REF_FOREIGN_TABLE_REGEX)
   // Safe: regex capture group (.+) guarantees match[1] exists when match is truthy
   return match?.[1] ?? null
 }
 
 /** Type guard to check if column type is a reference (Ref or RefList). */
 export function isReferenceType(columnType: string): boolean {
-  return /^(?:Ref|RefList):/.test(columnType)
+  return REF_TYPE_CHECK_REGEX.test(columnType)
 }
 
 /**

@@ -210,7 +210,7 @@ export type PageOperation = z.infer<typeof PageOperationSchema>
 /**
  * Execute a single page operation.
  */
-async function executeSingleOperation(
+function executeSingleOperation(
   ctx: ToolContext,
   docId: string,
   op: PageOperation
@@ -701,6 +701,41 @@ async function resolvePageName(
   return page
 }
 
+/** Parse a sort spec string into its components */
+interface ParsedSortItem {
+  isDescending: boolean
+  columnPart: string
+  flagsPart: string
+}
+
+function parseSortString(item: string): ParsedSortItem {
+  const isDescending = item.startsWith('-')
+  const withoutPrefix = isDescending ? item.slice(1) : item
+  const colonIndex = withoutPrefix.indexOf(':')
+
+  return {
+    isDescending,
+    columnPart: colonIndex >= 0 ? withoutPrefix.slice(0, colonIndex) : withoutPrefix,
+    flagsPart: colonIndex >= 0 ? withoutPrefix.slice(colonIndex) : ''
+  }
+}
+
+/** Format a resolved column ref with sign and flags */
+function formatSortResult(
+  colRef: number,
+  isDescending: boolean,
+  flagsPart: string
+): number | string {
+  const signedColRef = isDescending ? -colRef : colRef
+  return flagsPart ? `${signedColRef}${flagsPart}` : signedColRef
+}
+
+/** Check if a string represents a numeric column ref */
+function isNumericColumnRef(columnPart: string): boolean {
+  const numericValue = Number(columnPart)
+  return !Number.isNaN(numericValue) && columnPart.trim() !== ''
+}
+
 async function resolveSortSpec(
   client: ToolContext['client'],
   docId: string,
@@ -712,22 +747,17 @@ async function resolveSortSpec(
   for (const item of sortSpec) {
     if (typeof item === 'number') {
       resolved.push(item)
-    } else {
-      const isDescending = item.startsWith('-')
-      const withoutPrefix = isDescending ? item.slice(1) : item
-      const colonIndex = withoutPrefix.indexOf(':')
-      const columnPart = colonIndex >= 0 ? withoutPrefix.slice(0, colonIndex) : withoutPrefix
-      const flagsPart = colonIndex >= 0 ? withoutPrefix.slice(colonIndex) : ''
+      continue
+    }
 
-      const numericValue = Number(columnPart)
-      if (!Number.isNaN(numericValue) && columnPart.trim() !== '') {
-        const colId = isDescending ? -numericValue : numericValue
-        resolved.push(flagsPart ? `${colId}${flagsPart}` : colId)
-      } else {
-        const colRef = await resolveColumnNameToColRef(client, docId, tableId, columnPart)
-        const signedColRef = isDescending ? -colRef : colRef
-        resolved.push(flagsPart ? `${signedColRef}${flagsPart}` : signedColRef)
-      }
+    const parsed = parseSortString(item)
+
+    if (isNumericColumnRef(parsed.columnPart)) {
+      const colRef = Number(parsed.columnPart)
+      resolved.push(formatSortResult(colRef, parsed.isDescending, parsed.flagsPart))
+    } else {
+      const colRef = await resolveColumnNameToColRef(client, docId, tableId, parsed.columnPart)
+      resolved.push(formatSortResult(colRef, parsed.isDescending, parsed.flagsPart))
     }
   }
 
@@ -770,12 +800,13 @@ export const MANAGE_PAGES_TOOL = defineBatchTool<
   getDocId: (params) => params.docId,
   getActionName: (operation) => operation.action,
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async beforeExecute() {
     // Reset batch state for page name tracking across operations
     resetBatchState()
   },
 
-  async executeOperation(ctx, docId, operation, _index) {
+  executeOperation(ctx, docId, operation, _index) {
     return executeSingleOperation(ctx, docId, operation)
   },
 
@@ -808,6 +839,7 @@ export const MANAGE_PAGES_TOOL = defineBatchTool<
     }
   },
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async afterExecute(result, params, _ctx) {
     const createResults = result.results.filter((r) => r.action === 'create_page' && r.success)
     // Check if any create_page results have multiple widgets (sectionIds array)
@@ -899,7 +931,7 @@ export const MANAGE_PAGES_TOOL = defineBatchTool<
   }
 })
 
-export async function managePages(context: ToolContext, params: ManagePagesInput) {
+export function managePages(context: ToolContext, params: ManagePagesInput) {
   return MANAGE_PAGES_TOOL.handler(context, params)
 }
 

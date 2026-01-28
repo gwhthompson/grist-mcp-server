@@ -356,7 +356,7 @@ function preprocessWidgetOptions(val: unknown): object {
 
 export const WidgetOptionsSchema = z.preprocess(preprocessWidgetOptions, WidgetOptionsUnionSchema)
 
-export function getWidgetOptionsSchema(columnType: string): z.ZodType<any, any> {
+export function getWidgetOptionsSchema(columnType: string): z.ZodTypeAny {
   const baseType = columnType.split(':')[0]
 
   switch (baseType) {

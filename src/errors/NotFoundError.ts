@@ -1,5 +1,8 @@
 import { GristError } from './GristError.js'
 
+/** Regex to strip numbered list prefixes (e.g., "1. ", "2. ") */
+const NUMBERED_PREFIX_REGEX = /^\d+\.\s*/
+
 export type ResourceType = 'document' | 'table' | 'workspace' | 'column' | 'record' | 'organization'
 
 export class NotFoundError extends GristError {
@@ -27,7 +30,7 @@ export class NotFoundError extends GristError {
   getSuggestions(): string[] {
     const details = this.getDetailedSuggestions()
     // Return just the actionable next steps as suggestions
-    return details.nextSteps.map((s) => s.replace(/^\d+\.\s*/, ''))
+    return details.nextSteps.map((s) => s.replace(NUMBERED_PREFIX_REGEX, ''))
   }
 
   private getDetailedSuggestions(): { causes: string[]; nextSteps: string[] } {

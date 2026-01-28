@@ -1,6 +1,15 @@
 import { z } from 'zod'
 import { DocIdSchema, parseJsonString, ResponseFormatSchema, TableIdSchema } from './common.js'
 
+/** Regex patterns for detecting private/local IPs in webhook URLs */
+const PRIVATE_IP_PATTERNS = [
+  /^https?:\/\/localhost(:|\/|$)/i,
+  /^https?:\/\/127\.0\.0\.1(:|\/|$)/,
+  /^https?:\/\/192\.168\./,
+  /^https?:\/\/10\./,
+  /^https?:\/\/172\.(1[6-9]|2[0-9]|3[01])\./
+] as const
+
 export const WebhookIdSchema = z.string().uuid({
   message:
     'Webhook ID must be a valid UUID (e.g., "a1b2c3d4-e5f6-7890-abcd-ef1234567890"). ' +
@@ -12,19 +21,9 @@ export const WebhookUrlSchema = z
   .httpUrl({ message: 'Must be a valid HTTP/HTTPS URL (e.g., "https://example.com/webhook")' })
   .max(2000, { message: 'URL must be 2000 characters or less' })
   .transform((url) => url.trim())
-  .refine(
-    (url) => {
-      const privatePatterns = [
-        /^https?:\/\/localhost(:|\/|$)/i,
-        /^https?:\/\/127\.0\.0\.1(:|\/|$)/,
-        /^https?:\/\/192\.168\./,
-        /^https?:\/\/10\./,
-        /^https?:\/\/172\.(1[6-9]|2[0-9]|3[01])\./
-      ]
-      return !privatePatterns.some((pattern) => pattern.test(url))
-    },
-    { error: 'Private IPs not allowed - use public endpoint or ngrok' }
-  )
+  .refine((url) => !PRIVATE_IP_PATTERNS.some((pattern) => pattern.test(url)), {
+    error: 'Private IPs not allowed - use public endpoint or ngrok'
+  })
   .describe('public endpoint URL')
 
 const SQL_RESERVED_KEYWORDS = new Set([

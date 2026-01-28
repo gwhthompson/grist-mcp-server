@@ -66,6 +66,7 @@ import { toColId, toDocId, toTableId } from '../types/advanced.js'
 import type { ApplyResponse, SQLQueryResponse, UserAction } from '../types.js'
 import { first } from '../utils/array-helpers.js'
 import { extractFields } from '../utils/grist-field-extractor.js'
+import { log } from '../utils/logger.js'
 import { validateRetValues } from '../validators/apply-response.js'
 import { defineBatchTool } from './factory/index.js'
 import { nextSteps } from './utils/next-steps.js'
@@ -225,7 +226,7 @@ export type SchemaOperation = z.infer<typeof SchemaOperationSchema>
 /**
  * Execute a single schema operation.
  */
-async function executeSingleOperation(
+function executeSingleOperation(
   ctx: ToolContext,
   docId: string,
   op: SchemaOperation
@@ -688,7 +689,7 @@ async function resolveVisibleColInColumns(
   docId: string,
   columns: ColumnDefinition[]
 ): Promise<ColumnDefinition[]> {
-  return Promise.all(columns.map((col) => resolveVisibleColInColumn(client, docId, col)))
+  return await Promise.all(columns.map((col) => resolveVisibleColInColumn(client, docId, col)))
 }
 
 async function resolveVisibleColInColumn(
@@ -929,8 +930,13 @@ async function maybeDeleteEmptyTable1(client: ToolContext['client'], docId: stri
       schema: ApplyResponseSchema,
       context: 'Auto-removing empty Table1'
     })
-  } catch {
-    // Silently ignore - this is a convenience feature
+  } catch (error) {
+    // Best-effort cleanup - log for debugging but don't fail the operation
+    log.debug(
+      'Failed to auto-remove empty Table1',
+      { docId },
+      error instanceof Error ? error : undefined
+    )
   }
 }
 
@@ -968,7 +974,7 @@ export const MANAGE_SCHEMA_TOOL = defineBatchTool<
   getDocId: (params) => params.docId,
   getActionName: (operation) => operation.action,
 
-  async executeOperation(ctx, docId, operation, _index) {
+  executeOperation(ctx, docId, operation, _index) {
     return executeSingleOperation(ctx, docId, operation)
   },
 
@@ -997,6 +1003,7 @@ export const MANAGE_SCHEMA_TOOL = defineBatchTool<
     }
   },
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async afterExecute(result, _params, _ctx) {
     const tableCreates = result.results.filter((r) => r.action === 'create_table')
     const tableDeletes = result.results.filter((r) => r.action === 'delete_table')
@@ -1120,7 +1127,7 @@ export const MANAGE_SCHEMA_TOOL = defineBatchTool<
   }
 })
 
-export async function manageSchema(context: ToolContext, params: ManageSchemaInput) {
+export function manageSchema(context: ToolContext, params: ManageSchemaInput) {
   return MANAGE_SCHEMA_TOOL.handler(context, params)
 }
 

@@ -6,43 +6,56 @@ import { WidgetOptionsSchema, WidgetOptionsStringSchema } from './widget-options
 const KNOWN_OBJ_CODES = new Set(['L', 'l', 'O', 'D', 'd', 'S', 'C', 'R', 'r', 'E', 'P', 'U', 'V'])
 const warnedCellValueCodes = new Set<string>()
 
+// Lookup table for cell value decoders - returns undefined if format doesn't match
+type CellDecoder = (val: unknown[]) => unknown | undefined
+const CELL_DECODERS: Record<string, CellDecoder> = {
+  // Strip 'L' marker from lists
+  L: (val) => val.slice(1),
+  // Legacy lookup format
+  l: (val) => (val.length >= 2 ? (Array.isArray(val[1]) ? val[1] : [val[1]]) : undefined),
+  // Legacy reference format (returns array of IDs)
+  r: (val) =>
+    val.length === 3 && typeof val[1] === 'string' && Array.isArray(val[2]) ? val[2] : undefined,
+  // Reference format (returns row ID)
+  R: (val) =>
+    val.length === 3 && typeof val[1] === 'string' && typeof val[2] === 'number'
+      ? val[2]
+      : undefined,
+  // Dict format
+  O: (val) => (val.length === 2 && typeof val[1] === 'object' ? val[1] : undefined)
+}
+
+/** Warn once per unknown cell value code */
+function warnUnknownCode(code: string, val: unknown[]): void {
+  if (warnedCellValueCodes.has(code)) return
+  warnedCellValueCodes.add(code)
+  log.warn('Unknown CellValue encoding code encountered, returning raw value', {
+    code,
+    value: JSON.stringify(val),
+    hint: 'This may indicate a new Grist encoding type. The raw value will be passed through.'
+  })
+}
+
 /**
  * Decode cell values from API responses - handles legacy/internal formats.
  * For column-type-aware decoding (timestamps → ISO strings), use decodeFromApi from cell-codecs.ts
  */
 export function decodeCellValue(val: unknown): unknown {
-  if (Array.isArray(val) && val.length > 0) {
-    const first = val[0]
+  if (!Array.isArray(val) || val.length === 0) return val
 
-    // Strip 'L' marker from lists
-    if (first === 'L') return val.slice(1)
+  const first = val[0]
+  if (typeof first !== 'string' || first.length !== 1) return val
 
-    // Legacy lookup/reference formats that may appear in some responses
-    if (first === 'l' && val.length >= 2) return Array.isArray(val[1]) ? val[1] : [val[1]]
-    if (first === 'r' && val.length === 3 && typeof val[1] === 'string' && Array.isArray(val[2]))
-      return val[2]
-    if (
-      first === 'R' &&
-      val.length === 3 &&
-      typeof val[1] === 'string' &&
-      typeof val[2] === 'number'
-    )
-      return val[2]
+  // Try lookup table decoder
+  const decoder = CELL_DECODERS[first]
+  if (decoder) {
+    const result = decoder(val)
+    if (result !== undefined) return result
+  }
 
-    // Dict format
-    if (first === 'O' && val.length === 2 && typeof val[1] === 'object') return val[1]
-
-    // Graceful degradation: warn about unknown codes but return raw value
-    if (typeof first === 'string' && first.length === 1 && !KNOWN_OBJ_CODES.has(first)) {
-      if (!warnedCellValueCodes.has(first)) {
-        warnedCellValueCodes.add(first)
-        log.warn('Unknown CellValue encoding code encountered, returning raw value', {
-          code: first,
-          value: JSON.stringify(val),
-          hint: 'This may indicate a new Grist encoding type. The raw value will be passed through.'
-        })
-      }
-    }
+  // Warn about unknown codes (known codes like 'E' for error pass through)
+  if (!KNOWN_OBJ_CODES.has(first)) {
+    warnUnknownCode(first, val)
   }
 
   return val
@@ -252,7 +265,7 @@ export const PaginationMetadataSchema = z.object({
   next_offset: z.number().nullable()
 })
 
-export function createPaginatedSchema<T extends z.ZodType<any, any>>(itemsSchema: T) {
+export function createPaginatedSchema<T extends z.ZodTypeAny>(itemsSchema: T) {
   return z.object({
     items: itemsSchema,
     pagination: PaginationMetadataSchema
@@ -264,7 +277,7 @@ export const GristErrorSchema = z.object({
   details: z.unknown().optional()
 })
 
-export function validateApiResponse<T extends z.ZodType<any, any>>(
+export function validateApiResponse<T extends z.ZodTypeAny>(
   schema: T,
   data: unknown,
   context?: string
@@ -286,7 +299,7 @@ export function validateApiResponse<T extends z.ZodType<any, any>>(
   }
 }
 
-export function safeValidate<T extends z.ZodType<any, any>>(
+export function safeValidate<T extends z.ZodTypeAny>(
   schema: T,
   data: unknown
 ): { success: true; data: z.infer<T> } | { success: false; error: z.ZodError } {
@@ -299,7 +312,7 @@ export function safeValidate<T extends z.ZodType<any, any>>(
   return { success: false, error: result.error }
 }
 
-export function isValidApiResponse<T extends z.ZodType<any, any>>(
+export function isValidApiResponse<T extends z.ZodTypeAny>(
   schema: T,
   data: unknown
 ): data is z.infer<T> {

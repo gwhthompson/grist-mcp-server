@@ -247,7 +247,7 @@ export function buildHierarchicalPattern(
 ): UserAction[] {
   const actions: UserAction[] = []
 
-  config.levels.forEach((level, _index) => {
+  for (const level of config.levels) {
     const tableRef = tableRefsMap.get(level.table)
     if (!tableRef) {
       throw new ValidationError(
@@ -281,7 +281,7 @@ export function buildHierarchicalPattern(
         null
       )
     )
-  })
+  }
 
   return actions
 }
@@ -313,14 +313,14 @@ export function buildChartDashboardPattern(
     )
   }
 
-  config.charts.forEach((chart) => {
+  for (const chart of config.charts) {
     const tableRef = tableRefsMap.get(chart.table)
     if (!tableRef) {
       throw new ValidationError('table', chart.table, `Chart table "${chart.table}" not found`)
     }
 
     actions.push(buildCreateViewSectionAction(tableRef, 0, 'chart', null, null))
-  })
+  }
 
   return actions
 }
@@ -357,7 +357,7 @@ export function buildCustomPattern(
 ): UserAction[] {
   const actions: UserAction[] = []
 
-  config.widgets.forEach((widget) => {
+  for (const widget of config.widgets) {
     const tableRef = tableRefsMap.get(widget.table)
     if (!tableRef) {
       throw new ValidationError('table', widget.table, `Table "${widget.table}" not found`)
@@ -366,7 +366,7 @@ export function buildCustomPattern(
     actions.push(
       buildCreateViewSectionAction(tableRef, 0, convertWidgetType(widget.widget_type), null, null)
     )
-  })
+  }
 
   return actions
 }
@@ -526,39 +526,17 @@ export function buildVerticalSplitLayout(
   }
 }
 
-/**
- * Configures chart axes by setting exactly the specified columns as chart fields.
- *
- * In Grist charts:
- * - Grist auto-adds only the FIRST 2 columns (sorted by parentPos) when creating a chart
- * - Field order determines axis assignment: Field 1 = x-axis, Fields 2+ = y-axis series
- *
- * This function ensures the chart shows ONLY the specified x_axis and y_axis columns
- * by removing unwanted fields, updating existing field positions, and adding missing fields.
- *
- * @param client - GristClient instance
- * @param docId - Document ID
- * @param sectionRef - Section reference for the chart widget
- * @param tableId - Table name (needed to query column references)
- * @param xAxis - Column ID to use as x-axis (will be positioned first)
- * @param yAxis - Array of column IDs to use as y-axis series (positioned after x-axis)
- * @returns Array of UserActions to apply (empty if no configuration needed)
- */
-export async function configureChartAxes(
+// =============================================================================
+// Chart Axes Configuration Helpers
+// =============================================================================
+
+/** Fetch column ID to colRef mapping for a table */
+async function fetchColumnMappings(
   client: GristClient,
   docId: string,
-  sectionRef: number,
-  tableId: string,
-  xAxis?: string,
-  yAxis?: string[]
-): Promise<UserAction[]> {
-  // Skip if no axis configuration provided
-  if (!xAxis && (!yAxis || yAxis.length === 0)) {
-    return []
-  }
-
-  // 1. Get all columns in the table (colId -> colRef mapping)
-  const columnsResp = await client.post<SQLQueryResponse>(
+  tableId: string
+): Promise<Map<string, number>> {
+  const resp = await client.post<SQLQueryResponse>(
     `/docs/${docId}/sql`,
     {
       sql: `SELECT c.id as colRef, c.colId
@@ -571,13 +549,20 @@ export async function configureChartAxes(
   )
 
   const colIdToColRef = new Map<string, number>()
-  for (const record of columnsResp.records) {
+  for (const record of resp.records) {
     const fields = extractFields(record)
     colIdToColRef.set(fields.colId as string, fields.colRef as number)
   }
+  return colIdToColRef
+}
 
-  // 2. Get existing section fields (colRef -> fieldId)
-  const fieldsResp = await client.post<SQLQueryResponse>(
+/** Fetch existing section fields (colRef -> fieldId) */
+async function fetchSectionFields(
+  client: GristClient,
+  docId: string,
+  sectionRef: number
+): Promise<Map<number, number>> {
+  const resp = await client.post<SQLQueryResponse>(
     `/docs/${docId}/sql`,
     {
       sql: `SELECT f.id as fieldId, f.colRef
@@ -588,68 +573,78 @@ export async function configureChartAxes(
     {}
   )
 
-  const existingFields = new Map<number, number>() // colRef -> fieldId
-  for (const record of fieldsResp.records) {
+  const existingFields = new Map<number, number>()
+  for (const record of resp.records) {
     const fields = extractFields(record)
     existingFields.set(fields.colRef as number, fields.fieldId as number)
   }
+  return existingFields
+}
 
-  // 3. Build desired columns list with validation
+/** Resolve column IDs to colRefs with validation */
+function resolveAxisColumns(
+  xAxis: string | undefined,
+  yAxis: string[] | undefined,
+  colIdToColRef: Map<string, number>,
+  tableId: string
+): number[] {
   const desiredColRefs: number[] = []
-  if (xAxis) {
-    const colRef = colIdToColRef.get(xAxis)
+
+  const resolveColumn = (colId: string): number => {
+    const colRef = colIdToColRef.get(colId)
     if (colRef === undefined) {
       throw new ValidationError(
         'axis_column',
-        xAxis,
-        `Column "${xAxis}" not found in table "${tableId}". Verify column name.`
+        colId,
+        `Column "${colId}" not found in table "${tableId}". Verify column name.`
       )
     }
-    desiredColRefs.push(colRef)
+    return colRef
+  }
+
+  if (xAxis) {
+    desiredColRefs.push(resolveColumn(xAxis))
   }
   for (const col of yAxis || []) {
-    const colRef = colIdToColRef.get(col)
-    if (colRef === undefined) {
-      throw new ValidationError(
-        'axis_column',
-        col,
-        `Column "${col}" not found in table "${tableId}". Verify column name.`
-      )
-    }
-    desiredColRefs.push(colRef)
+    desiredColRefs.push(resolveColumn(col))
   }
 
-  const desiredColRefSet = new Set(desiredColRefs)
+  return desiredColRefs
+}
+
+/** Build field actions (remove, update, add) based on desired vs existing fields */
+function buildChartFieldActions(
+  desiredColRefs: number[],
+  existingFields: Map<number, number>,
+  sectionRef: number
+): UserAction[] {
   const actions: UserAction[] = []
+  const desiredColRefSet = new Set(desiredColRefs)
 
-  // 4. Remove unwanted fields using BulkRemoveRecord (more efficient)
-  const fieldIdsToRemove: number[] = []
-  for (const [colRef, fieldId] of existingFields) {
-    if (!desiredColRefSet.has(colRef)) {
-      fieldIdsToRemove.push(fieldId)
-    }
-  }
+  // Remove unwanted fields
+  const fieldIdsToRemove = [...existingFields.entries()]
+    .filter(([colRef]) => !desiredColRefSet.has(colRef))
+    .map(([, fieldId]) => fieldId)
+
   if (fieldIdsToRemove.length > 0) {
     actions.push(['BulkRemoveRecord', '_grist_Views_section_field', fieldIdsToRemove])
   }
 
-  // 5. Collect fields to add and update
+  // Categorize fields to add vs update
   const fieldsToAdd: { colRef: number; parentPos: number }[] = []
   const fieldsToUpdate: { fieldId: number; parentPos: number }[] = []
+
   for (let i = 0; i < desiredColRefs.length; i++) {
-    // Safe: loop bound guarantees desiredColRefs[i] exists
     const colRef = desiredColRefs[i] as number
     const fieldId = existingFields.get(colRef)
     if (fieldId !== undefined) {
-      // Collect for bulk update
       fieldsToUpdate.push({ fieldId, parentPos: i + 1 })
     } else {
-      // Collect for bulk add
       fieldsToAdd.push({ colRef, parentPos: i + 1 })
     }
   }
 
-  // 5b. Update existing field positions using BulkUpdateRecord
+  // Bulk update positions
   if (fieldsToUpdate.length > 0) {
     actions.push([
       'BulkUpdateRecord',
@@ -659,7 +654,7 @@ export async function configureChartAxes(
     ])
   }
 
-  // 6. Add missing fields using BulkAddRecord (single action for all new fields)
+  // Bulk add new fields
   if (fieldsToAdd.length > 0) {
     actions.push([
       'BulkAddRecord',
@@ -674,4 +669,27 @@ export async function configureChartAxes(
   }
 
   return actions
+}
+
+/** Configures chart axes by setting exactly the specified columns as chart fields. */
+export async function configureChartAxes(
+  client: GristClient,
+  docId: string,
+  sectionRef: number,
+  tableId: string,
+  xAxis?: string,
+  yAxis?: string[]
+): Promise<UserAction[]> {
+  if (!xAxis && (!yAxis || yAxis.length === 0)) {
+    return []
+  }
+
+  const [colIdToColRef, existingFields] = await Promise.all([
+    fetchColumnMappings(client, docId, tableId),
+    fetchSectionFields(client, docId, sectionRef)
+  ])
+
+  const desiredColRefs = resolveAxisColumns(xAxis, yAxis, colIdToColRef, tableId)
+
+  return buildChartFieldActions(desiredColRefs, existingFields, sectionRef)
 }

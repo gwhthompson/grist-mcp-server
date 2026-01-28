@@ -84,30 +84,28 @@ export function createNormalizer(_columnTypes: ColumnTypeMap): ValueNormalizer {
  */
 export function deepEqual(a: unknown, b: unknown, columnType?: string): boolean {
   // Normalize values if column type is provided
-  if (columnType) {
-    a = normalizeValue(a, columnType)
-    b = normalizeValue(b, columnType)
-  }
+  const valA = columnType ? normalizeValue(a, columnType) : a
+  const valB = columnType ? normalizeValue(b, columnType) : b
 
   // Identity check
-  if (a === b) return true
+  if (valA === valB) return true
 
   // Null check
-  if (a === null || b === null) return a === b
+  if (valA === null || valB === null) return valA === valB
 
   // Type check
-  if (typeof a !== typeof b) return false
+  if (typeof valA !== typeof valB) return false
 
   // Array comparison
-  if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false
-    return a.every((val, i) => deepEqual(val, b[i]))
+  if (Array.isArray(valA) && Array.isArray(valB)) {
+    if (valA.length !== valB.length) return false
+    return valA.every((val, i) => deepEqual(val, valB[i]))
   }
 
   // Object comparison
-  if (typeof a === 'object' && typeof b === 'object') {
-    const aObj = a as Record<string, unknown>
-    const bObj = b as Record<string, unknown>
+  if (typeof valA === 'object' && typeof valB === 'object') {
+    const aObj = valA as Record<string, unknown>
+    const bObj = valB as Record<string, unknown>
     const keys = Object.keys(aObj)
     if (keys.length !== Object.keys(bObj).length) return false
     return keys.every((key) => deepEqual(aObj[key], bObj[key]))

@@ -58,11 +58,23 @@ export function safeToColId(raw: string): ColId | null {
   return result.success ? result.data : null
 }
 
+/** Regex for UUID validation */
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/** Helper to validate positive integer IDs */
+function validatePositiveIntId(raw: number, typeName: string): void {
+  if (!Number.isInteger(raw) || raw <= 0) {
+    throw new TypeError(`Invalid ${typeName}: ${raw}. Must be a positive integer.`)
+  }
+}
+
 export function toWorkspaceId(raw: number): WorkspaceId {
+  validatePositiveIntId(raw, 'WorkspaceId')
   return raw as WorkspaceId
 }
 
 export function toRowId(raw: number): RowId {
+  validatePositiveIntId(raw, 'RowId')
   return raw as RowId
 }
 
@@ -72,6 +84,7 @@ export function toColId(raw: string): ColId {
 }
 
 export function toOrgId(raw: number): OrgId {
+  validatePositiveIntId(raw, 'OrgId')
   return raw as OrgId
 }
 
@@ -79,8 +92,7 @@ export function toWebhookId(raw: string): WebhookId {
   if (!raw || raw.trim().length === 0) {
     throw new TypeError('WebhookId cannot be empty')
   }
-  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-  if (!uuidRegex.test(raw)) {
+  if (!UUID_REGEX.test(raw)) {
     throw new TypeError(
       `Invalid WebhookId format: "${raw}". Must be a valid UUID (e.g., "a1b2c3d4-e5f6-7890-abcd-ef1234567890")`
     )
@@ -112,15 +124,72 @@ export function safeToTimestamp(raw: number): Timestamp | null {
 }
 
 export function toViewId(raw: number): ViewId {
+  validatePositiveIntId(raw, 'ViewId')
   return raw as ViewId
 }
 
 export function toSectionId(raw: number): SectionId {
+  validatePositiveIntId(raw, 'SectionId')
   return raw as SectionId
 }
 
 export function toPageId(raw: number): PageId {
+  validatePositiveIntId(raw, 'PageId')
   return raw as PageId
+}
+
+/** Safe version of toWorkspaceId - returns null on invalid input */
+export function safeToWorkspaceId(raw: number): WorkspaceId | null {
+  try {
+    return toWorkspaceId(raw)
+  } catch {
+    return null
+  }
+}
+
+/** Safe version of toRowId - returns null on invalid input */
+export function safeToRowId(raw: number): RowId | null {
+  try {
+    return toRowId(raw)
+  } catch {
+    return null
+  }
+}
+
+/** Safe version of toOrgId - returns null on invalid input */
+export function safeToOrgId(raw: number): OrgId | null {
+  try {
+    return toOrgId(raw)
+  } catch {
+    return null
+  }
+}
+
+/** Safe version of toViewId - returns null on invalid input */
+export function safeToViewId(raw: number): ViewId | null {
+  try {
+    return toViewId(raw)
+  } catch {
+    return null
+  }
+}
+
+/** Safe version of toSectionId - returns null on invalid input */
+export function safeToSectionId(raw: number): SectionId | null {
+  try {
+    return toSectionId(raw)
+  } catch {
+    return null
+  }
+}
+
+/** Safe version of toPageId - returns null on invalid input */
+export function safeToPageId(raw: number): PageId | null {
+  try {
+    return toPageId(raw)
+  } catch {
+    return null
+  }
 }
 
 export function fromBranded<T>(branded: Brand<T, string>): T {

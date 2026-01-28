@@ -4,18 +4,28 @@ import type {
   GristConditionalRuleRaw
 } from '../schemas/conditional-rules.js'
 
+/** Regex to match comparison operators (==, !=, <=, >=, <>, etc.) */
+const COMPARISON_OPERATORS_REGEX = /[=!<>]=|==|!=/
+
+/** Regex to detect single = assignment used incorrectly in comparison */
+const SINGLE_EQUAL_REGEX = /\$\w+\s*=\s*[^=]/
+
+/** Regex to match potential column references (capitalized identifiers) */
+const COLUMN_REF_PATTERN = /\b[A-Z][A-Za-z0-9_]*\b/
+
 export interface FormulaValidationResult {
   valid: boolean
   error?: string
   suggestions?: string[]
 }
 
-// Basic validation to catch common errors - not a full Python parser
-export function validatePythonFormula(formula: string): FormulaValidationResult {
-  const trimmed = formula.trim()
+// Validator returns null if check passes, or a FormulaValidationResult if it fails/warns
+type FormulaValidator = (formula: string) => FormulaValidationResult | null
 
+/** Check for balanced parentheses */
+function validateParentheses(formula: string): FormulaValidationResult | null {
   let parenCount = 0
-  for (const char of trimmed) {
+  for (const char of formula) {
     if (char === '(') parenCount++
     if (char === ')') parenCount--
     if (parenCount < 0) {
@@ -26,7 +36,6 @@ export function validatePythonFormula(formula: string): FormulaValidationResult 
       }
     }
   }
-
   if (parenCount > 0) {
     return {
       valid: false,
@@ -34,10 +43,13 @@ export function validatePythonFormula(formula: string): FormulaValidationResult 
       suggestions: ['Check that each "(" has a corresponding ")"']
     }
   }
+  return null
+}
 
-  if (trimmed.includes('=') && !trimmed.match(/[=!<>]=|==|!=/)) {
-    const singleEqualMatch = trimmed.match(/\$\w+\s*=\s*[^=]/)
-    if (singleEqualMatch) {
+/** Check for incorrect assignment operator (= instead of ==) */
+function validateAssignmentOperator(formula: string): FormulaValidationResult | null {
+  if (formula.includes('=') && !COMPARISON_OPERATORS_REGEX.test(formula)) {
+    if (SINGLE_EQUAL_REGEX.test(formula)) {
       return {
         valid: false,
         error: 'Invalid equality operator: use "==" for comparison, not "="',
@@ -48,29 +60,39 @@ export function validatePythonFormula(formula: string): FormulaValidationResult 
       }
     }
   }
+  return null
+}
 
-  const singleQuotes = (trimmed.match(/'/g) || []).length
-  const doubleQuotes = (trimmed.match(/"/g) || []).length
-
-  if (singleQuotes % 2 !== 0) {
+/** Check for balanced single quotes */
+function validateSingleQuotes(formula: string): FormulaValidationResult | null {
+  const count = (formula.match(/'/g) || []).length
+  if (count % 2 !== 0) {
     return {
       valid: false,
       error: "Unmatched single quote (') in formula",
       suggestions: ['Ensure all single quotes are properly closed']
     }
   }
+  return null
+}
 
-  if (doubleQuotes % 2 !== 0) {
+/** Check for balanced double quotes */
+function validateDoubleQuotes(formula: string): FormulaValidationResult | null {
+  const count = (formula.match(/"/g) || []).length
+  if (count % 2 !== 0) {
     return {
       valid: false,
       error: 'Unmatched double quote (") in formula',
       suggestions: ['Ensure all double quotes are properly closed']
     }
   }
+  return null
+}
 
-  const columnRefPattern = /\b[A-Z][A-Za-z0-9_]*\b/
-  const match = trimmed.match(columnRefPattern)
-  if (match && !trimmed.includes(`$${match[0]}`)) {
+/** Check for missing $ prefix on column references (warning only) */
+function validateColumnReferences(formula: string): FormulaValidationResult | null {
+  const match = formula.match(COLUMN_REF_PATTERN)
+  if (match && !formula.includes(`$${match[0]}`)) {
     return {
       valid: true,
       error: `Possible missing $ prefix for column reference "${match[0]}"`,
@@ -79,6 +101,26 @@ export function validatePythonFormula(formula: string): FormulaValidationResult 
         'Column references in formulas should start with $ (e.g., "$Price", "$Status")'
       ]
     }
+  }
+  return null
+}
+
+// Validator chain - each validator returns null to pass, or a result to stop
+const FORMULA_VALIDATORS: FormulaValidator[] = [
+  validateParentheses,
+  validateAssignmentOperator,
+  validateSingleQuotes,
+  validateDoubleQuotes,
+  validateColumnReferences
+]
+
+// Basic validation to catch common errors - not a full Python parser
+export function validatePythonFormula(formula: string): FormulaValidationResult {
+  const trimmed = formula.trim()
+
+  for (const validator of FORMULA_VALIDATORS) {
+    const result = validator(trimmed)
+    if (result !== null) return result
   }
 
   return { valid: true }

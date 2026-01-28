@@ -398,19 +398,19 @@ export async function renameColumn(
       })
     }
 
-    if (!newColumn) {
-      checks.push({
-        description: `New column ${newColId} should exist`,
-        passed: false,
-        expected: 'exists',
-        actual: null
-      })
-    } else {
+    if (newColumn) {
       checks.push({
         description: `New column ${newColId} exists`,
         passed: true,
         expected: 'exists',
         actual: newColumn
+      })
+    } else {
+      checks.push({
+        description: `New column ${newColId} should exist`,
+        passed: false,
+        expected: 'exists',
+        actual: null
       })
     }
 
@@ -678,19 +678,19 @@ export async function renameTable(
       })
     }
 
-    if (!newTable) {
-      checks.push({
-        description: `New table ${newTableIdStr} should exist`,
-        passed: false,
-        expected: 'exists',
-        actual: null
-      })
-    } else {
+    if (newTable) {
       checks.push({
         description: `New table ${newTableIdStr} exists`,
         passed: true,
         expected: 'exists',
         actual: newTable
+      })
+    } else {
+      checks.push({
+        description: `New table ${newTableIdStr} should exist`,
+        passed: false,
+        expected: 'exists',
+        actual: null
       })
     }
 

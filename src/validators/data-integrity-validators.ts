@@ -18,13 +18,16 @@ import type { ColumnMetadata, SchemaCache } from '../services/schema-cache.js'
 import { parseChoiceOptions } from '../services/schema-cache.js'
 import { type DocId, type TableId, toTableId } from '../types/advanced.js'
 
+// Module-level regex for extracting table name from Ref/RefList type
+const REF_TYPE_REGEX = /^Ref(?:List)?:(.+)$/
+
 /**
  * Extracts the referenced table name from a Ref or RefList column type.
  * @example getRefTableName('Ref:Customers') => 'Customers'
  * @example getRefTableName('RefList:Orders') => 'Orders'
  */
 export function getRefTableName(columnType: string): string | null {
-  const match = columnType.match(/^Ref(?:List)?:(.+)$/)
+  const match = columnType.match(REF_TYPE_REGEX)
   return match?.[1] ?? null
 }
 

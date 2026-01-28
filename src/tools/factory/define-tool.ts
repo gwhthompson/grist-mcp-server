@@ -86,6 +86,44 @@ function calculateResponseBytes(response: MCPToolResponse): number {
   }
 }
 
+/** Execution context for tool wrapper */
+interface ExecutionContext {
+  toolName: string
+  startTime: number
+  response?: MCPToolResponse
+  success: boolean
+}
+
+/** Record metrics after execution */
+function finalizeExecution(ctx: ExecutionContext): void {
+  const durationMs = Date.now() - ctx.startTime
+  const responseBytes = ctx.response ? calculateResponseBytes(ctx.response) : 0
+  recordExecution(ctx.toolName, responseBytes, durationMs, ctx.success)
+}
+
+/** Execute core logic with error handling */
+async function executeWithMetrics(
+  toolName: string,
+  execute: () => Promise<MCPToolResponse>
+): Promise<MCPToolResponse> {
+  const ctx: ExecutionContext = {
+    toolName,
+    startTime: Date.now(),
+    success: false
+  }
+
+  try {
+    ctx.response = await execute()
+    ctx.success = true
+    return ctx.response
+  } catch (error) {
+    ctx.response = handleError(error)
+    return ctx.response
+  } finally {
+    finalizeExecution(ctx)
+  }
+}
+
 // =============================================================================
 // Standard Tool Factory
 // =============================================================================
@@ -111,11 +149,7 @@ export function defineStandardTool<TInput extends ToolInputSchema, TOutput>(
   config: Omit<StandardToolConfig<TInput, TOutput>, 'kind'>
 ): ToolDefinition<TInput> {
   const handler: ToolHandler<TInput> = async (context: ToolContext, rawParams: unknown) => {
-    const startTime = Date.now()
-    let success = false
-    let response: MCPToolResponse | undefined
-
-    try {
+    return await executeWithMetrics(config.name, async () => {
       const params = validateInput(config.inputSchema, rawParams, config.name)
 
       if (config.beforeExecute) {
@@ -128,18 +162,8 @@ export function defineStandardTool<TInput extends ToolInputSchema, TOutput>(
         result = await config.afterExecute(result, params, context)
       }
 
-      const format = getResponseFormat(params)
-      response = formatToolResponse(result, format)
-      success = true
-      return response
-    } catch (error) {
-      response = handleError(error)
-      return response
-    } finally {
-      const durationMs = Date.now() - startTime
-      const responseBytes = response ? calculateResponseBytes(response) : 0
-      recordExecution(config.name, responseBytes, durationMs, success)
-    }
+      return formatToolResponse(result, getResponseFormat(params))
+    })
   }
 
   return createToolDefinition(config, handler)
@@ -170,68 +194,67 @@ const DEFAULT_PAGE_SIZE = 100
  * })
  * ```
  */
+/** Apply optional filter and sort to items */
+function processItems<TItem, TParams>(
+  items: TItem[],
+  params: TParams,
+  filterItems?: (items: TItem[], params: TParams) => TItem[],
+  sortItems?: (items: TItem[], params: TParams) => TItem[]
+): TItem[] {
+  let result = items
+  if (filterItems) result = filterItems(result, params)
+  if (sortItems) result = sortItems(result, params)
+  return result
+}
+
+/** Build paginated response from items */
+function buildPaginatedResponse<TItem>(
+  items: TItem[],
+  offset: number,
+  limit: number
+): PaginatedResponse<TItem> {
+  const paginatedItems = items.slice(offset, offset + limit)
+  const hasMore = offset + limit < items.length
+  return {
+    items: paginatedItems,
+    total: items.length,
+    offset,
+    limit,
+    hasMore,
+    nextOffset: hasMore ? offset + limit : null
+  }
+}
+
 export function definePaginatedTool<TInput extends ToolInputSchema, TItem>(
   config: Omit<PaginatedToolConfig<TInput, TItem>, 'kind'>
 ): ToolDefinition<TInput> {
   const pageSize = config.pageSize ?? DEFAULT_PAGE_SIZE
 
   const handler: ToolHandler<TInput> = async (context: ToolContext, rawParams: unknown) => {
-    const startTime = Date.now()
-    let success = false
-    let response: MCPToolResponse | undefined
-
-    try {
+    return await executeWithMetrics(config.name, async () => {
       const params = validateInput(config.inputSchema, rawParams, config.name)
 
       if (config.beforeExecute) {
         await config.beforeExecute(context, params)
       }
 
-      // Fetch items
-      let items = await config.fetchItems(context, params)
+      const rawItems = await config.fetchItems(context, params)
+      const items = processItems(rawItems, params, config.filterItems, config.sortItems)
 
-      // Filter if provided
-      if (config.filterItems) {
-        items = config.filterItems(items, params)
-      }
-
-      // Sort if provided
-      if (config.sortItems) {
-        items = config.sortItems(items, params)
-      }
-
-      // Paginate
       const offset = getOffset(params) ?? 0
       const limit = getLimit(params) ?? pageSize
-      const paginatedItems = items.slice(offset, offset + limit)
-      const hasMore = offset + limit < items.length
-
-      // Return flat structure matching output schemas
-      let result: PaginatedResponse<TItem> & { nextSteps?: string[] } = {
-        items: paginatedItems,
-        total: items.length,
+      let result: PaginatedResponse<TItem> & { nextSteps?: string[] } = buildPaginatedResponse(
+        items,
         offset,
-        limit,
-        hasMore,
-        nextOffset: hasMore ? offset + limit : null
-      }
+        limit
+      )
 
       if (config.afterExecute) {
         result = await config.afterExecute(result, params, context)
       }
 
-      const format = getResponseFormat(params)
-      response = formatToolResponse(result, format)
-      success = true
-      return response
-    } catch (error) {
-      response = handleError(error)
-      return response
-    } finally {
-      const durationMs = Date.now() - startTime
-      const responseBytes = response ? calculateResponseBytes(response) : 0
-      recordExecution(config.name, responseBytes, durationMs, success)
-    }
+      return formatToolResponse(result, getResponseFormat(params))
+    })
   }
 
   return createToolDefinition(config, handler)
@@ -281,6 +304,41 @@ function getLimit(params: unknown): number | undefined {
  * })
  * ```
  */
+/** Result of batch execution - either success with all results or failure at specific index */
+type BatchExecutionResult<TResult, TOperation> =
+  | { success: true; results: TResult[] }
+  | {
+      success: false
+      failedIndex: number
+      operation: TOperation
+      results: TResult[]
+      error: string
+    }
+
+/** Execute batch operations sequentially, capturing partial failures */
+async function executeBatchOperations<TOperation, TResult>(
+  operations: TOperation[],
+  executeOne: (op: TOperation, index: number) => Promise<TResult>
+): Promise<BatchExecutionResult<TResult, TOperation>> {
+  const results: TResult[] = []
+
+  for (const [i, operation] of operations.entries()) {
+    try {
+      results.push(await executeOne(operation, i))
+    } catch (error) {
+      return {
+        success: false,
+        failedIndex: i,
+        operation,
+        results,
+        error: error instanceof Error ? error.message : String(error)
+      }
+    }
+  }
+
+  return { success: true, results }
+}
+
 export function defineBatchTool<
   TInput extends ToolInputSchema,
   TOperation,
@@ -290,11 +348,7 @@ export function defineBatchTool<
   config: Omit<BatchToolConfig<TInput, TOperation, TResult, TResponse>, 'kind'>
 ): ToolDefinition<TInput> {
   const handler: ToolHandler<TInput> = async (context: ToolContext, rawParams: unknown) => {
-    const startTime = Date.now()
-    let success = false
-    let response: MCPToolResponse | undefined
-
-    try {
+    return await executeWithMetrics(config.name, async () => {
       const params = validateInput(config.inputSchema, rawParams, config.name)
 
       if (config.beforeExecute) {
@@ -303,54 +357,31 @@ export function defineBatchTool<
 
       const operations = config.getOperations(params)
       const docId = config.getDocId(params)
-      const completedResults: TResult[] = []
 
-      // Execute operations sequentially
-      for (const [i, operation] of operations.entries()) {
-        try {
-          const opResult = await config.executeOperation(context, docId, operation, i)
-          completedResults.push(opResult)
-        } catch (error) {
-          // Build failure response with partial results
-          const errorMessage = error instanceof Error ? error.message : String(error)
-          let result = config.buildFailureResponse(
-            docId,
-            i,
-            operation,
-            completedResults,
-            errorMessage,
-            params
-          )
+      const batchResult = await executeBatchOperations(operations, (op, i) =>
+        config.executeOperation(context, docId, op, i)
+      )
 
-          if (config.afterExecute) {
-            result = await config.afterExecute(result, params, context)
-          }
-
-          const format = getResponseFormat(params)
-          response = formatToolResponse(result, format)
-          return response
-        }
+      let result: TResponse
+      if (batchResult.success) {
+        result = config.buildSuccessResponse(docId, batchResult.results, params)
+      } else {
+        result = config.buildFailureResponse(
+          docId,
+          batchResult.failedIndex,
+          batchResult.operation,
+          batchResult.results,
+          batchResult.error,
+          params
+        )
       }
-
-      // All operations succeeded
-      let result = config.buildSuccessResponse(docId, completedResults, params)
 
       if (config.afterExecute) {
         result = await config.afterExecute(result, params, context)
       }
 
-      const format = getResponseFormat(params)
-      response = formatToolResponse(result, format)
-      success = true
-      return response
-    } catch (error) {
-      response = handleError(error)
-      return response
-    } finally {
-      const durationMs = Date.now() - startTime
-      const responseBytes = response ? calculateResponseBytes(response) : 0
-      recordExecution(config.name, responseBytes, durationMs, success)
-    }
+      return formatToolResponse(result, getResponseFormat(params))
+    })
   }
 
   return createToolDefinition(config, handler)

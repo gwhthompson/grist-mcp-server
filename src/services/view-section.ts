@@ -120,7 +120,7 @@ export function validateViewSectionUpdate(updates: ViewSectionUpdate): void {
     const validTypes = ['record', 'single', 'detail', 'chart', 'form', 'custom']
     if (!validTypes.includes(updates.parentKey)) {
       errors.push(
-        `Invalid widget type "${updates.parentKey}". ` + `Must be one of: ${validTypes.join(', ')}`
+        `Invalid widget type "${updates.parentKey}". Must be one of: ${validTypes.join(', ')}`
       )
     }
   }

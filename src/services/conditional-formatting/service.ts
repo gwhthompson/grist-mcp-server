@@ -23,6 +23,15 @@ import type {
   RuleScope
 } from './types.js'
 
+// Polling configuration for waitForHelperColumns
+// Grist creates helper columns asynchronously; we poll with exponential backoff
+const POLLING_MAX_ATTEMPTS = 20
+const POLLING_FAST_THRESHOLD = 5 // Use fast delay for first N attempts
+const POLLING_MEDIUM_THRESHOLD = 10 // Use medium delay for next N attempts
+const POLLING_DELAY_FAST_MS = 10
+const POLLING_DELAY_MEDIUM_MS = 50
+const POLLING_DELAY_SLOW_MS = 100
+
 /**
  * Factory function to create the appropriate RuleOwner for a scope
  */
@@ -55,6 +64,49 @@ export class ConditionalFormattingService {
     this.ruleOwner = createRuleOwner(scope)
   }
 
+  /** Validate formula and throw formatted error if invalid */
+  private validateFormula(formula: string): void {
+    const validation = validatePythonFormula(formula)
+    if (!validation.valid && validation.error) {
+      const suggestions = validation.suggestions ?? []
+      const suggestionText =
+        suggestions.length > 0
+          ? `\nSuggestions:\n${suggestions.map((s) => `- ${s}`).join('\n')}`
+          : ''
+      throw new Error(`Invalid formula: ${validation.error}${suggestionText}`)
+    }
+  }
+
+  /** Check if error is a column not found error (retry-worthy) */
+  private isColumnNotFoundError(error: unknown): boolean {
+    if (!(error instanceof Error)) return false
+    return (
+      error.message.includes('not found') ||
+      error.message.includes('Invalid column') ||
+      error.message.includes('KeyError')
+    )
+  }
+
+  /** Wait for rules RefList to propagate with exponential backoff */
+  private async waitForRulePropagation(
+    docId: string,
+    ownerRef: number,
+    expectedCount: number
+  ): Promise<void> {
+    for (let waitAttempt = 0; waitAttempt < POLLING_MAX_ATTEMPTS; waitAttempt++) {
+      const updatedState = await this.ruleOwner.getRulesAndStyles(this.client, docId, ownerRef)
+      if (updatedState.helperColRefs.length >= expectedCount) return
+
+      const delay =
+        waitAttempt < POLLING_FAST_THRESHOLD
+          ? POLLING_DELAY_FAST_MS
+          : waitAttempt < POLLING_MEDIUM_THRESHOLD
+            ? POLLING_DELAY_MEDIUM_MS
+            : POLLING_DELAY_SLOW_MS
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+
   /**
    * Add a new conditional formatting rule.
    *
@@ -68,16 +120,7 @@ export class ConditionalFormattingService {
     rule: { formula: string; style: Record<string, unknown> }
   ): Promise<RuleOperationResult> {
     const MAX_RETRIES = 2
-
-    // Validate formula syntax
-    const validation = validatePythonFormula(rule.formula)
-    if (!validation.valid && validation.error) {
-      let errorMsg = `Invalid formula: ${validation.error}`
-      if (validation.suggestions && validation.suggestions.length > 0) {
-        errorMsg += `\nSuggestions:\n${validation.suggestions.map((s) => `- ${s}`).join('\n')}`
-      }
-      throw new Error(errorMsg)
-    }
+    this.validateFormula(rule.formula)
 
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
@@ -132,28 +175,12 @@ export class ConditionalFormattingService {
         )
 
         // Wait for rules RefList to propagate before returning
-        const expectedCount = currentState.helperColRefs.length + 1
-        for (let waitAttempt = 0; waitAttempt < 20; waitAttempt++) {
-          const updatedState = await this.ruleOwner.getRulesAndStyles(this.client, docId, ownerRef)
-          if (updatedState.helperColRefs.length >= expectedCount) {
-            break
-          }
-          const delay = waitAttempt < 5 ? 10 : waitAttempt < 10 ? 50 : 100
-          await new Promise((resolve) => setTimeout(resolve, delay))
-        }
+        await this.waitForRulePropagation(docId, ownerRef, currentState.helperColRefs.length + 1)
 
         return this.listRules(docId, tableId, ownerParams)
       } catch (error) {
-        // Check if this is a ModifyColumn failure due to wrong column name prediction
-        const isColumnNotFoundError =
-          error instanceof Error &&
-          (error.message.includes('not found') ||
-            error.message.includes('Invalid column') ||
-            error.message.includes('KeyError'))
-
-        if (isColumnNotFoundError && attempt < MAX_RETRIES) {
-          // Retry with fresh prediction - bundle already rolled back
-          continue
+        if (this.isColumnNotFoundError(error) && attempt < MAX_RETRIES) {
+          continue // Retry with fresh prediction - bundle already rolled back
         }
         throw error
       }
@@ -172,15 +199,7 @@ export class ConditionalFormattingService {
     ruleIndex: number,
     rule: { formula: string; style: Record<string, unknown> }
   ): Promise<RuleOperationResult> {
-    // Validate formula syntax
-    const validation = validatePythonFormula(rule.formula)
-    if (!validation.valid && validation.error) {
-      let errorMsg = `Invalid formula: ${validation.error}`
-      if (validation.suggestions && validation.suggestions.length > 0) {
-        errorMsg += `\nSuggestions:\n${validation.suggestions.map((s) => `- ${s}`).join('\n')}`
-      }
-      throw new Error(errorMsg)
-    }
+    this.validateFormula(rule.formula)
 
     const ownerRef = await this.ruleOwner.getOwnerRef(this.client, docId, ownerParams)
     const currentState = await this.ruleOwner.getRulesAndStyles(this.client, docId, ownerRef)

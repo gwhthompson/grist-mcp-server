@@ -50,6 +50,42 @@ import {
 import { deepEqual, throwIfFailed } from './base.js'
 
 // =============================================================================
+// Link Widget Helpers
+// =============================================================================
+
+/** Link field definitions for building updates and checks */
+const LINK_FIELDS = ['linkSrcSectionRef', 'linkSrcColRef', 'linkTargetColRef'] as const
+
+/** Build updates object from link input (only defined fields) */
+function buildLinkUpdates(link: LinkWidgetInput): Record<string, unknown> {
+  const updates: Record<string, unknown> = {}
+  for (const field of LINK_FIELDS) {
+    if (link[field] !== undefined) {
+      updates[field] = link[field]
+    }
+  }
+  return updates
+}
+
+/** Build verification checks from link input and read widget */
+function buildLinkChecks(link: LinkWidgetInput, readWidget: DomainWidget): VerificationCheck[] {
+  const checks: VerificationCheck[] = []
+  for (const field of LINK_FIELDS) {
+    if (link[field] !== undefined) {
+      const expected = link[field]
+      const actual = readWidget[field]
+      checks.push({
+        description: field,
+        passed: deepEqual(expected, actual),
+        expected,
+        actual
+      })
+    }
+  }
+  return checks
+}
+
+// =============================================================================
 // Page Read Operations
 // =============================================================================
 
@@ -493,19 +529,8 @@ export async function linkWidget(
     throw new Error(`Widget ${sectionId} not found on page ${viewId}`)
   }
 
-  // Build link updates
-  const updates: Record<string, unknown> = {}
-  if (link.linkSrcSectionRef !== undefined) {
-    updates.linkSrcSectionRef = link.linkSrcSectionRef
-  }
-  if (link.linkSrcColRef !== undefined) {
-    updates.linkSrcColRef = link.linkSrcColRef
-  }
-  if (link.linkTargetColRef !== undefined) {
-    updates.linkTargetColRef = link.linkTargetColRef
-  }
-
-  // Execute link configuration
+  // Build and execute link updates
+  const updates = buildLinkUpdates(link)
   await ctx.client.post<ApplyResponse>(
     `/docs/${docIdStr}/apply`,
     [['UpdateRecord', '_grist_Views_section', sectionId, updates]],
@@ -515,11 +540,10 @@ export async function linkWidget(
     }
   )
 
-  // Verify by reading back
-  if (verify) {
-    const readWidget = await getWidget(ctx, docIdStr, viewId, sectionId)
-
-    if (!readWidget) {
+  // Read back widget (always needed for result)
+  const readWidget = await getWidget(ctx, docIdStr, viewId, sectionId)
+  if (!readWidget) {
+    if (verify) {
       throw new VerificationError(
         {
           passed: false,
@@ -532,47 +556,15 @@ export async function linkWidget(
             }
           ]
         },
-        {
-          operation: 'linkWidget',
-          entityType: 'Widget',
-          entityId: String(sectionId)
-        }
+        { operation: 'linkWidget', entityType: 'Widget', entityId: String(sectionId) }
       )
     }
+    throw new Error(`Widget ${sectionId} not found after linkWidget operation`)
+  }
 
-    // Verify link fields
-    const checks: VerificationCheck[] = []
-
-    if (link.linkSrcSectionRef !== undefined) {
-      const passed = deepEqual(link.linkSrcSectionRef, readWidget.linkSrcSectionRef)
-      checks.push({
-        description: 'linkSrcSectionRef',
-        passed,
-        expected: link.linkSrcSectionRef,
-        actual: readWidget.linkSrcSectionRef
-      })
-    }
-
-    if (link.linkSrcColRef !== undefined) {
-      const passed = deepEqual(link.linkSrcColRef, readWidget.linkSrcColRef)
-      checks.push({
-        description: 'linkSrcColRef',
-        passed,
-        expected: link.linkSrcColRef,
-        actual: readWidget.linkSrcColRef
-      })
-    }
-
-    if (link.linkTargetColRef !== undefined) {
-      const passed = deepEqual(link.linkTargetColRef, readWidget.linkTargetColRef)
-      checks.push({
-        description: 'linkTargetColRef',
-        passed,
-        expected: link.linkTargetColRef,
-        actual: readWidget.linkTargetColRef
-      })
-    }
-
+  // Verify link fields if requested
+  if (verify) {
+    const checks = buildLinkChecks(link, readWidget)
     const verification: VerificationResult = {
       passed: checks.every((c) => c.passed),
       checks
@@ -583,22 +575,15 @@ export async function linkWidget(
       entityType: 'Widget',
       entityId: String(sectionId)
     })
-
-    // Get source widget for result
-    let sourceWidget: DomainWidget | undefined
-    if (link.linkSrcSectionRef) {
-      sourceWidget = (await getWidget(ctx, docIdStr, viewId, link.linkSrcSectionRef)) ?? undefined
-    }
-
-    return { entity: readWidget, verified: true, sourceWidget }
   }
 
-  // Without verification, read back to return the widget
-  const readWidget = await getWidget(ctx, docIdStr, viewId, sectionId)
-  if (!readWidget) {
-    throw new Error(`Widget ${sectionId} not found after linkWidget operation`)
+  // Get source widget for result
+  let sourceWidget: DomainWidget | undefined
+  if (link.linkSrcSectionRef) {
+    sourceWidget = (await getWidget(ctx, docIdStr, viewId, link.linkSrcSectionRef)) ?? undefined
   }
-  return { entity: readWidget, verified: true }
+
+  return { entity: readWidget, verified: true, sourceWidget }
 }
 
 /**

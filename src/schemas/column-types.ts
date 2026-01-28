@@ -21,6 +21,9 @@ import { BaseConditionalRuleSchema } from './conditional-rules.js'
 // Re-export for consumers that expect these from column-types
 export { AlignmentSchema, HexColorSchema } from './common.js'
 
+/** Regex to parse Ref/RefList type strings (e.g., "Ref:Contacts") */
+const REF_TYPE_REGEX = /^(Ref|RefList):(.+)$/
+
 // JSON Schema validation only - transform is done in action builder
 // Using .pipe() separates JSON Schema input from runtime output type
 export const CurrencyCodeInputSchema = z.string().length(3).describe('e.g. USD, EUR')
@@ -411,7 +414,7 @@ export function buildGristType(input: { type: string; refTable?: string }): stri
  * Non-reference types return {type, refTable: undefined}
  */
 export function parseGristType(gristType: string): { type: string; refTable?: string } {
-  const match = gristType.match(/^(Ref|RefList):(.+)$/)
+  const match = gristType.match(REF_TYPE_REGEX)
   if (match?.[1] && match[2]) {
     return { type: match[1], refTable: match[2] }
   }

@@ -1,6 +1,17 @@
 // Grist uses Python for formulas, so identifiers must be valid Python identifiers.
 // Tables start uppercase (Grist convention).
 
+// Module-level regex patterns for performance
+const PYTHON_IDENTIFIER_REGEX = /^[a-zA-Z_][a-zA-Z0-9_]*$/
+const TABLE_ID_REGEX = /^[A-Z][a-zA-Z0-9_]*$/
+const STARTS_WITH_DIGIT_REGEX = /^[0-9]/
+const STARTS_WITH_LETTER_OR_UNDERSCORE_REGEX = /^[a-zA-Z_]/
+const STARTS_WITH_LOWERCASE_REGEX = /^[a-z]/
+const STARTS_WITH_UPPERCASE_REGEX = /^[A-Z]/
+const INVALID_IDENTIFIER_CHARS_REGEX = /[^a-zA-Z0-9_]/g
+const BASE58_DOCID_REGEX = /^[1-9A-HJ-NP-Za-km-z]{22}$/
+const INVALID_BASE58_CHARS_REGEX = /[^1-9A-HJ-NP-Za-km-z]/g
+
 import {
   GRIST_RESERVED_PREFIXES,
   getPythonKeywordError,
@@ -11,7 +22,7 @@ import {
 export const isValidColId = (colId: string, existingColIds?: string[]): boolean => {
   if (!colId) return false
 
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(colId)) {
+  if (!PYTHON_IDENTIFIER_REGEX.test(colId)) {
     return false
   }
 
@@ -39,7 +50,7 @@ export const isValidColId = (colId: string, existingColIds?: string[]): boolean 
 export const isValidTableId = (tableId: string, existingTableIds?: string[]): boolean => {
   if (!tableId) return false
 
-  if (!/^[A-Z][a-zA-Z0-9_]*$/.test(tableId)) {
+  if (!TABLE_ID_REGEX.test(tableId)) {
     return false
   }
 
@@ -67,15 +78,15 @@ export function getColIdError(colId: string, existingColIds?: string[]): string 
     return `Column ID too long (${colId.length} chars, max: 64). Use shorter name.`
   }
 
-  if (/^[0-9]/.test(colId)) {
+  if (STARTS_WITH_DIGIT_REGEX.test(colId)) {
     return `Column ID cannot start with digit (got: "${colId}"). Suggestion: "${colId[0]}_${colId.slice(1)}"`
   }
 
-  if (!/^[a-zA-Z_]/.test(colId)) {
+  if (!STARTS_WITH_LETTER_OR_UNDERSCORE_REGEX.test(colId)) {
     return `Column ID must start with letter or underscore (got: "${colId}")`
   }
 
-  const invalidChars = colId.match(/[^a-zA-Z0-9_]/g)
+  const invalidChars = colId.match(INVALID_IDENTIFIER_CHARS_REGEX)
   if (invalidChars) {
     return `Column ID contains invalid characters: ${invalidChars.join(', ')} (only letters, digits, underscores allowed). Got: "${colId}"`
   }
@@ -105,20 +116,20 @@ export function getTableIdError(tableId: string, existingTableIds?: string[]): s
     return `Table ID too long (${tableId.length} chars, max: 64). Use shorter name.`
   }
 
-  if (/^[a-z]/.test(tableId)) {
+  if (STARTS_WITH_LOWERCASE_REGEX.test(tableId)) {
     const firstChar = tableId[0] ?? ''
     return `Table ID must start with UPPERCASE letter (got: "${tableId}"). Suggestion: "${firstChar.toUpperCase()}${tableId.slice(1)}"`
   }
 
-  if (/^[0-9]/.test(tableId)) {
+  if (STARTS_WITH_DIGIT_REGEX.test(tableId)) {
     return `Table ID cannot start with digit (got: "${tableId}")`
   }
 
-  if (!/^[A-Z]/.test(tableId)) {
+  if (!STARTS_WITH_UPPERCASE_REGEX.test(tableId)) {
     return `Table ID must start with UPPERCASE letter (got: "${tableId}")`
   }
 
-  const invalidChars = tableId.match(/[^a-zA-Z0-9_]/g)
+  const invalidChars = tableId.match(INVALID_IDENTIFIER_CHARS_REGEX)
   if (invalidChars) {
     return `Table ID contains invalid characters: ${invalidChars.join(', ')} (only letters, digits, underscores allowed). Got: "${tableId}"`
   }
@@ -141,7 +152,7 @@ export function getTableIdError(tableId: string, existingTableIds?: string[]): s
 
 // Base58, 22 chars, excludes 0/O/I/l for visual clarity
 export function isValidDocId(docId: string): boolean {
-  return /^[1-9A-HJ-NP-Za-km-z]{22}$/.test(docId)
+  return BASE58_DOCID_REGEX.test(docId)
 }
 
 export function getDocIdError(docId: string): string {
@@ -160,7 +171,7 @@ export function getDocIdError(docId: string): string {
     }
   }
 
-  const invalidChars = docId.match(/[^1-9A-HJ-NP-Za-km-z]/g)
+  const invalidChars = docId.match(INVALID_BASE58_CHARS_REGEX)
   if (invalidChars) {
     return `Document ID contains invalid characters: ${invalidChars.join(', ')}. Must be base58 (1-9, A-H, J-N, P-Z, a-k, m-z).`
   }

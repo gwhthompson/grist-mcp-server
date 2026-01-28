@@ -102,45 +102,49 @@ export function formatAsMarkdown<T>(data: T): string {
   return String(data)
 }
 
+/** Extract ID from an item if it has one */
+function extractItemId(item: unknown): unknown {
+  if (typeof item === 'object' && item && 'id' in item) {
+    return (item as { id: unknown }).id
+  }
+  return null
+}
+
+/** Format paginated response in concise mode */
+function formatPaginatedConcise(obj: Record<string, unknown>): string {
+  const items = Array.isArray(obj.items) ? obj.items : []
+  const total = typeof obj.total === 'number' ? obj.total : items.length
+  const ids = items.slice(0, 10).map(extractItemId).filter(Boolean)
+
+  let result = `${items.length} of ${total} items`
+  if (ids.length > 0) {
+    const ellipsis = items.length > 10 ? '...' : ''
+    result += `\nIDs: ${ids.join(', ')}${ellipsis}`
+  }
+  if (obj.hasMore) {
+    result += '\nMore available'
+  }
+  return result
+}
+
+/** Format plain object in concise mode */
+function formatObjectConcise(data: object): string {
+  const keys = Object.keys(data)
+  const preview = keys.slice(0, 5).join(', ')
+  const ellipsis = keys.length > 5 ? '...' : ''
+  return `Object with ${keys.length} properties: ${preview}${ellipsis}`
+}
+
 /**
  * Format data in concise mode - minimal output with counts and IDs only.
  * Optimized for token efficiency when full details aren't needed.
  */
 function formatConcise(data: unknown): string {
-  if (data === null || data === undefined) {
-    return 'No data'
-  }
-
-  if (Array.isArray(data)) {
-    return `${data.length} items`
-  }
-
-  if (typeof data === 'object' && 'items' in data) {
-    const obj = data as Record<string, unknown>
-    const items = Array.isArray(obj.items) ? obj.items : []
-    const total = typeof obj.total === 'number' ? obj.total : items.length
-    const ids = items
-      .slice(0, 10)
-      .map((item) =>
-        typeof item === 'object' && item && 'id' in item ? (item as { id: unknown }).id : null
-      )
-      .filter(Boolean)
-
-    let result = `${items.length} of ${total} items`
-    if (ids.length > 0) {
-      result += `\nIDs: ${ids.join(', ')}${items.length > 10 ? '...' : ''}`
-    }
-    if (obj.hasMore) {
-      result += '\nMore available'
-    }
-    return result
-  }
-
-  if (typeof data === 'object') {
-    const keys = Object.keys(data as object)
-    return `Object with ${keys.length} properties: ${keys.slice(0, 5).join(', ')}${keys.length > 5 ? '...' : ''}`
-  }
-
+  if (data === null || data === undefined) return 'No data'
+  if (Array.isArray(data)) return `${data.length} items`
+  if (typeof data === 'object' && 'items' in data)
+    return formatPaginatedConcise(data as Record<string, unknown>)
+  if (typeof data === 'object') return formatObjectConcise(data as object)
   return String(data)
 }
 
@@ -226,11 +230,11 @@ function formatTruncationWarning(
   const lines: string[] = ['', truncationReason || 'Truncated: exceeded character limit']
 
   if (Array.isArray(suggestions) && suggestions.length > 0) {
-    suggestions.forEach((suggestion) => {
+    for (const suggestion of suggestions) {
       if (typeof suggestion === 'string') {
         lines.push(`- ${suggestion}`)
       }
-    })
+    }
   }
 
   return lines

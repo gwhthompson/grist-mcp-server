@@ -19,7 +19,7 @@ import {
   processCreateViewSectionResults
 } from '../pages-builder.js'
 import { formatGetLayoutResult } from './from-layout-spec.js'
-import type { LayoutNode } from './schema.js'
+import type { LayoutNode, NewPane } from './schema.js'
 import { collectExistingSectionIds, collectNewPanes, LayoutNodeSchema } from './schema.js'
 import { replacePlaceholders, toLayoutSpec } from './to-layout-spec.js'
 import { WidgetRegistry } from './widget-registry.js'
@@ -27,16 +27,6 @@ import { WidgetRegistry } from './widget-registry.js'
 // =============================================================================
 // Types
 // =============================================================================
-
-interface NewWidgetConfig {
-  table: string
-  widget: string
-  title?: string
-  chartType?: string
-  chart_options?: Record<string, unknown>
-  x_axis?: string
-  y_axis?: string[]
-}
 
 export interface CreatePageResult {
   success: boolean
@@ -75,7 +65,7 @@ async function configureNewWidget(
   client: GristClient,
   docId: string,
   sectionRef: number,
-  widget: NewWidgetConfig
+  widget: NewPane
 ): Promise<void> {
   // Set title if specified
   if (widget.title) {
@@ -111,6 +101,64 @@ async function configureNewWidget(
   }
 }
 
+/** Result of creating widgets from layout */
+interface CreateWidgetsResult {
+  sectionIds: number[]
+  placeholderToSectionId: Map<number, number>
+  viewRef: number | null
+}
+
+/**
+ * Create widgets from layout and return section IDs.
+ * Shared between executeCreatePage and executeSetLayout.
+ */
+async function createWidgetsFromLayout(
+  client: GristClient,
+  docId: string,
+  viewId: number | null,
+  newWidgets: NewPane[],
+  placeholderMap: Map<number, number>,
+  getTableRef: (tableId: string) => Promise<number>,
+  registry: WidgetRegistry
+): Promise<CreateWidgetsResult> {
+  const sectionIds: number[] = []
+  const placeholderToSectionId = new Map<number, number>()
+  let viewRef = viewId
+
+  for (const [i, widget] of newWidgets.entries()) {
+    const tableRef = await getTableRef(widget.table)
+    const widgetType = toGristWidgetType(widget.widget)
+    const targetViewRef = viewRef ?? 0
+
+    const action = buildCreateViewSectionAction(tableRef, targetViewRef, widgetType, null, null)
+    const response = await client.post<ApplyResponse>(`/docs/${docId}/apply`, [action])
+    const results = processCreateViewSectionResults(response.retValues)
+    const result = results[0]
+
+    if (!result?.sectionRef) {
+      throw new Error(`Failed to create widget for table "${widget.table}"`)
+    }
+
+    if (viewRef === null) {
+      viewRef = result.viewRef
+    }
+
+    registry.register(result.sectionRef)
+    sectionIds.push(result.sectionRef)
+
+    // Map placeholder to real ID
+    for (const [placeholder, index] of placeholderMap) {
+      if (index === i) {
+        placeholderToSectionId.set(placeholder, result.sectionRef)
+      }
+    }
+
+    await configureNewWidget(client, docId, result.sectionRef, widget)
+  }
+
+  return { sectionIds, placeholderToSectionId, viewRef }
+}
+
 // =============================================================================
 // Create Page Executor
 // =============================================================================
@@ -127,8 +175,6 @@ export async function executeCreatePage(
 ): Promise<CreatePageResult> {
   // Phase 1: Validate and collect
   const validatedLayout = LayoutNodeSchema.parse(layout)
-  // Note: collectLocalIds was removed in Architecture B - no string IDs
-
   const newPanes = collectNewPanes(validatedLayout)
   if (newPanes.length === 0) {
     throw new Error(
@@ -137,91 +183,31 @@ export async function executeCreatePage(
     )
   }
 
-  // Validate tables exist
-  const tableRefs = new Map<string, number>()
-  for (const pane of newPanes) {
-    if (!tableRefs.has(pane.table)) {
-      const tableRef = await getTableRef(pane.table)
-      tableRefs.set(pane.table, tableRef)
-    }
-  }
-
   // Phase 2: Transform to LayoutSpec
-  const {
-    layoutSpec: preliminarySpec,
-    newWidgets,
-    placeholderMap
-    // Note: existingWidgetLinks is not used for create_page since all widgets are new
-  } = toLayoutSpec(validatedLayout)
+  const { layoutSpec: preliminarySpec, newWidgets, placeholderMap } = toLayoutSpec(validatedLayout)
 
   // Phase 3: Create widgets
   const registry = new WidgetRegistry()
-  const placeholderToSectionId = new Map<number, number>()
-  let viewRef: number | null = null
-  const sectionIds: number[] = []
+  const { sectionIds, placeholderToSectionId, viewRef } = await createWidgetsFromLayout(
+    client,
+    docId,
+    null, // No existing page
+    newWidgets,
+    placeholderMap,
+    getTableRef,
+    registry
+  )
 
-  for (const [i, widget] of newWidgets.entries()) {
-    const tableRef = tableRefs.get(widget.table)
-    if (tableRef === undefined) {
-      throw new Error(`Table ref not found for "${widget.table}"`)
-    }
-    const widgetType = toGristWidgetType(widget.widget)
-
-    // First widget creates the page (viewRef=0)
-    const targetViewRef = viewRef ?? 0
-
-    const action = buildCreateViewSectionAction(
-      tableRef,
-      targetViewRef,
-      widgetType,
-      null, // groupbyColRefs
-      null // tableId
-    )
-
-    const response = await client.post<ApplyResponse>(`/docs/${docId}/apply`, [action])
-    const results = processCreateViewSectionResults(response.retValues)
-    const result = results[0]
-
-    if (!result || !result.sectionRef) {
-      throw new Error(`Failed to create widget for table "${widget.table}"`)
-    }
-
-    // First widget's viewRef becomes our page
-    if (viewRef === null) {
-      viewRef = result.viewRef
-    }
-
-    // Register the widget (no local ID in Architecture B)
-    registry.register(result.sectionRef)
-    sectionIds.push(result.sectionRef)
-
-    // Map placeholder to real ID
-    for (const [placeholder, index] of placeholderMap) {
-      if (index === i) {
-        placeholderToSectionId.set(placeholder, result.sectionRef)
-      }
-    }
-
-    // Note: link handling removed in Architecture B - use link_widgets operation
-
-    // Configure widget title and chart settings
-    await configureNewWidget(client, docId, result.sectionRef, widget)
-  }
-
-  // Phase 4: Apply layout
-  // viewRef is guaranteed to be set since we validated newWidgets.length > 0
   if (viewRef === null) {
     throw new Error('Internal error: viewRef should be set after widget creation')
   }
 
+  // Phase 4: Apply layout and name page
   const finalLayoutSpec = replacePlaceholders(preliminarySpec, placeholderToSectionId)
   await client.post(`/docs/${docId}/apply`, [
     buildUpdateLayoutAction(viewRef, finalLayoutSpec),
     ['UpdateRecord', '_grist_Views', viewRef, { name: pageName }]
   ])
-
-  // Note: Phase 5 (link configuration) removed in Architecture B
-  // Use link_widgets operation to configure widget links after page creation
 
   return {
     success: true,
@@ -235,6 +221,33 @@ export async function executeCreatePage(
 // =============================================================================
 // Set Layout Executor
 // =============================================================================
+
+/** Validate layout references and check for orphaned widgets */
+function validateLayoutReferences(
+  referencedIds: Set<number>,
+  existingSectionIds: Set<number>,
+  removeWidgets: number[]
+): void {
+  // Check referenced sections exist
+  for (const id of referencedIds) {
+    if (!existingSectionIds.has(id)) {
+      throw new Error(
+        `Section ${id} not found on page. Available sections: ${[...existingSectionIds].join(', ')}`
+      )
+    }
+  }
+
+  // Check for orphaned widgets (not in layout and not in remove list)
+  const removeSet = new Set(removeWidgets)
+  for (const id of existingSectionIds) {
+    if (!referencedIds.has(id) && !removeSet.has(id)) {
+      throw new Error(
+        `Section ${id} exists on page but is not in layout or remove list. ` +
+          `Either include it in the layout or add it to the remove array.`
+      )
+    }
+  }
+}
 
 /**
  * Execute set_layout operation on an existing page.
@@ -250,33 +263,12 @@ export async function executeSetLayout(
 ): Promise<SetLayoutResult> {
   // Phase 1: Validate layout
   const validatedLayout = LayoutNodeSchema.parse(layout)
-  // Note: collectLocalIds was removed in Architecture B - no string IDs
 
   // Phase 2: Get existing widgets and validate
   const existingWidgets = await getExistingWidgets()
   const existingSectionIds = new Set(existingWidgets.keys())
-
-  // Check referenced sections exist
   const referencedIds = collectExistingSectionIds(validatedLayout)
-  for (const id of referencedIds) {
-    if (!existingSectionIds.has(id)) {
-      throw new Error(
-        `Section ${id} not found on page. ` +
-          `Available sections: ${[...existingSectionIds].join(', ')}`
-      )
-    }
-  }
-
-  // Check for orphaned widgets (not in layout and not in remove list)
-  const removeSet = new Set(removeWidgets)
-  for (const id of existingSectionIds) {
-    if (!referencedIds.has(id) && !removeSet.has(id)) {
-      throw new Error(
-        `Section ${id} exists on page but is not in layout or remove list. ` +
-          `Either include it in the layout or add it to the remove array.`
-      )
-    }
-  }
+  validateLayoutReferences(referencedIds, existingSectionIds, removeWidgets)
 
   // Phase 3: Remove widgets
   if (removeWidgets.length > 0) {
@@ -289,18 +281,14 @@ export async function executeSetLayout(
   }
 
   // Phase 4: Create new widgets
-  const _newPanes = collectNewPanes(validatedLayout)
   const registry = new WidgetRegistry()
-  const placeholderToSectionId = new Map<number, number>()
-
-  // Register existing widgets
+  const removeSet = new Set(removeWidgets)
   for (const id of existingSectionIds) {
     if (!removeSet.has(id)) {
       registry.register(id)
     }
   }
 
-  // Transform layout
   const {
     layoutSpec: preliminarySpec,
     newWidgets,
@@ -308,43 +296,21 @@ export async function executeSetLayout(
     placeholderMap
   } = toLayoutSpec(validatedLayout)
 
-  // Create new widgets
-  for (const [i, widget] of newWidgets.entries()) {
-    const tableRef = await getTableRef(widget.table)
-    const widgetType = toGristWidgetType(widget.widget)
-
-    const action = buildCreateViewSectionAction(tableRef, viewId, widgetType, null, null)
-
-    const response = await client.post<ApplyResponse>(`/docs/${docId}/apply`, [action])
-    const results = processCreateViewSectionResults(response.retValues)
-    const result = results[0]
-
-    if (!result || !result.sectionRef) {
-      throw new Error(`Failed to create widget for table "${widget.table}"`)
-    }
-
-    registry.register(result.sectionRef)
-
-    for (const [placeholder, index] of placeholderMap) {
-      if (index === i) {
-        placeholderToSectionId.set(placeholder, result.sectionRef)
-      }
-    }
-
-    // Note: link handling removed in Architecture B - use link_widgets operation
-
-    // Configure widget title and chart settings
-    await configureNewWidget(client, docId, result.sectionRef, widget)
-  }
+  const { placeholderToSectionId } = await createWidgetsFromLayout(
+    client,
+    docId,
+    viewId,
+    newWidgets,
+    placeholderMap,
+    getTableRef,
+    registry
+  )
 
   // Phase 5: Apply layout
   const finalLayoutSpec = replacePlaceholders(preliminarySpec, placeholderToSectionId)
   await client.post(`/docs/${docId}/apply`, [buildUpdateLayoutAction(viewId, finalLayoutSpec)])
 
-  // Note: Phase 6 (link configuration) removed in Architecture B
-  // Use link_widgets operation to configure widget links after layout changes
-  // Ignore existingWidgetLinks - links are handled separately
-  void existingWidgetLinks // Suppress unused variable warning
+  void existingWidgetLinks // Links handled separately via link_widgets operation
 
   return {
     success: true,

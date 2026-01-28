@@ -20,17 +20,14 @@
     "rules": {
       "recommended": true,
       "complexity": {
-        "noExcessiveCognitiveComplexity": "off"
-      },
-      "style": {
-        "useConst": "error",
-        "useTemplate": "warn",
-        "noNonNullAssertion": "error"
-      },
-      "suspicious": {
-        "noExplicitAny": "error",
-        "noConsole": "off",
-        "useIterableCallbackReturn": "warn"
+        "noExcessiveCognitiveComplexity": {
+          "level": "warn",
+          "options": { "maxAllowedComplexity": 15 }
+        },
+        "noForEach": "warn",
+        "useLiteralKeys": "error",
+        "noUselessStringConcat": "error",
+        "noUselessUndefinedInitialization": "error"
       },
       "correctness": {
         "noUnusedVariables": {
@@ -38,7 +35,43 @@
           "options": {
             "ignoreRestSiblings": true
           }
-        }
+        },
+        "noUndeclaredDependencies": "error",
+        "noUnusedImports": "error",
+        "noUnusedPrivateClassMembers": "error"
+      },
+      "security": {
+        "noGlobalEval": "error"
+      },
+      "style": {
+        "useConst": "error",
+        "useTemplate": "warn",
+        "noNonNullAssertion": "error",
+        "noDefaultExport": "warn",
+        "noNamespace": "error",
+        "noNegationElse": "warn",
+        "noParameterAssign": "error",
+        "useCollapsedElseIf": "warn",
+        "useConsistentBuiltinInstantiation": "error",
+        "useExplicitLengthCheck": "warn",
+        "useForOf": "warn",
+        "useThrowNewError": "error",
+        "useThrowOnlyError": "error"
+      },
+      "suspicious": {
+        "noExplicitAny": "error",
+        "noConsole": "warn",
+        "useIterableCallbackReturn": "warn",
+        "noEmptyBlockStatements": "error",
+        "noEvolvingTypes": "error",
+        "noMisplacedAssertion": "error",
+        "useAwait": "error",
+        "useErrorMessage": "warn"
+      },
+      "performance": {
+        "noAccumulatingSpread": "warn",
+        "noDelete": "warn",
+        "useTopLevelRegex": "warn"
       }
     }
   },
@@ -61,19 +94,47 @@
   "overrides": [
     {
       "includes": [
-        "src/registry/types.ts",
+        "src/index.ts",
         "src/registry/tool-registry.ts",
-        "src/registry/tool-definitions.ts",
-        "src/schemas/api-responses.ts",
-        "src/schemas/common.ts",
-        "src/schemas/widget-options.ts",
-        "src/types/type-guards.ts",
-        "src/tools/base/*.ts"
+        "scripts/**/*.ts",
+        "scripts/**/*.mjs"
       ],
       "linter": {
         "rules": {
           "suspicious": {
-            "noExplicitAny": "off"
+            "noConsole": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["vite.config.ts", "vitest.config.ts"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noDefaultExport": "off"
+          }
+        }
+      }
+    },
+    {
+      "includes": ["tests/**/*.ts"],
+      "linter": {
+        "rules": {
+          "performance": {
+            "useTopLevelRegex": "off",
+            "noDelete": "off"
+          },
+          "suspicious": {
+            "noConsole": "off",
+            "useAwait": "off",
+            "noEmptyBlockStatements": "off"
+          },
+          "complexity": {
+            "noForEach": "off"
+          },
+          "style": {
+            "useConsistentBuiltinInstantiation": "off"
           }
         }
       }

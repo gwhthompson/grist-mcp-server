@@ -34,6 +34,7 @@ import {
 } from '../schemas/common.js'
 import { toDocId, toTableId } from '../types/advanced.js'
 import type { UpsertResponse } from '../types.js'
+import { log } from '../utils/logger.js'
 import {
   validateRecordsDataIntegrity,
   validateRowIdsExist,
@@ -151,7 +152,7 @@ interface RecordsResponse {
 /**
  * Execute a single record operation.
  */
-async function executeSingleOperation(
+function executeSingleOperation(
   ctx: ToolContext,
   docId: string,
   tableId: string,
@@ -398,8 +399,13 @@ async function findAffectedRecordIds(
       for (const rec of response.records || []) {
         allIds.add(rec.id)
       }
-    } catch {
-      // Continue with other records if query fails
+    } catch (error) {
+      // Log and continue - batch operations should not fail due to single query error
+      log.debug(
+        'Record lookup query failed',
+        { docId, tableId, require: record.require },
+        error instanceof Error ? error : undefined
+      )
     }
   }
 
@@ -524,8 +530,11 @@ export const MANAGE_RECORDS_TOOL = defineBatchTool<
     }
   },
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async afterExecute(result, params, _ctx) {
-    const addResults = result.results.filter((r) => r.action === 'add' && r.recordIds?.length)
+    const addResults = result.results.filter(
+      (r) => r.action === 'add' && (r.recordIds?.length ?? 0) > 0
+    )
     const updateResults = result.results.filter((r) => r.action === 'update')
     const deleteResults = result.results.filter((r) => r.action === 'delete')
     const firstAdd = addResults[0]
@@ -540,7 +549,7 @@ export const MANAGE_RECORDS_TOOL = defineBatchTool<
     } else if (result.success) {
       builder
         .addIf(
-          !!firstAdd?.recordIds?.length,
+          (firstAdd?.recordIds?.length ?? 0) > 0,
           `Use grist_get_records with docId="${params.docId}" and tableId="${firstAdd?.tableId}" to verify added records`
         )
         .addIf(updateResults.length > 0, 'Use grist_get_records to verify updated data')
@@ -617,7 +626,7 @@ export const MANAGE_RECORDS_TOOL = defineBatchTool<
   }
 })
 
-export async function manageRecords(context: ToolContext, params: ManageRecordsInput) {
+export function manageRecords(context: ToolContext, params: ManageRecordsInput) {
   return MANAGE_RECORDS_TOOL.handler(context, params)
 }
 

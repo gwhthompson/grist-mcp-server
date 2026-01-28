@@ -67,6 +67,45 @@ Add to your MCP config:
 }
 ```
 
+### Cloudflare Workers (HTTP transport)
+
+Deploy as a remote MCP server using Cloudflare Workers for HTTP-based access.
+
+**Local development:**
+
+```bash
+npm run worker:dev
+```
+
+**Deploy to Cloudflare:**
+
+```bash
+npm run worker:deploy
+```
+
+**Configuration:**
+
+The Workers deployment uses header-based authentication:
+
+- `X-Grist-API-Key`: Your Grist API key (required)
+- `X-Grist-Base-URL`: Grist instance URL (optional, defaults to `https://docs.getgrist.com`)
+
+**Endpoint:** `https://your-worker.workers.dev/mcp`
+
+**Example request:**
+
+```bash
+curl -X POST https://your-worker.workers.dev/mcp \
+  -H "Content-Type: application/json" \
+  -H "X-Grist-API-Key: your_api_key" \
+  -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+```
+
+**Notes:**
+- Stateless design: Each request creates a fresh server instance
+- CORS enabled for all origins (safe because auth uses headers, not cookies)
+- Configure environment variables via `wrangler secret put GRIST_API_KEY`
+
 ## Tools
 
 <!-- TOOLS_TABLE_START -->

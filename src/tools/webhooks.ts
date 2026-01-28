@@ -150,7 +150,7 @@ interface ManageWebhooksResponse {
 /**
  * Execute a single webhook operation.
  */
-async function executeSingleOperation(
+function executeSingleOperation(
   ctx: ToolContext,
   docId: string,
   operation: WebhookOperation
@@ -312,7 +312,7 @@ export const MANAGE_WEBHOOKS_TOOL = defineBatchTool<
   getDocId: (params) => params.docId,
   getActionName: (operation) => operation.action,
 
-  async executeOperation(ctx, docId, operation, _index) {
+  executeOperation(ctx, docId, operation, _index) {
     return executeSingleOperation(ctx, docId, operation)
   },
 
@@ -341,6 +341,7 @@ export const MANAGE_WEBHOOKS_TOOL = defineBatchTool<
     }
   },
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async afterExecute(result, params, _ctx) {
     const operations = params.operations
     const hasCreate = operations.some((op) => op.action === 'create')
@@ -423,7 +424,7 @@ export const MANAGE_WEBHOOKS_TOOL = defineBatchTool<
   }
 })
 
-export async function manageWebhooks(context: ToolContext, params: ManageWebhooksInput) {
+export function manageWebhooks(context: ToolContext, params: ManageWebhooksInput) {
   return MANAGE_WEBHOOKS_TOOL.handler(context, params)
 }
 

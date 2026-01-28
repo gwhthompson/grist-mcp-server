@@ -20,6 +20,15 @@ import type {
   RulesAndStylesUpdate
 } from './types.js'
 
+// Polling configuration for fetchFormulasFromHelperCols
+// Grist creates helper columns asynchronously; we poll with exponential backoff
+const POLLING_MAX_ATTEMPTS = 20
+const POLLING_FAST_THRESHOLD = 5 // Use fast delay for first N attempts
+const POLLING_MEDIUM_THRESHOLD = 10 // Use medium delay for next N attempts
+const POLLING_DELAY_FAST_MS = 10
+const POLLING_DELAY_MEDIUM_MS = 50
+const POLLING_DELAY_SLOW_MS = 100
+
 /**
  * Abstract base class for rule owners.
  *
@@ -239,7 +248,7 @@ export abstract class RuleOwner {
       records: Array<{ id: number; fields?: { formula?: string | null }; formula?: string | null }>
     }
 
-    for (let attempt = 0; attempt < 20; attempt++) {
+    for (let attempt = 0; attempt < POLLING_MAX_ATTEMPTS; attempt++) {
       // Add cache-busting parameter
       response = await client.get<{
         records: Array<{
@@ -263,7 +272,12 @@ export abstract class RuleOwner {
       }
 
       // Exponential backoff
-      const delay = attempt < 5 ? 10 : attempt < 10 ? 50 : 100
+      const delay =
+        attempt < POLLING_FAST_THRESHOLD
+          ? POLLING_DELAY_FAST_MS
+          : attempt < POLLING_MEDIUM_THRESHOLD
+            ? POLLING_DELAY_MEDIUM_MS
+            : POLLING_DELAY_SLOW_MS
       await new Promise((resolve) => setTimeout(resolve, delay))
     }
 

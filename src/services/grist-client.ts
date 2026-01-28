@@ -20,6 +20,14 @@ interface RetryConfig {
 
 type RequestBody = Record<string, unknown> | unknown[] | string | number | boolean | null
 
+// Top-level regex patterns for path extraction (performance optimization)
+const TABLES_PATH_REGEX = /\/tables\/([^/]+)/
+const DOCS_PATH_REGEX = /\/docs\/([^/]+)/
+const WORKSPACES_PATH_REGEX = /\/workspaces\/([^/]+)/
+const ORGS_PATH_REGEX = /\/orgs\/([^/]+)/
+// Regex for extracting key names from KeyError messages (e.g., "KeyError 'NonExistentColumn'")
+const KEY_ERROR_REGEX = /['`]([^'`]+)['`]/
+
 interface RequestOptions<TResponse = unknown> {
   schema?: z.ZodSchema<TResponse>
   config?: AxiosRequestConfig
@@ -382,6 +390,41 @@ export class GristClient {
     }
   }
 
+  /** Calculate exponential backoff delay with jitter */
+  private calculateBackoffDelay(attempt: number): number {
+    const exponentialDelay = this.retryConfig.baseDelayMs * 2 ** attempt
+    const jitter = Math.random() * 0.3 * exponentialDelay
+    return Math.min(exponentialDelay + jitter, this.retryConfig.maxDelayMs)
+  }
+
+  /** Check if we should throw the error (non-retryable or exhausted retries) */
+  private shouldThrowRetryError(error: unknown, attempt: number, context: string): boolean {
+    if (!this.isRetryableError(error)) {
+      return true
+    }
+    if (attempt === this.retryConfig.maxRetries) {
+      this.logger.error('Retry exhausted', {
+        attempt: attempt + 1,
+        maxRetries: this.retryConfig.maxRetries,
+        context,
+        status: this.getErrorStatus(error)
+      })
+      return true
+    }
+    return false
+  }
+
+  /** Log retry attempt */
+  private logRetryAttempt(attempt: number, context: string, delayMs: number, error: unknown): void {
+    this.logger.debug('Retrying request after error', {
+      attempt: attempt + 1,
+      maxRetries: this.retryConfig.maxRetries,
+      context,
+      delayMs: Math.round(delayMs),
+      status: this.getErrorStatus(error)
+    })
+  }
+
   // Exponential backoff with jitter to prevent thundering herd
   private async retryWithBackoff<T>(fn: () => Promise<T>, context: string): Promise<T> {
     let lastError: Error | undefined
@@ -390,47 +433,17 @@ export class GristClient {
       try {
         return await fn()
       } catch (error) {
-        // Check if this is a retryable error
-        const isRetryable = this.isRetryableError(error)
-        const isLastAttempt = attempt === this.retryConfig.maxRetries
-
-        if (!isRetryable || isLastAttempt) {
-          // Log critical error on final retry exhaustion
-          if (isLastAttempt && isRetryable) {
-            this.logger.error('Retry exhausted', {
-              attempt: attempt + 1,
-              maxRetries: this.retryConfig.maxRetries,
-              context,
-              status: this.getErrorStatus(error)
-            })
-          }
-          // Not retryable or out of retries - throw immediately
+        if (this.shouldThrowRetryError(error, attempt, context)) {
           throw error
         }
 
-        // Calculate delay with exponential backoff and jitter
-        const exponentialDelay = this.retryConfig.baseDelayMs * 2 ** attempt
-        const jitter = Math.random() * 0.3 * exponentialDelay // 0-30% jitter
-        const delayMs = Math.min(exponentialDelay + jitter, this.retryConfig.maxDelayMs)
-
-        // Store error for potential final throw
+        const delayMs = this.calculateBackoffDelay(attempt)
         lastError = error instanceof Error ? error : new Error(String(error))
-
-        // Log retry attempt at debug level (quiet in normal operation)
-        this.logger.debug('Retrying request after error', {
-          attempt: attempt + 1,
-          maxRetries: this.retryConfig.maxRetries,
-          context,
-          delayMs: Math.round(delayMs),
-          status: this.getErrorStatus(error)
-        })
-
-        // Wait before retrying
+        this.logRetryAttempt(attempt, context, delayMs, error)
         await this.sleep(delayMs)
       }
     }
 
-    // Should never reach here due to throw in loop, but TypeScript needs this
     throw lastError || new Error(`Retry failed for ${context}`)
   }
 
@@ -508,7 +521,7 @@ export class GristClient {
 
   private buildKeyError(sanitizedMessage: string): Error {
     // Extract the key name from messages like "KeyError 'NonExistentColumn'"
-    const keyMatch = sanitizedMessage.match(/'([^']+)'/)
+    const keyMatch = sanitizedMessage.match(KEY_ERROR_REGEX)
     const keyName = keyMatch ? keyMatch[1] : 'unknown'
 
     return new Error(
@@ -660,10 +673,10 @@ export class GristClient {
 
   // Check more specific paths first (table before doc)
   private build404Error(path: string): Error {
-    const tableMatch = path.match(/\/tables\/([^/]+)/)
-    const docMatch = path.match(/\/docs\/([^/]+)/)
-    const workspaceMatch = path.match(/\/workspaces\/([^/]+)/)
-    const orgMatch = path.match(/\/orgs\/([^/]+)/)
+    const tableMatch = path.match(TABLES_PATH_REGEX)
+    const docMatch = path.match(DOCS_PATH_REGEX)
+    const workspaceMatch = path.match(WORKSPACES_PATH_REGEX)
+    const orgMatch = path.match(ORGS_PATH_REGEX)
 
     // Check table errors FIRST (more specific than document)
     if (tableMatch) {
@@ -750,7 +763,7 @@ export class GristClient {
     }
 
     // Extract document ID from path
-    const docMatch = path.match(/\/docs\/([^/]+)/)
+    const docMatch = path.match(DOCS_PATH_REGEX)
     if (!docMatch) {
       // Can't determine scope, clear all cache to be safe
       this.cache.clear()

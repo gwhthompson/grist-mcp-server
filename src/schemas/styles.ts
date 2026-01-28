@@ -19,7 +19,7 @@ import { AlignmentSchema, HexColorSchema } from './common.js'
  * Used by: column styles, rule styles, widget options.
  * Uses strictObject to reject unknown properties.
  */
-const CellStyleBaseSchema = z.strictObject({
+export const CellStyleBaseSchema = z.strictObject({
   textColor: HexColorSchema,
   fillColor: HexColorSchema,
   fontBold: z.boolean(),

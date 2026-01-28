@@ -15,8 +15,9 @@
 
 import { z } from 'zod'
 import { getCurrencyCodeError, isValidCurrency } from '../constants/iso-4217-currencies.js'
-import { AlignmentSchema, ColIdSchema, HexColorSchema } from './common.js'
+import { AlignmentSchema, ColIdSchema } from './common.js'
 import { BaseConditionalRuleSchema } from './conditional-rules.js'
+import { CellStyleBaseSchema, HeaderStyleBaseSchema } from './styles.js'
 
 // Re-export for consumers that expect these from column-types
 export { AlignmentSchema, HexColorSchema } from './common.js'
@@ -35,47 +36,23 @@ export const CurrencyCodeSchema = CurrencyCodeInputSchema.transform((code) =>
   error: (issue) => getCurrencyCodeError(issue.input as string)
 })
 
-// =============================================================================
-// Rule Style Schema (for conditional formatting)
-// =============================================================================
-
-// Base schema with required types - .partial() makes all properties optional
-const RuleStyleBaseSchema = z.object({
-  textColor: HexColorSchema,
-  fillColor: HexColorSchema,
-  fontBold: z.boolean(),
-  fontItalic: z.boolean(),
-  fontUnderline: z.boolean(),
-  fontStrikethrough: z.boolean()
-})
-
-export const RuleStyleSchema = RuleStyleBaseSchema.partial()
+// Re-export RuleStyleSchema from styles.ts (single source of truth)
+export { RuleStyleSchema } from './styles.js'
 
 // =============================================================================
 // Column Style Schema (universal styling, nested in `style` property)
+// Extends styles.ts ColumnStyleSchema with rulesOptions for conditional formatting
 // =============================================================================
 
-// Base schema with required types - .partial() makes all properties optional
-const ColumnStyleBaseSchema = z.object({
-  textColor: HexColorSchema,
-  fillColor: HexColorSchema,
-  fontBold: z.boolean(),
-  fontItalic: z.boolean(),
-  fontUnderline: z.boolean(),
-  fontStrikethrough: z.boolean(),
-  headerTextColor: HexColorSchema,
-  headerFillColor: HexColorSchema,
-  headerFontBold: z.boolean(),
-  headerFontItalic: z.boolean(),
-  headerFontUnderline: z.boolean(),
-  headerFontStrikethrough: z.boolean(),
-  alignment: AlignmentSchema,
-  rulesOptions: z
-    .array(BaseConditionalRuleSchema)
-    .describe('{formula, style} rules, first match wins')
-})
-
-export const ColumnStyleSchema = ColumnStyleBaseSchema.partial().meta({ id: 'ColumnStyle' })
+export const ColumnStyleSchema = CellStyleBaseSchema.merge(HeaderStyleBaseSchema)
+  .extend({
+    alignment: AlignmentSchema,
+    rulesOptions: z
+      .array(BaseConditionalRuleSchema)
+      .describe('{formula, style} rules, first match wins')
+  })
+  .partial()
+  .meta({ id: 'ColumnStyle' })
 
 export type ColumnStyle = z.infer<typeof ColumnStyleSchema>
 
@@ -122,20 +99,10 @@ export const NumModeSchema = z
   .nullable()
 
 // =============================================================================
-// Choice Styling Schema
+// Choice Styling Schema (reuses CellStyleBaseSchema from styles.ts)
 // =============================================================================
 
-// Base schema with required types - .partial() makes all properties optional
-const ChoiceStyleBaseSchema = z.object({
-  textColor: HexColorSchema,
-  fillColor: HexColorSchema,
-  fontBold: z.boolean(),
-  fontItalic: z.boolean(),
-  fontUnderline: z.boolean(),
-  fontStrikethrough: z.boolean()
-})
-
-const ChoiceStyleSchema = ChoiceStyleBaseSchema.partial()
+const ChoiceStyleSchema = CellStyleBaseSchema.partial()
 
 export const ChoiceOptionsSchema = z
   .record(z.string(), ChoiceStyleSchema)

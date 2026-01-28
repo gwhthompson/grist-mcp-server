@@ -14,7 +14,6 @@ export type {
   PaginatedToolConfig,
   PaginationMetadata,
   StandardToolConfig,
-  ToolConfig,
   ToolInputSchema,
   ToolMetadata
 } from './types.js'

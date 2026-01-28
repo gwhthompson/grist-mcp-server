@@ -171,16 +171,3 @@ export interface BatchToolConfig<
     ctx: ToolContext
   ) => Promise<TResponse>
 }
-
-// =============================================================================
-// Discriminated Union
-// =============================================================================
-
-/**
- * Union of all tool configuration types.
- * The 'kind' field discriminates between variants for exhaustive type checking.
- */
-export type ToolConfig<TInput extends ToolInputSchema> =
-  | StandardToolConfig<TInput, unknown>
-  | PaginatedToolConfig<TInput, unknown>
-  | BatchToolConfig<TInput, unknown, BaseOperationResult, BaseBatchResponse<BaseOperationResult>>

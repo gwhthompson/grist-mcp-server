@@ -1,11 +1,13 @@
 /**
  * Domain Operations Index
  *
- * Exports all domain operations and shared utilities.
+ * Exports domain operations and shared utilities.
  */
 
+export type { ColumnTypeMap, ValueNormalizer } from './base.js'
 // Base utilities
 export {
+  buildColumnTypeMap,
   createNormalizer,
   deepEqual,
   normalizeValue,
@@ -13,18 +15,32 @@ export {
   verifyDeleted,
   verifyEntities
 } from './base.js'
+export type {
+  ConfigureWidgetInput,
+  ConfigureWidgetResult,
+  CreatePageResult,
+  CreatePageWithLayoutInput,
+  DeletePageResult,
+  DomainPage,
+  DomainWidget,
+  GetLayoutResult,
+  LayoutWidgetInfo,
+  LinkWidgetInput,
+  LinkWidgetResult,
+  RemoveWidgetResult,
+  RenamePageResult,
+  ReorderPagesResult,
+  SetLayoutResult
+} from './pages.js'
 // Page and widget operations
 export {
   configureWidget,
-  // Layout operations
   createPage,
   deletePage,
   getLayout,
   getPage,
-  // Page operations
   getPages,
   getWidget,
-  // Widget operations
   getWidgets,
   linkWidget,
   removeWidget,
@@ -32,7 +48,12 @@ export {
   reorderPages,
   setLayout
 } from './pages.js'
-
+export type {
+  AddRecordsResult,
+  DeleteRecordsResult,
+  DomainRecord,
+  UpdateRecordsResult
+} from './records.js'
 // Record operations
 export {
   addRecords,
@@ -42,40 +63,31 @@ export {
   updateRecords,
   verifyRecords
 } from './records.js'
-
+export type {
+  AddColumnInput,
+  AddColumnResult,
+  CreateTableInput,
+  CreateTableResult,
+  DeleteTableResult,
+  DomainColumn,
+  DomainTable,
+  ModifyColumnInput,
+  ModifyColumnResult,
+  RemoveColumnResult,
+  RenameColumnResult,
+  RenameTableResult
+} from './schema.js'
 // Schema operations (columns and tables)
 export {
   addColumn,
   createTable,
   deleteTable,
   getColumn,
-  // Column operations
   getColumns,
   getTable,
-  // Table operations
   getTables,
   modifyColumn,
   removeColumn,
   renameColumn,
   renameTable
 } from './schema.js'
-// Types
-export type {
-  AddInput,
-  ColumnLocator,
-  ColumnTypeMap,
-  EntityFilter,
-  EntityId,
-  EntityOperations,
-  PageLocator,
-  RecordLocator,
-  TableLocator,
-  UpdateInput,
-  ValueNormalizer,
-  VerifiedBatchDeleteResult,
-  VerifiedBatchResult,
-  VerifiedDeleteResult,
-  VerifiedResult,
-  WidgetLocator,
-  WriteOptions
-} from './types.js'

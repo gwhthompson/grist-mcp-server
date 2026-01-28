@@ -30,23 +30,111 @@ import { toDocId } from '../../types/advanced.js'
 import type { ApplyResponse, SQLQueryResponse } from '../../types.js'
 import { first } from '../../utils/array-helpers.js'
 import { extractFields } from '../../utils/grist-field-extractor.js'
-import {
-  type ConfigureWidgetInput,
-  type ConfigureWidgetResult,
-  type CreatePageWithLayoutInput,
-  type DeletePageResult,
-  type DomainPage,
-  DomainPageSchema,
-  type DomainWidget,
-  DomainWidgetSchema,
-  type GetLayoutResult,
-  type LayoutWidgetInfo,
-  type LinkWidgetInput,
-  type LinkWidgetResult,
-  type RemoveWidgetResult,
-  type RenamePageResult,
-  type SetLayoutResult
-} from '../schemas/page.js'
+// =============================================================================
+// Domain Types (inlined from deleted domain/schemas/page.ts)
+// =============================================================================
+
+export interface DomainWidget {
+  sectionId: number
+  viewId: number
+  tableId: string
+  tableRef?: number
+  widgetType: string
+  title?: string
+  linkSrcSectionRef?: number
+  linkSrcColRef?: number
+  linkTargetColRef?: number
+  summarySourceTable?: number
+}
+
+export interface DomainPage {
+  viewId: number
+  docId: string
+  name: string
+  pagePos?: number | null
+  pageId?: number | null
+  widgets?: DomainWidget[]
+}
+
+export interface ConfigureWidgetInput {
+  title?: string
+  sortColRefs?: string
+}
+
+export interface LinkWidgetInput {
+  linkSrcSectionRef?: number
+  linkSrcColRef?: number
+  linkTargetColRef?: number
+}
+
+export interface CreatePageWithLayoutInput {
+  name: string
+  layout: unknown
+}
+
+export interface LayoutWidgetInfo {
+  section: number
+  table: string
+  widget: string
+  title?: string
+}
+
+export interface ConfigureWidgetResult {
+  entity: DomainWidget
+  verified: true
+}
+
+export interface LinkWidgetResult {
+  entity: DomainWidget
+  verified: true
+  sourceWidget?: DomainWidget
+}
+
+export interface RemoveWidgetResult {
+  sectionId: number
+  deleted: true
+  verified: true
+}
+
+export interface RenamePageResult {
+  entity: DomainPage
+  verified: true
+  oldName: string
+}
+
+export interface DeletePageResult {
+  viewId: number
+  name: string
+  deleted: true
+  verified: true
+}
+
+export interface GetLayoutResult {
+  entity: DomainPage
+  layout: unknown
+  widgets: LayoutWidgetInfo[]
+}
+
+export interface SetLayoutResult {
+  entity: DomainPage
+  verified: true
+  widgetsAdded: number
+  widgetsRemoved: number
+}
+
+export interface CreatePageResult {
+  entity: DomainPage
+  verified: true
+  sectionIds: number[]
+}
+
+export interface ReorderPagesResult {
+  entities: DomainPage[]
+  count: number
+  verified: true
+  newOrder: string[]
+}
+
 import { deepEqual, throwIfFailed } from './base.js'
 
 // =============================================================================
@@ -119,13 +207,13 @@ export async function getPages(
 
   for (const record of response.records) {
     const fields = extractFields(record)
-    const page: DomainPage = DomainPageSchema.parse({
+    const page: DomainPage = {
       viewId: fields.viewId as number,
       docId: docIdStr,
       name: fields.name as string,
       pagePos: fields.pagePos as number | undefined,
       pageId: fields.pageId as number | undefined
-    })
+    }
 
     if (includeWidgets) {
       page.widgets = await getWidgets(ctx, docIdStr, page.viewId)
@@ -172,13 +260,13 @@ export async function getPage(
   }
 
   const fields = extractFields(first(response.records, 'Page'))
-  const page: DomainPage = DomainPageSchema.parse({
+  const page: DomainPage = {
     viewId: fields.viewId as number,
     docId: docIdStr,
     name: fields.name as string,
     pagePos: fields.pagePos as number | undefined,
     pageId: fields.pageId as number | undefined
-  })
+  }
 
   if (includeWidgets) {
     page.widgets = await getWidgets(ctx, docIdStr, page.viewId)
@@ -664,7 +752,7 @@ export async function createPage(
   docId: DocId | string,
   input: CreatePageWithLayoutInput,
   options: { verify?: boolean } = {}
-): Promise<import('../schemas/page.js').CreatePageResult> {
+): Promise<CreatePageResult> {
   const { verify = true } = options
   const docIdStr = typeof docId === 'string' ? docId : String(docId)
 
@@ -929,7 +1017,7 @@ export async function reorderPages(
   docId: DocId | string,
   pageNames: string[],
   options: { verify?: boolean } = {}
-): Promise<import('../schemas/page.js').ReorderPagesResult> {
+): Promise<ReorderPagesResult> {
   const { verify = true } = options
   const docIdStr = typeof docId === 'string' ? docId : String(docId)
 
@@ -1016,7 +1104,7 @@ export async function reorderPages(
  * Convert SectionInfo from schema cache to DomainWidget shape.
  */
 function sectionInfoToDomainWidget(viewId: number, section: SectionInfo): DomainWidget {
-  return DomainWidgetSchema.parse({
+  return {
     sectionId: section.sectionId,
     viewId,
     tableId: section.tableId,
@@ -1026,5 +1114,5 @@ function sectionInfoToDomainWidget(viewId: number, section: SectionInfo): Domain
     linkSrcColRef: section.linkSrcColRef || undefined,
     linkTargetColRef: section.linkTargetColRef || undefined,
     summarySourceTable: section.summarySourceTable || undefined
-  })
+  } satisfies DomainWidget
 }

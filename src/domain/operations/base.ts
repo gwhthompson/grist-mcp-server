@@ -13,7 +13,11 @@ import {
 } from '../../errors/VerificationError.js'
 import { decodeFromApi, encodeForApi } from '../../schemas/cell-codecs.js'
 import type { ColumnMetadata } from '../../services/schema-cache.js'
-import type { ColumnTypeMap, ValueNormalizer } from './types.js'
+/** Map of column ID to column type string (e.g., 'Text', 'Date', 'Ref:Contacts') */
+export type ColumnTypeMap = Map<string, string>
+
+/** Normalizer function for value comparison */
+export type ValueNormalizer = (value: unknown, columnType?: string) => unknown
 
 // =============================================================================
 // Column Type Utilities

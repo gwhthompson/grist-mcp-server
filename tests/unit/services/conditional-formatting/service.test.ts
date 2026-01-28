@@ -1,10 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ColumnRuleOwner } from '../../../../src/services/conditional-formatting/column-rule-owner.js'
-import { FieldRuleOwner } from '../../../../src/services/conditional-formatting/field-rule-owner.js'
-import { RowRuleOwner } from '../../../../src/services/conditional-formatting/row-rule-owner.js'
 import {
   ConditionalFormattingService,
-  createRuleOwner
+  createRuleOwner,
+  RuleOwner
 } from '../../../../src/services/conditional-formatting/service.js'
 import type { GristClient } from '../../../../src/services/grist-client.js'
 
@@ -35,23 +33,22 @@ vi.mock('../../../../src/services/rule-utilities.js', () => ({
 }))
 
 describe('createRuleOwner', () => {
-  it('creates ColumnRuleOwner for column scope', () => {
+  it('creates RuleOwner for column scope', () => {
     const owner = createRuleOwner('column')
-    expect(owner).toBeInstanceOf(ColumnRuleOwner)
+    expect(owner).toBeInstanceOf(RuleOwner)
+    expect(owner.scope).toBe('column')
   })
 
-  it('creates RowRuleOwner for row scope', () => {
+  it('creates RuleOwner for row scope', () => {
     const owner = createRuleOwner('row')
-    expect(owner).toBeInstanceOf(RowRuleOwner)
+    expect(owner).toBeInstanceOf(RuleOwner)
+    expect(owner.scope).toBe('row')
   })
 
-  it('creates FieldRuleOwner for field scope', () => {
+  it('creates RuleOwner for field scope', () => {
     const owner = createRuleOwner('field')
-    expect(owner).toBeInstanceOf(FieldRuleOwner)
-  })
-
-  it('throws for unknown scope', () => {
-    expect(() => createRuleOwner('invalid' as never)).toThrow('Unknown scope: invalid')
+    expect(owner).toBeInstanceOf(RuleOwner)
+    expect(owner.scope).toBe('field')
   })
 })
 

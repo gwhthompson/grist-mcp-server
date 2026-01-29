@@ -4,11 +4,10 @@
  * Exports domain operations and shared utilities.
  */
 
-export type { ColumnTypeMap, ValueNormalizer } from './base.js'
+export type { ColumnTypeMap } from './base.js'
 // Base utilities
 export {
   buildColumnTypeMap,
-  createNormalizer,
   deepEqual,
   normalizeValue,
   throwIfFailed,

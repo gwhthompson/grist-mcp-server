@@ -4,7 +4,7 @@ import {
   validateRecord,
   validateRecords,
   validateUpsertRecords
-} from '../../../src/validators/record-validator.js'
+} from '../../../src/validators/data-integrity-validators.js'
 
 // Helper to create minimal column metadata for testing
 function createColumn(id: string, type: string, isFormula = false): ColumnMetadata {

@@ -36,11 +36,12 @@ import { toDocId, toTableId } from '../types/advanced.js'
 import type { UpsertResponse } from '../types.js'
 import { log } from '../utils/logger.js'
 import {
+  validateRecords,
   validateRecordsDataIntegrity,
   validateRowIdsExist,
+  validateUpsertRecords,
   validateUpsertRecordsDataIntegrity
 } from '../validators/data-integrity-validators.js'
-import { validateRecords, validateUpsertRecords } from '../validators/record-validator.js'
 import { defineBatchTool } from './factory/index.js'
 import { nextSteps } from './utils/next-steps.js'
 

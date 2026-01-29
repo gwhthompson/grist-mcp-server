@@ -14,7 +14,7 @@ import {
   validateRecord,
   validateRecords,
   validateUpsertRecords
-} from '../../../src/validators/record-validator.js'
+} from '../../../src/validators/data-integrity-validators.js'
 import { FormulaColumnWriteError } from '../../../src/validators/writable-columns.js'
 
 // =============================================================================

@@ -15,8 +15,9 @@ import type { TableId } from '../types/advanced.js'
 import type { ApplyResponse } from '../types.js'
 import { validateRetValues } from '../validators/apply-response.js'
 import { buildSetDisplayFormulaAction, buildUpdateColumnMetadataAction } from './action-builder.js'
+import { serializeUserAction } from './action-serializer.js'
 import { extractForeignTable, getColumnNameFromId } from './column-resolver.js'
-import { type GristClient, serializeUserAction } from './grist-client.js'
+import type { GristClient } from './grist-client.js'
 
 /**
  * Parameters for setting up visibleCol on a reference column.

@@ -18,7 +18,10 @@ import {
   buildModifyColumnAction,
   buildRenameColumnAction
 } from '../../../src/services/action-builder.js'
-import { serializeUserAction, serializeUserActions } from '../../../src/services/grist-client.js'
+import {
+  serializeUserAction,
+  serializeUserActions
+} from '../../../src/services/action-serializer.js'
 
 describe('UserAction Format Compliance (CRITICAL)', () => {
   describe('buildAddTableAction', () => {

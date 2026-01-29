@@ -14,7 +14,7 @@ import {
   buildBulkRemoveRecordAction,
   buildBulkUpdateRecordAction
 } from '../../services/action-builder.js'
-import { serializeUserAction } from '../../services/grist-client.js'
+import { serializeUserAction } from '../../services/action-serializer.js'
 import type { DocId, TableId } from '../../types/advanced.js'
 import { toDocId, toRowId, toTableId } from '../../types/advanced.js'
 import type { ApplyResponse } from '../../types.js'

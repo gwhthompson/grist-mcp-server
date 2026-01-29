@@ -27,7 +27,7 @@ import {
   buildRenameColumnAction,
   buildRenameTableAction
 } from '../../services/action-builder.js'
-import { serializeUserAction } from '../../services/grist-client.js'
+import { serializeUserAction } from '../../services/action-serializer.js'
 import type { ColumnMetadata } from '../../services/schema-cache.js'
 import type { DocId, TableId } from '../../types/advanced.js'
 import { toColId, toDocId, toTableId } from '../../types/advanced.js'

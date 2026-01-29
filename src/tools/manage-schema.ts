@@ -57,9 +57,9 @@ import {
   buildAddTableAction,
   buildModifyColumnAction
 } from '../services/action-builder.js'
+import { serializeUserAction } from '../services/action-serializer.js'
 import { getColumnRef, resolveVisibleCol } from '../services/column-resolver.js'
 import { ConditionalFormattingService } from '../services/conditional-formatting/service.js'
-import { serializeUserAction } from '../services/grist-client.js'
 import { VisibleColService, type VisibleColSetupParams } from '../services/visiblecol-service.js'
 import { resolveColumnNameToColRef } from '../services/widget-resolver.js'
 import { toColId, toDocId, toTableId } from '../types/advanced.js'

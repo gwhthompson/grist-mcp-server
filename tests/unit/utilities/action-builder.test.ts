@@ -11,7 +11,7 @@ import {
   buildRenameColumnAction,
   buildRenameTableAction
 } from '../../../src/services/action-builder.js'
-import { serializeUserAction } from '../../../src/services/grist-client.js'
+import { serializeUserAction } from '../../../src/services/action-serializer.js'
 import { toColId, toRowId, toTableId } from '../../../src/types/advanced.js'
 
 describe('buildAddColumnAction', () => {

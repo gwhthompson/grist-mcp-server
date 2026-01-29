@@ -13,7 +13,6 @@ import type {
   BaseOperationResult
 } from '../../schemas/batch-operation-schemas.js'
 import { formatErrorResponse, formatToolResponse } from '../../services/formatter.js'
-import { getSessionAnalytics } from '../../services/session-analytics.js'
 import type { MCPToolResponse, ResponseFormat } from '../../types.js'
 import type {
   BatchToolConfig,
@@ -66,61 +65,14 @@ function handleError(error: unknown): MCPToolResponse {
   return formatErrorResponse(String(error))
 }
 
-function recordExecution(
-  toolName: string,
-  responseBytes: number,
-  durationMs: number,
-  success: boolean
-): void {
-  const analytics = getSessionAnalytics()
-  if (analytics) {
-    analytics.recordToolExecution(toolName, responseBytes, durationMs, success)
-  }
-}
-
-function calculateResponseBytes(response: MCPToolResponse): number {
-  try {
-    return JSON.stringify(response).length
-  } catch {
-    return 0
-  }
-}
-
-/** Execution context for tool wrapper */
-interface ExecutionContext {
-  toolName: string
-  startTime: number
-  response?: MCPToolResponse
-  success: boolean
-}
-
-/** Record metrics after execution */
-function finalizeExecution(ctx: ExecutionContext): void {
-  const durationMs = Date.now() - ctx.startTime
-  const responseBytes = ctx.response ? calculateResponseBytes(ctx.response) : 0
-  recordExecution(ctx.toolName, responseBytes, durationMs, ctx.success)
-}
-
 /** Execute core logic with error handling */
-async function executeWithMetrics(
-  toolName: string,
+async function executeWithErrorHandling(
   execute: () => Promise<MCPToolResponse>
 ): Promise<MCPToolResponse> {
-  const ctx: ExecutionContext = {
-    toolName,
-    startTime: Date.now(),
-    success: false
-  }
-
   try {
-    ctx.response = await execute()
-    ctx.success = true
-    return ctx.response
+    return await execute()
   } catch (error) {
-    ctx.response = handleError(error)
-    return ctx.response
-  } finally {
-    finalizeExecution(ctx)
+    return handleError(error)
   }
 }
 
@@ -149,7 +101,7 @@ export function defineStandardTool<TInput extends ToolInputSchema, TOutput>(
   config: Omit<StandardToolConfig<TInput, TOutput>, 'kind'>
 ): ToolDefinition<TInput> {
   const handler: ToolHandler<TInput> = async (context: ToolContext, rawParams: unknown) => {
-    return await executeWithMetrics(config.name, async () => {
+    return await executeWithErrorHandling(async () => {
       const params = validateInput(config.inputSchema, rawParams, config.name)
 
       if (config.beforeExecute) {
@@ -231,7 +183,7 @@ export function definePaginatedTool<TInput extends ToolInputSchema, TItem>(
   const pageSize = config.pageSize ?? DEFAULT_PAGE_SIZE
 
   const handler: ToolHandler<TInput> = async (context: ToolContext, rawParams: unknown) => {
-    return await executeWithMetrics(config.name, async () => {
+    return await executeWithErrorHandling(async () => {
       const params = validateInput(config.inputSchema, rawParams, config.name)
 
       if (config.beforeExecute) {
@@ -348,7 +300,7 @@ export function defineBatchTool<
   config: Omit<BatchToolConfig<TInput, TOperation, TResult, TResponse>, 'kind'>
 ): ToolDefinition<TInput> {
   const handler: ToolHandler<TInput> = async (context: ToolContext, rawParams: unknown) => {
-    return await executeWithMetrics(config.name, async () => {
+    return await executeWithErrorHandling(async () => {
       const params = validateInput(config.inputSchema, rawParams, config.name)
 
       if (config.beforeExecute) {

@@ -15,8 +15,6 @@ import {
 } from './registry/tool-registry.js'
 import type { ToolContext } from './registry/types.js'
 import { createGristMcpServer, type ServerConfig, type ServerInstance } from './server.js'
-import { initSessionAnalytics } from './services/session-analytics.js'
-import { sharedLogger } from './utils/shared-logger.js'
 
 function validateEnvironment(env: NodeJS.ProcessEnv): ServerConfig {
   const apiKey = env.GRIST_API_KEY
@@ -39,9 +37,7 @@ function validateEnvironment(env: NodeJS.ProcessEnv): ServerConfig {
     name: 'grist-mcp-server',
     version: packageJson.version,
     gristBaseUrl: baseUrl,
-    gristApiKey: apiKey,
-    enableMetrics: env.GRIST_MCP_ENABLE_METRICS === 'true',
-    metricsInterval: parseInt(env.GRIST_MCP_METRICS_INTERVAL || '60000', 10)
+    gristApiKey: apiKey
   }
 }
 
@@ -183,7 +179,6 @@ function overrideToolsList(server: McpServer): void {
 
 async function main(): Promise<void> {
   const config = validateEnvironment(process.env)
-  initSessionAnalytics(sharedLogger)
 
   if (STRICT_MODE) {
     console.error('⚠ STRICT_MODE enabled: Response size limits reduced for debugging')

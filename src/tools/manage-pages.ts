@@ -49,21 +49,26 @@ import { fetchWidgetTableMetadata } from './pages/shared.js'
 import { nextSteps } from './utils/next-steps.js'
 
 // =============================================================================
-// Batch State Management
+// Batch Context
 // =============================================================================
 
-/**
- * Batch state is used to track page renames and cache page info within a single batch execution.
- * Since the factory pattern doesn't have built-in state, we use module-level state
- * that gets reset when beforeExecute runs.
- */
-let batchPageNameMap = new Map<string, string>()
-let batchPageInfoCache = new Map<string, { id: number; viewRef: number; pagePos: number }>()
-
-function resetBatchState(): void {
-  batchPageNameMap = new Map()
-  batchPageInfoCache = new Map()
+/** Per-batch context tracking page renames and caching page info. */
+interface PagesBatchContext {
+  /** Maps old page name → new name for in-flight renames */
+  readonly renames: Map<string, string>
+  /** Caches page info lookups within the batch */
+  readonly pageInfo: Map<string, { id: number; viewRef: number; pagePos: number }>
 }
+
+function createBatchContext(): PagesBatchContext {
+  return { renames: new Map(), pageInfo: new Map() }
+}
+
+/**
+ * Module-level batch context, reset before each batch execution.
+ * Threaded explicitly through the operation chain as a parameter.
+ */
+let batchContext: PagesBatchContext = createBatchContext()
 
 // =============================================================================
 // Shared Schemas
@@ -213,23 +218,24 @@ export type PageOperation = z.infer<typeof PageOperationSchema>
 function executeSingleOperation(
   ctx: ToolContext,
   docId: string,
-  op: PageOperation
+  op: PageOperation,
+  batch: PagesBatchContext
 ): Promise<GenericOperationResult> {
   switch (op.action) {
     case 'create_page':
       return executeCreatePageOp(ctx, docId, op)
     case 'set_layout':
-      return executeSetLayoutOp(ctx, docId, op)
+      return executeSetLayoutOp(ctx, docId, op, batch)
     case 'get_layout':
-      return executeGetLayoutOp(ctx, docId, op)
+      return executeGetLayoutOp(ctx, docId, op, batch)
     case 'rename_page':
-      return executeRenamePage(ctx, docId, op)
+      return executeRenamePage(ctx, docId, op, batch)
     case 'delete_page':
-      return executeDeletePage(ctx, docId, op)
+      return executeDeletePage(ctx, docId, op, batch)
     case 'reorder_pages':
       return executeReorderPagesOp(ctx, docId, op)
     case 'configure_widget':
-      return executeConfigureWidget(ctx, docId, op)
+      return executeConfigureWidget(ctx, docId, op, batch)
     case 'link_widgets':
       return executeLinkWidgets(ctx, docId, op)
   }
@@ -280,13 +286,16 @@ async function executeCreatePageOp(
 async function executeSetLayoutOp(
   ctx: ToolContext,
   docId: string,
-  op: Extract<PageOperation, { action: 'set_layout' }>
+  op: Extract<PageOperation, { action: 'set_layout' }>,
+  batch: PagesBatchContext
 ): Promise<GenericOperationResult> {
   const { client } = ctx
 
   // Resolve page
   const viewId =
-    typeof op.page === 'number' ? op.page : (await resolvePageName(client, docId, op.page)).viewRef
+    typeof op.page === 'number'
+      ? op.page
+      : (await resolvePageName(client, docId, op.page, batch)).viewRef
 
   const result = await executeSetLayout(
     client,
@@ -344,13 +353,16 @@ async function executeSetLayoutOp(
 async function executeGetLayoutOp(
   ctx: ToolContext,
   docId: string,
-  op: Extract<PageOperation, { action: 'get_layout' }>
+  op: Extract<PageOperation, { action: 'get_layout' }>,
+  batch: PagesBatchContext
 ): Promise<GenericOperationResult> {
   const { client } = ctx
 
   // Resolve page
   const viewId =
-    typeof op.page === 'number' ? op.page : (await resolvePageName(client, docId, op.page)).viewRef
+    typeof op.page === 'number'
+      ? op.page
+      : (await resolvePageName(client, docId, op.page, batch)).viewRef
 
   const result = await executeGetLayout(client, docId, viewId)
 
@@ -371,14 +383,15 @@ async function executeGetLayoutOp(
 async function executeRenamePage(
   ctx: ToolContext,
   docId: string,
-  op: Extract<PageOperation, { action: 'rename_page' }>
+  op: Extract<PageOperation, { action: 'rename_page' }>,
+  batch: PagesBatchContext
 ): Promise<GenericOperationResult> {
   const { client } = ctx
-  const page = await resolvePageName(client, docId, op.page)
+  const page = await resolvePageName(client, docId, op.page, batch)
 
-  // Track rename in batch state
-  batchPageNameMap.set(op.page, op.newName)
-  batchPageInfoCache.set(op.newName, page)
+  // Track rename in batch context
+  batch.renames.set(op.page, op.newName)
+  batch.pageInfo.set(op.newName, page)
 
   await client.post<ApplyResponse>(
     `/docs/${docId}/apply`,
@@ -402,10 +415,11 @@ async function executeRenamePage(
 async function executeDeletePage(
   ctx: ToolContext,
   docId: string,
-  op: Extract<PageOperation, { action: 'delete_page' }>
+  op: Extract<PageOperation, { action: 'delete_page' }>,
+  batch: PagesBatchContext
 ): Promise<GenericOperationResult> {
   const { client } = ctx
-  const page = await resolvePageName(client, docId, op.page)
+  const page = await resolvePageName(client, docId, op.page, batch)
   const actions: Array<['BulkRemoveRecord' | 'RemoveTable', string, number[] | string]> = [
     ['BulkRemoveRecord', '_grist_Pages', [page.id]]
   ]
@@ -470,10 +484,11 @@ async function executeReorderPagesOp(
 async function executeConfigureWidget(
   ctx: ToolContext,
   docId: string,
-  op: Extract<PageOperation, { action: 'configure_widget' }>
+  op: Extract<PageOperation, { action: 'configure_widget' }>,
+  batch: PagesBatchContext
 ): Promise<GenericOperationResult> {
   const { client } = ctx
-  const page = await resolvePageName(client, docId, op.page)
+  const page = await resolvePageName(client, docId, op.page, batch)
   const sectionId = await resolveWidgetNameToSectionId(client, docId, page.viewRef, op.widget)
 
   const service = new ViewSectionService(client)
@@ -678,10 +693,11 @@ async function fetchWidgetsOnPage(
 async function resolvePageName(
   client: ToolContext['client'],
   docId: string,
-  pageName: string
+  pageName: string,
+  batch: PagesBatchContext
 ): Promise<{ id: number; viewRef: number; pagePos: number }> {
   // Check for in-flight rename
-  const newNameFromRename = batchPageNameMap.get(pageName)
+  const newNameFromRename = batch.renames.get(pageName)
   if (newNameFromRename) {
     throw new Error(
       `Page "${pageName}" was renamed to "${newNameFromRename}" in an earlier operation. ` +
@@ -690,14 +706,14 @@ async function resolvePageName(
   }
 
   // Check cache
-  const cached = batchPageInfoCache.get(pageName)
+  const cached = batch.pageInfo.get(pageName)
   if (cached) {
     return cached
   }
 
   // Fetch from database
   const page = await getPageByName(client, docId, pageName)
-  batchPageInfoCache.set(pageName, page)
+  batch.pageInfo.set(pageName, page)
   return page
 }
 
@@ -802,12 +818,12 @@ export const MANAGE_PAGES_TOOL = defineBatchTool<
 
   // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async beforeExecute() {
-    // Reset batch state for page name tracking across operations
-    resetBatchState()
+    // Create fresh batch context for page name tracking across operations
+    batchContext = createBatchContext()
   },
 
   executeOperation(ctx, docId, operation, _index) {
-    return executeSingleOperation(ctx, docId, operation)
+    return executeSingleOperation(ctx, docId, operation, batchContext)
   },
 
   buildSuccessResponse(docId, results, params) {

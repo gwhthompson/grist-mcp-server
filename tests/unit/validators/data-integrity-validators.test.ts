@@ -6,13 +6,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import {
-  InvalidChoiceError,
-  InvalidChoiceListError,
-  InvalidReferenceError,
-  InvalidRefListError,
-  RowNotFoundError
-} from '../../../src/errors/DataIntegrityError.js'
+import { DataIntegrityError } from '../../../src/errors/DataIntegrityError.js'
 import type { CellValue } from '../../../src/schemas/api-responses.js'
 import type { ColumnMetadata, SchemaCache } from '../../../src/services/schema-cache.js'
 import { toTableId } from '../../../src/types/advanced.js'
@@ -142,7 +136,7 @@ describe('validateRefValue - Error Cases', () => {
   it('throws for non-existent row ID', async () => {
     await expect(
       validateRefValue(999, 'CustomerId', 'Customers', toTableId('Orders'), 'docId', schemaCache)
-    ).rejects.toThrow(InvalidReferenceError)
+    ).rejects.toThrow(DataIntegrityError)
   })
 
   it('error includes column and table info', async () => {
@@ -156,11 +150,11 @@ describe('validateRefValue - Error Cases', () => {
         schemaCache
       )
     } catch (error) {
-      expect(error).toBeInstanceOf(InvalidReferenceError)
-      expect((error as InvalidReferenceError).columnId).toBe('CustomerId')
-      expect((error as InvalidReferenceError).value).toBe(999)
-      expect((error as InvalidReferenceError).refTableId).toBe('Customers')
-      expect((error as InvalidReferenceError).tableId).toBe('Orders')
+      expect(error).toBeInstanceOf(DataIntegrityError)
+      expect((error as DataIntegrityError).details.columnId).toBe('CustomerId')
+      expect((error as DataIntegrityError).details.value).toBe(999)
+      expect((error as DataIntegrityError).details.refTableId).toBe('Customers')
+      expect((error as DataIntegrityError).tableId).toBe('Orders')
     }
   })
 
@@ -175,7 +169,7 @@ describe('validateRefValue - Error Cases', () => {
         schemaCache
       )
     } catch (error) {
-      expect((error as InvalidReferenceError).validRowIds).toEqual([1, 2, 3])
+      expect((error as DataIntegrityError).details.validRowIds).toEqual([1, 2, 3])
     }
   })
 
@@ -194,7 +188,7 @@ describe('validateRefValue - Error Cases', () => {
         largeSchemaCache
       )
     } catch (error) {
-      expect((error as InvalidReferenceError).validRowIds).toBeUndefined()
+      expect((error as DataIntegrityError).details.validRowIds).toBeUndefined()
     }
   })
 })
@@ -282,7 +276,7 @@ describe('validateRefListValue - Error Cases', () => {
         'docId',
         schemaCache
       )
-    ).rejects.toThrow(InvalidRefListError)
+    ).rejects.toThrow(DataIntegrityError)
   })
 
   it('error includes all invalid IDs', async () => {
@@ -296,10 +290,10 @@ describe('validateRefListValue - Error Cases', () => {
         schemaCache
       )
     } catch (error) {
-      expect(error).toBeInstanceOf(InvalidRefListError)
-      expect((error as InvalidRefListError).invalidValues).toEqual([99, 88])
-      expect((error as InvalidRefListError).columnId).toBe('OrderIds')
-      expect((error as InvalidRefListError).refTableId).toBe('Orders')
+      expect(error).toBeInstanceOf(DataIntegrityError)
+      expect((error as DataIntegrityError).details.invalidValues).toEqual([99, 88])
+      expect((error as DataIntegrityError).details.columnId).toBe('OrderIds')
+      expect((error as DataIntegrityError).details.refTableId).toBe('Orders')
     }
   })
 
@@ -315,7 +309,7 @@ describe('validateRefListValue - Error Cases', () => {
         schemaCache
       )
     } catch (error) {
-      expect((error as InvalidRefListError).invalidValues).toEqual([99])
+      expect((error as DataIntegrityError).details.invalidValues).toEqual([99])
     }
   })
 })
@@ -358,23 +352,23 @@ describe('validateChoiceValue - Error Cases', () => {
   it('throws for invalid choice', () => {
     expect(() =>
       validateChoiceValue('Yellow', 'Color', allowedChoices, toTableId('Items'))
-    ).toThrow(InvalidChoiceError)
+    ).toThrow(DataIntegrityError)
   })
 
   it('error includes value and allowed choices', () => {
     try {
       validateChoiceValue('Purple', 'Color', allowedChoices, toTableId('Items'))
     } catch (error) {
-      expect(error).toBeInstanceOf(InvalidChoiceError)
-      expect((error as InvalidChoiceError).columnId).toBe('Color')
-      expect((error as InvalidChoiceError).value).toBe('Purple')
-      expect((error as InvalidChoiceError).allowedChoices).toEqual(allowedChoices)
+      expect(error).toBeInstanceOf(DataIntegrityError)
+      expect((error as DataIntegrityError).details.columnId).toBe('Color')
+      expect((error as DataIntegrityError).details.value).toBe('Purple')
+      expect((error as DataIntegrityError).details.allowedChoices).toEqual(allowedChoices)
     }
   })
 
   it('is case-sensitive', () => {
     expect(() => validateChoiceValue('red', 'Color', allowedChoices, toTableId('Items'))).toThrow(
-      InvalidChoiceError
+      DataIntegrityError
     )
   })
 })
@@ -433,7 +427,7 @@ describe('validateChoiceListValue - Error Cases', () => {
   it('throws for invalid choices', () => {
     expect(() =>
       validateChoiceListValue(['small', 'xlarge'], 'Size', allowedChoices, toTableId('Products'))
-    ).toThrow(InvalidChoiceListError)
+    ).toThrow(DataIntegrityError)
   })
 
   it('error includes all invalid values', () => {
@@ -445,10 +439,10 @@ describe('validateChoiceListValue - Error Cases', () => {
         toTableId('Products')
       )
     } catch (error) {
-      expect(error).toBeInstanceOf(InvalidChoiceListError)
-      expect((error as InvalidChoiceListError).invalidValues).toEqual(['tiny', 'huge'])
-      expect((error as InvalidChoiceListError).columnId).toBe('Size')
-      expect((error as InvalidChoiceListError).allowedChoices).toEqual(allowedChoices)
+      expect(error).toBeInstanceOf(DataIntegrityError)
+      expect((error as DataIntegrityError).details.invalidValues).toEqual(['tiny', 'huge'])
+      expect((error as DataIntegrityError).details.columnId).toBe('Size')
+      expect((error as DataIntegrityError).details.allowedChoices).toEqual(allowedChoices)
     }
   })
 
@@ -456,7 +450,7 @@ describe('validateChoiceListValue - Error Cases', () => {
     try {
       validateChoiceListValue(['', 'invalid', ''], 'Size', allowedChoices, toTableId('Products'))
     } catch (error) {
-      expect((error as InvalidChoiceListError).invalidValues).toEqual(['invalid'])
+      expect((error as DataIntegrityError).details.invalidValues).toEqual(['invalid'])
     }
   })
 })
@@ -503,23 +497,23 @@ describe('validateRowIdsExist - Error Cases', () => {
   it('throws for invalid row IDs', async () => {
     await expect(
       validateRowIdsExist([1, 99], toTableId('Users'), 'docId', schemaCache)
-    ).rejects.toThrow(RowNotFoundError)
+    ).rejects.toThrow(DataIntegrityError)
   })
 
   it('error includes all invalid row IDs', async () => {
     try {
       await validateRowIdsExist([1, 99, 88], toTableId('Users'), 'docId', schemaCache)
     } catch (error) {
-      expect(error).toBeInstanceOf(RowNotFoundError)
-      expect((error as RowNotFoundError).rowIds).toEqual([99, 88])
-      expect((error as RowNotFoundError).tableId).toBe('Users')
+      expect(error).toBeInstanceOf(DataIntegrityError)
+      expect((error as DataIntegrityError).details.rowIds).toEqual([99, 88])
+      expect((error as DataIntegrityError).tableId).toBe('Users')
     }
   })
 
   it('throws when all row IDs are invalid', async () => {
     await expect(
       validateRowIdsExist([99, 88, 77], toTableId('Users'), 'docId', schemaCache)
-    ).rejects.toThrow(RowNotFoundError)
+    ).rejects.toThrow(DataIntegrityError)
   })
 })
 
@@ -584,7 +578,7 @@ describe('validateRecordDataIntegrity - Ref Validation', () => {
 
     expect(result.valid).toBe(false)
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0]).toBeInstanceOf(InvalidReferenceError)
+    expect(result.errors[0]).toBeInstanceOf(DataIntegrityError)
   })
 
   it('skips validation for null Ref value', async () => {
@@ -660,7 +654,7 @@ describe('validateRecordDataIntegrity - RefList Validation', () => {
 
     expect(result.valid).toBe(false)
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0]).toBeInstanceOf(InvalidRefListError)
+    expect(result.errors[0]).toBeInstanceOf(DataIntegrityError)
   })
 })
 
@@ -704,7 +698,7 @@ describe('validateRecordDataIntegrity - Choice Validation', () => {
 
     expect(result.valid).toBe(false)
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0]).toBeInstanceOf(InvalidChoiceError)
+    expect(result.errors[0]).toBeInstanceOf(DataIntegrityError)
   })
 
   it('skips validation when no choices defined', async () => {
@@ -782,7 +776,7 @@ describe('validateRecordDataIntegrity - ChoiceList Validation', () => {
 
     expect(result.valid).toBe(false)
     expect(result.errors).toHaveLength(1)
-    expect(result.errors[0]).toBeInstanceOf(InvalidChoiceListError)
+    expect(result.errors[0]).toBeInstanceOf(DataIntegrityError)
   })
 })
 
@@ -840,7 +834,7 @@ describe('validateRecordDataIntegrity - Complex Records', () => {
 
     expect(result.valid).toBe(false)
     expect(result.errors.length).toBeGreaterThan(0)
-    expect(result.errors[0]).toBeInstanceOf(InvalidReferenceError)
+    expect(result.errors[0]).toBeInstanceOf(DataIntegrityError)
   })
 
   it('validates record with mixed valid and null values', async () => {
@@ -901,7 +895,7 @@ describe('validateRecordsDataIntegrity - Batch Validation', () => {
 
     await expect(
       validateRecordsDataIntegrity(records, columns, toTableId('Orders'), 'docId', schemaCache)
-    ).rejects.toThrow(InvalidReferenceError)
+    ).rejects.toThrow(DataIntegrityError)
   })
 
   it('pre-fetches row IDs once for all records', async () => {
@@ -1008,7 +1002,7 @@ describe('validateUpsertRecordsDataIntegrity - Upsert Format', () => {
         'docId',
         schemaCache
       )
-    ).rejects.toThrow(InvalidReferenceError)
+    ).rejects.toThrow(DataIntegrityError)
   })
 
   it('throws for invalid value in require', async () => {
@@ -1026,7 +1020,7 @@ describe('validateUpsertRecordsDataIntegrity - Upsert Format', () => {
         'docId',
         schemaCache
       )
-    ).rejects.toThrow(InvalidReferenceError)
+    ).rejects.toThrow(DataIntegrityError)
   })
 
   it('pre-fetches row IDs once for all records', async () => {

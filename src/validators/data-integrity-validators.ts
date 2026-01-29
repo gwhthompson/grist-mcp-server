@@ -6,13 +6,7 @@
  * this module validates VALUE validity against live Grist data.
  */
 
-import {
-  InvalidChoiceError,
-  InvalidChoiceListError,
-  InvalidReferenceError,
-  InvalidRefListError,
-  RowNotFoundError
-} from '../errors/DataIntegrityError.js'
+import { DataIntegrityError } from '../errors/DataIntegrityError.js'
 import type { CellValue } from '../schemas/api-responses.js'
 import type { ColumnMetadata, SchemaCache } from '../services/schema-cache.js'
 import { parseChoiceOptions } from '../services/schema-cache.js'
@@ -33,7 +27,7 @@ export function getRefTableName(columnType: string): string | null {
 
 /**
  * Validates that a Ref column value references an existing row.
- * @throws {InvalidReferenceError} if the row ID doesn't exist
+ * @throws {DataIntegrityError} with kind 'invalid_reference' if the row ID doesn't exist
  */
 export async function validateRefValue(
   value: number,
@@ -50,19 +44,19 @@ export async function validateRefValue(
   const validRowIds = await schemaCache.getRowIds(docId, refTableId)
 
   if (!validRowIds.has(value)) {
-    throw new InvalidReferenceError(
+    throw new DataIntegrityError('invalid_reference', tableId as string, {
       columnId,
       value,
-      refTableName,
-      tableId as string,
-      validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
-    )
+      refTableId: refTableName,
+      validRowIds:
+        validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
+    })
   }
 }
 
 /**
  * Validates that all RefList values reference existing rows.
- * @throws {InvalidRefListError} if any row IDs don't exist
+ * @throws {DataIntegrityError} with kind 'invalid_reflist' if any row IDs don't exist
  */
 export async function validateRefListValue(
   values: number[],
@@ -81,19 +75,19 @@ export async function validateRefListValue(
   const invalidValues = nonZeroValues.filter((id) => !validRowIds.has(id))
 
   if (invalidValues.length > 0) {
-    throw new InvalidRefListError(
+    throw new DataIntegrityError('invalid_reflist', tableId as string, {
       columnId,
       invalidValues,
-      refTableName,
-      tableId as string,
-      validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
-    )
+      refTableId: refTableName,
+      validRowIds:
+        validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
+    })
   }
 }
 
 /**
  * Validates that a Choice column value is in the allowed choices.
- * @throws {InvalidChoiceError} if the value is not in allowed choices
+ * @throws {DataIntegrityError} with kind 'invalid_choice' if the value is not in allowed choices
  */
 export function validateChoiceValue(
   value: string,
@@ -105,13 +99,17 @@ export function validateChoiceValue(
   if (value === '') return
 
   if (!allowedChoices.includes(value)) {
-    throw new InvalidChoiceError(columnId, value, allowedChoices, tableId as string)
+    throw new DataIntegrityError('invalid_choice', tableId as string, {
+      columnId,
+      value,
+      allowedChoices
+    })
   }
 }
 
 /**
  * Validates that all ChoiceList values are in the allowed choices.
- * @throws {InvalidChoiceListError} if any values are not in allowed choices
+ * @throws {DataIntegrityError} with kind 'invalid_choicelist' if any values are not in allowed choices
  */
 export function validateChoiceListValue(
   values: string[],
@@ -127,14 +125,18 @@ export function validateChoiceListValue(
   const invalidValues = nonEmptyValues.filter((v) => !allowedSet.has(v))
 
   if (invalidValues.length > 0) {
-    throw new InvalidChoiceListError(columnId, invalidValues, allowedChoices, tableId as string)
+    throw new DataIntegrityError('invalid_choicelist', tableId as string, {
+      columnId,
+      invalidValues,
+      allowedChoices
+    })
   }
 }
 
 /**
  * Validates that all provided row IDs exist in the table.
  * Used for update/delete operations.
- * @throws {RowNotFoundError} if any row IDs don't exist
+ * @throws {DataIntegrityError} with kind 'row_not_found' if any row IDs don't exist
  */
 export async function validateRowIdsExist(
   rowIds: number[],
@@ -146,7 +148,9 @@ export async function validateRowIdsExist(
   const invalidRowIds = rowIds.filter((id) => !validRowIds.has(id))
 
   if (invalidRowIds.length > 0) {
-    throw new RowNotFoundError(invalidRowIds, tableId as string)
+    throw new DataIntegrityError('row_not_found', tableId as string, {
+      rowIds: invalidRowIds
+    })
   }
 }
 
@@ -155,9 +159,7 @@ export async function validateRowIdsExist(
  */
 export interface DataIntegrityValidationResult {
   valid: boolean
-  errors: Array<
-    InvalidReferenceError | InvalidRefListError | InvalidChoiceError | InvalidChoiceListError
-  >
+  errors: DataIntegrityError[]
 }
 
 /**
@@ -196,7 +198,7 @@ async function prefetchRowIds(
 
 /**
  * Validates a Ref value against pre-fetched row IDs.
- * @throws {InvalidReferenceError} if the row ID doesn't exist
+ * @throws {DataIntegrityError} with kind 'invalid_reference' if the row ID doesn't exist
  */
 function validateRefValueWithPrefetch(
   value: number,
@@ -209,19 +211,19 @@ function validateRefValueWithPrefetch(
   if (value === 0) return
 
   if (!validRowIds.has(value)) {
-    throw new InvalidReferenceError(
+    throw new DataIntegrityError('invalid_reference', tableId as string, {
       columnId,
       value,
-      refTableName,
-      tableId as string,
-      validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
-    )
+      refTableId: refTableName,
+      validRowIds:
+        validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
+    })
   }
 }
 
 /**
  * Validates RefList values against pre-fetched row IDs.
- * @throws {InvalidRefListError} if any row IDs don't exist
+ * @throws {DataIntegrityError} with kind 'invalid_reflist' if any row IDs don't exist
  */
 function validateRefListValueWithPrefetch(
   values: number[],
@@ -237,13 +239,13 @@ function validateRefListValueWithPrefetch(
   const invalidValues = nonZeroValues.filter((id) => !validRowIds.has(id))
 
   if (invalidValues.length > 0) {
-    throw new InvalidRefListError(
+    throw new DataIntegrityError('invalid_reflist', tableId as string, {
       columnId,
       invalidValues,
-      refTableName,
-      tableId as string,
-      validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
-    )
+      refTableId: refTableName,
+      validRowIds:
+        validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
+    })
   }
 }
 
@@ -309,12 +311,7 @@ function validateRecordWithPrefetch(
         }
       }
     } catch (error) {
-      if (
-        error instanceof InvalidReferenceError ||
-        error instanceof InvalidRefListError ||
-        error instanceof InvalidChoiceError ||
-        error instanceof InvalidChoiceListError
-      ) {
+      if (error instanceof DataIntegrityError) {
         errors.push(error)
       } else {
         throw error
@@ -360,7 +357,7 @@ export async function validateRecordDataIntegrity(
  * Pre-fetches row IDs once for all Ref tables, then validates each record.
  * Stops at first error for fail-fast behavior.
  *
- * @throws First error encountered (InvalidReferenceError, InvalidChoiceError, etc.)
+ * @throws First DataIntegrityError encountered
  */
 export async function validateRecordsDataIntegrity(
   records: Record<string, CellValue>[],
@@ -387,7 +384,7 @@ export async function validateRecordsDataIntegrity(
  * Pre-fetches row IDs once for all Ref tables, then validates each record.
  * Only validates the fields property if present.
  *
- * @throws First error encountered (InvalidReferenceError, InvalidChoiceError, etc.)
+ * @throws First DataIntegrityError encountered
  */
 export async function validateUpsertRecordsDataIntegrity(
   records: Array<{ require?: Record<string, CellValue>; fields?: Record<string, CellValue> }>,

@@ -1,6 +1,8 @@
 import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios'
 import type { z } from 'zod'
 import { API_TIMEOUT, CLIENT_IDENTIFIER } from '../constants.js'
+import { ApiError, type HttpMethod } from '../errors/ApiError.js'
+import { NotFoundError } from '../errors/NotFoundError.js'
 import { safeValidate, validateApiResponse } from '../schemas/api-responses.js'
 import type { ApiPath } from '../types/advanced.js'
 import type { UserActionObject, UserActionTuple } from '../types.js'
@@ -8,8 +10,6 @@ import { Logger, LogLevel } from '../utils/logger.js'
 import { RateLimiter, type RateLimiterConfig } from '../utils/rate-limiter.js'
 import { ResponseCache, type ResponseCacheConfig } from '../utils/response-cache.js'
 import { sanitizeMessage } from '../utils/sanitizer.js'
-
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 interface RetryConfig {
   maxRetries: number
@@ -558,33 +558,23 @@ export class GristClient {
     )
   }
 
-  private build400Error(sanitizedMessage: string): Error {
-    return new Error(
-      `Bad request (400): ${sanitizedMessage}\n\n` +
-        `The request was rejected by Grist. Common issues:\n` +
-        `- Invalid parameter format\n` +
-        `- Missing required fields\n` +
-        `- Malformed data structure\n\n` +
-        `Check the tool description for correct parameter formats.`
-    )
+  private build400Error(sanitizedMessage: string, method: HttpMethod, path: string): ApiError {
+    return new ApiError(400, method, path, sanitizedMessage, { baseUrl: this.baseUrl })
   }
 
-  private buildServerError(status: number): Error {
-    return new Error(
-      `Grist server error (${status}). This is a temporary server issue. ` +
-        `Try again in a few moments. If problem persists, check https://status.getgrist.com`
-    )
+  private buildServerError(status: number, method: HttpMethod, path: string): ApiError {
+    return new ApiError(status, method, path, 'Server error', { baseUrl: this.baseUrl })
   }
 
-  private handle500Error(path: string, sanitizedMessage: string): Error {
+  private handle500Error(path: string, sanitizedMessage: string, method: HttpMethod): Error {
     if (path.includes('/apply') && this.detect500EncodingError(sanitizedMessage)) {
       return this.buildEncodingError(sanitizedMessage)
     }
 
-    return this.buildServerError(500)
+    return this.buildServerError(500, method, path)
   }
 
-  private handle400Error(path: string, sanitizedMessage: string): Error {
+  private handle400Error(path: string, sanitizedMessage: string, method: HttpMethod): Error {
     if (this.detect400SqlError(path)) {
       return this.buildSqlError(sanitizedMessage)
     }
@@ -598,7 +588,7 @@ export class GristClient {
       return this.buildValidationError(sanitizedMessage)
     }
 
-    return this.build400Error(sanitizedMessage)
+    return this.build400Error(sanitizedMessage, method, path)
   }
 
   private handleError(error: unknown, method: HttpMethod, path: string): Error {
@@ -630,97 +620,63 @@ export class GristClient {
     // Sanitize the error message from API
     const sanitizedMessage = sanitizeMessage(userError || message)
 
-    // Status code handler lookup
-    const handlers: Record<number, () => Error> = {
-      401: () =>
-        new Error(
-          `Authentication failed. Check that GRIST_API_KEY is valid and not expired. ` +
-            `Get your API key from: ${this.baseUrl}/settings/keys`
-        ),
-      403: () =>
-        new Error(
-          `Permission denied for ${method} ${path}. API key lacks required access. ` +
-            `Try using grist_get_documents to see which documents you can access.`
-        ),
-      404: () => this.build404Error(path),
-      429: () =>
-        new Error(
-          `Rate limit exceeded. The Grist server is limiting your requests. ` +
-            `Wait 60 seconds before retrying this operation.`
-        ),
-      400: () => this.handle400Error(path, sanitizedMessage),
-      500: () => this.handle500Error(path, sanitizedMessage),
-      502: () => this.buildServerError(502),
-      503: () => this.buildServerError(503),
-      504: () => this.buildServerError(504)
+    if (!status) {
+      if (axiosError.code === 'ECONNABORTED') {
+        return new Error(
+          `Request timed out after ${API_TIMEOUT}ms. The operation took too long. ` +
+            `Try reducing the amount of data requested or check your network connection.`
+        )
+      }
+      return new Error(`Request failed: ${sanitizedMessage}. ${method} ${path} returned no status.`)
     }
 
-    if (status && handlers[status]) {
-      return handlers[status]()
+    // Special handling for 400 and 500 with sub-detection logic
+    if (status === 400) return this.handle400Error(path, sanitizedMessage, method)
+    if (status === 500) return this.handle500Error(path, sanitizedMessage, method)
+
+    // 404 → NotFoundError (structured)
+    if (status === 404) return this.build404Error(path)
+
+    // 429 → ApiError with retryAfter
+    if (status === 429) {
+      const retryAfterHeader = axiosError.response?.headers?.['retry-after']
+      const retryAfter = retryAfterHeader ? Number.parseInt(retryAfterHeader, 10) : undefined
+      return new ApiError(429, method, path, sanitizedMessage, {
+        baseUrl: this.baseUrl,
+        retryAfter
+      })
     }
 
-    if (axiosError.code === 'ECONNABORTED') {
-      return new Error(
-        `Request timed out after ${API_TIMEOUT}ms. The operation took too long. ` +
-          `Try reducing the amount of data requested or check your network connection.`
-      )
-    }
-
-    return new Error(
-      `Request failed: ${sanitizedMessage}. ${method} ${path} returned status ${status}.`
-    )
+    // All other status codes → ApiError
+    return new ApiError(status, method, path, sanitizedMessage, { baseUrl: this.baseUrl })
   }
 
   // Check more specific paths first (table before doc)
-  private build404Error(path: string): Error {
+  private build404Error(path: string): NotFoundError {
     const tableMatch = path.match(TABLES_PATH_REGEX)
     const docMatch = path.match(DOCS_PATH_REGEX)
     const workspaceMatch = path.match(WORKSPACES_PATH_REGEX)
     const orgMatch = path.match(ORGS_PATH_REGEX)
 
     // Check table errors FIRST (more specific than document)
-    if (tableMatch) {
-      const tableId = tableMatch[1]
-      return new Error(
-        `Table not found (ID: '${tableId}'). ` +
-          `Possible causes: invalid table ID (check spelling/case), table was deleted/renamed, or wrong document. ` +
-          `Use grist_get_tables to see available tables and verify ID matches exactly.`
-      )
+    if (tableMatch?.[1]) {
+      return new NotFoundError('table', tableMatch[1])
     }
 
-    if (docMatch) {
-      const docId = docMatch[1]
-      return new Error(
-        `Document not found (ID: '${docId}'). ` +
-          `Possible causes: invalid document ID, no access permission, or document was deleted. ` +
-          `Use grist_get_documents to see available documents and check API key has required permissions.`
-      )
+    if (docMatch?.[1]) {
+      return new NotFoundError('document', docMatch[1])
     }
 
-    if (workspaceMatch) {
-      const workspaceId = workspaceMatch[1]
-      return new Error(
-        `Workspace not found (ID: '${workspaceId}'). ` +
-          `Possible causes: invalid workspace ID, no access permission, or workspace was deleted. ` +
-          `Use grist_get_workspaces to see available workspaces and verify you have access.`
-      )
+    if (workspaceMatch?.[1]) {
+      return new NotFoundError('workspace', workspaceMatch[1])
     }
 
-    if (orgMatch) {
-      const orgId = orgMatch[1]
-      return new Error(
-        `Organization not found (ID: '${orgId}'). ` +
-          `Possible causes: invalid organization ID or no access permission. ` +
-          `Use grist_get_workspaces to see available organizations.`
-      )
+    if (orgMatch?.[1]) {
+      return new NotFoundError('organization', orgMatch[1])
     }
 
-    // Generic 404
-    return new Error(
-      `Resource not found at path: ${path}. ` +
-        `The requested resource does not exist or you don't have access. ` +
-        `Verify the resource ID is correct, check permissions, and use discovery tools (grist_get_workspaces, grist_get_documents, grist_get_tables).`
-    )
+    // Generic 404 — use path as resource identifier
+    return new NotFoundError('document', path)
   }
 
   getBaseUrl(): string {

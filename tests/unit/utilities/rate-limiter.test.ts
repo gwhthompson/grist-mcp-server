@@ -197,6 +197,9 @@ describe('RateLimiter', () => {
 
       await Promise.all([promise1, promise2, promise3])
 
+      // Wait for all processing to complete (including finally callbacks)
+      await limiter.waitForIdle()
+
       // After completion
       const finalStats = limiter.getStats()
       expect(finalStats.activeCount).toBe(0)

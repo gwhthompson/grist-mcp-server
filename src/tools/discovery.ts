@@ -1,6 +1,5 @@
 import { z } from 'zod'
 import { READ_ONLY_ANNOTATIONS, type ToolContext, type ToolDefinition } from '../registry/types.js'
-
 import {
   DetailLevelTableSchema,
   DetailLevelWorkspaceSchema,
@@ -21,6 +20,7 @@ import {
   isReferenceType
 } from '../services/column-resolver.js'
 import type { DocumentInfo, TablesApiResponse, WorkspaceInfo } from '../types.js'
+import { log } from '../utils/logger.js'
 import { definePaginatedTool, defineStandardTool } from './factory/index.js'
 import { nextSteps } from './utils/next-steps.js'
 import { paginate } from './utils/pagination.js'
@@ -97,9 +97,10 @@ export const GET_WORKSPACES_TOOL = definePaginatedTool<
     const allWorkspaces: WorkspaceInfo[] = []
     for (const org of orgs) {
       if (allWorkspaces.length >= maxWorkspaces) {
-        console.error(
-          `[GetWorkspaces] Reached max workspaces during fetch: ${allWorkspaces.length}/${maxWorkspaces}`
-        )
+        log.warn('GetWorkspaces reached max workspaces during fetch', {
+          fetched: allWorkspaces.length,
+          max: maxWorkspaces
+        })
         break
       }
 
@@ -121,6 +122,7 @@ export const GET_WORKSPACES_TOOL = definePaginatedTool<
     return items.filter((ws) => ws.name.toLowerCase().includes(searchTerm))
   },
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async afterExecute(result, _params, _ctx) {
     const firstWs = result.items[0]
 
@@ -152,7 +154,7 @@ export const GET_WORKSPACES_TOOL = definePaginatedTool<
   }
 })
 
-export async function getWorkspaces(context: ToolContext, params: GetWorkspacesInput) {
+export function getWorkspaces(context: ToolContext, params: GetWorkspacesInput) {
   return GET_WORKSPACES_TOOL.handler(context, params)
 }
 
@@ -231,9 +233,10 @@ async function fetchAllDocuments(
 
   for (const org of orgs) {
     if (documents.length >= maxDocuments) {
-      console.error(
-        `[GetDocuments] Reached max documents during fetch: ${documents.length}/${maxDocuments}`
-      )
+      log.warn('GetDocuments reached max documents during fetch', {
+        fetched: documents.length,
+        max: maxDocuments
+      })
       break
     }
 
@@ -294,6 +297,7 @@ export const GET_DOCUMENTS_TOOL = definePaginatedTool<typeof GetDocumentsSchema,
       return items.filter((doc) => doc.name.toLowerCase().includes(searchTerm))
     },
 
+    // biome-ignore lint/suspicious/useAwait: Factory type requires async return
     async afterExecute(result, params, _ctx) {
       const firstDoc = result.items[0]
 
@@ -329,7 +333,7 @@ export const GET_DOCUMENTS_TOOL = definePaginatedTool<typeof GetDocumentsSchema,
   }
 )
 
-export async function getDocuments(context: ToolContext, params: GetDocumentsInput) {
+export function getDocuments(context: ToolContext, params: GetDocumentsInput) {
   return GET_DOCUMENTS_TOOL.handler(context, params)
 }
 
@@ -352,7 +356,7 @@ interface FormattedTable {
   columns?:
     | string[]
     | Array<{
-        id: string
+        colId: string
         label: string
         type: string
         isFormula: boolean
@@ -378,6 +382,49 @@ interface GetTablesOutput {
   nextSteps?: string[]
 }
 
+interface ColumnApiResponse {
+  id: string
+  fields: {
+    label?: string
+    type: string
+    isFormula?: boolean
+    formula?: string | null
+    widgetOptions?: string | Record<string, unknown>
+    visibleCol?: number
+  }
+}
+
+function parseWidgetOptions(
+  raw: string | Record<string, unknown> | undefined
+): string | Record<string, unknown> | null {
+  if (!raw || raw === '') return null
+  return typeof raw === 'string' ? JSON.parse(raw) : raw
+}
+
+async function resolveVisibleColName(
+  client: ToolContext['client'],
+  docId: string,
+  type: string,
+  visibleCol: number | undefined
+): Promise<string | null> {
+  if (!visibleCol || !isReferenceType(type)) return null
+
+  const foreignTable = extractForeignTable(type)
+  if (!foreignTable) return null
+
+  try {
+    return await getColumnNameFromId(client, docId, foreignTable, visibleCol)
+  } catch (error) {
+    // Non-critical - visible column name is a convenience enhancement
+    log.debug(
+      'Failed to resolve visibleColName',
+      { docId, foreignTable, visibleCol },
+      error instanceof Error ? error : undefined
+    )
+    return null
+  }
+}
+
 async function formatTables(
   ctx: ToolContext,
   tables: Array<{ id: string }>,
@@ -388,19 +435,7 @@ async function formatTables(
   }
 
   if (params.detail_level === 'columns' || params.detail_level === 'full_schema') {
-    interface ColumnApiResponse {
-      id: string
-      fields: {
-        label?: string
-        type: string
-        isFormula?: boolean
-        formula?: string | null
-        widgetOptions?: string | Record<string, unknown>
-        visibleCol?: number
-      }
-    }
-
-    return Promise.all(
+    return await Promise.all(
       tables.map(async (t) => {
         const columnsResponse = await ctx.client.get<{
           columns: ColumnApiResponse[]
@@ -417,43 +452,21 @@ async function formatTables(
         return {
           id: t.id,
           columns: await Promise.all(
-            columns.map(async (c) => {
-              let parsedWidgetOptions: string | Record<string, unknown> | null = null
-              if (c.fields.widgetOptions && c.fields.widgetOptions !== '') {
-                parsedWidgetOptions =
-                  typeof c.fields.widgetOptions === 'string'
-                    ? JSON.parse(c.fields.widgetOptions)
-                    : c.fields.widgetOptions
-              }
-
-              let visibleColName: string | null = null
-              if (c.fields.visibleCol && isReferenceType(c.fields.type)) {
-                const foreignTable = extractForeignTable(c.fields.type)
-                if (foreignTable) {
-                  try {
-                    visibleColName = await getColumnNameFromId(
-                      ctx.client,
-                      params.docId,
-                      foreignTable,
-                      c.fields.visibleCol
-                    )
-                  } catch {
-                    visibleColName = null
-                  }
-                }
-              }
-
-              return {
-                id: c.id,
-                label: c.fields.label ?? c.id,
-                type: c.fields.type,
-                isFormula: c.fields.isFormula ?? false,
-                formula: c.fields.formula ?? null,
-                widgetOptions: parsedWidgetOptions,
-                visibleCol: c.fields.visibleCol ?? null,
-                visibleColName: visibleColName
-              }
-            })
+            columns.map(async (c) => ({
+              colId: c.id,
+              label: c.fields.label ?? c.id,
+              type: c.fields.type,
+              isFormula: c.fields.isFormula ?? false,
+              formula: c.fields.formula ?? null,
+              widgetOptions: parseWidgetOptions(c.fields.widgetOptions),
+              visibleCol: c.fields.visibleCol ?? null,
+              visibleColName: await resolveVisibleColName(
+                ctx.client,
+                params.docId,
+                c.fields.type,
+                c.fields.visibleCol
+              )
+            }))
           )
         }
       })
@@ -508,6 +521,7 @@ export const GET_TABLES_TOOL = defineStandardTool<typeof GetTablesSchema, GetTab
     }
   },
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async afterExecute(result, params, _ctx) {
     const firstTable = result.items[0]
 
@@ -526,7 +540,7 @@ export const GET_TABLES_TOOL = defineStandardTool<typeof GetTablesSchema, GetTab
 
   docs: {
     overview:
-      'Get table structure and schema. Detail levels: names (table IDs only ~20 tokens/table), columns (+ column names ~50 tokens/table), or full_schema (+ types, formulas, widget options ~200 tokens/table). Note: widgetOptions only returned with full_schema.',
+      'Get table structure and schema. Detail levels: names (table IDs only ~20 tokens/table), columns (+ column names ~50 tokens/table), or full_schema (+ types, formulas, widget options ~200 tokens/table). Columns use `colId` to match grist_manage_schema input format. Note: widgetOptions only returned with full_schema.',
     examples: [
       { desc: 'List table names', input: { docId: 'abc123', detail_level: 'names' } },
       {
@@ -545,7 +559,7 @@ export const GET_TABLES_TOOL = defineStandardTool<typeof GetTablesSchema, GetTab
   }
 })
 
-export async function getTables(context: ToolContext, params: GetTablesInput) {
+export function getTables(context: ToolContext, params: GetTablesInput) {
   return GET_TABLES_TOOL.handler(context, params)
 }
 

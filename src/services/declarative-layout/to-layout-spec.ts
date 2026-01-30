@@ -245,6 +245,24 @@ export function replacePlaceholders(
 // Validation
 // =============================================================================
 
+/** Assert section exists, throw descriptive error if not */
+function assertSectionExists(sectionId: number, existingSectionIds: Set<number>): void {
+  if (!existingSectionIds.has(sectionId)) {
+    throw new Error(
+      `Section ${sectionId} not found on this page. ` +
+        `Available sections: ${[...existingSectionIds].join(', ')}`
+    )
+  }
+}
+
+/** Get section ID from a node if it references an existing section */
+function getSectionIdFromNode(node: LayoutNode): number | null {
+  if (isSectionId(node)) return node
+  if (isWeightedSection(node)) return node[0]
+  if (isExistingPane(node)) return node.section
+  return null
+}
+
 /**
  * Validate that all existing section IDs in a layout actually exist on the page.
  *
@@ -257,39 +275,16 @@ export function validateExistingSections(
   existingSectionIds: Set<number>
 ): void {
   function walk(node: LayoutNode): void {
-    if (isSectionId(node)) {
-      if (!existingSectionIds.has(node)) {
-        throw new Error(
-          `Section ${node} not found on this page. ` +
-            `Available sections: ${[...existingSectionIds].join(', ')}`
-        )
-      }
-    }
-
-    if (isWeightedSection(node)) {
-      if (!existingSectionIds.has(node[0])) {
-        throw new Error(
-          `Section ${node[0]} not found on this page. ` +
-            `Available sections: ${[...existingSectionIds].join(', ')}`
-        )
-      }
-    }
-
-    if (isExistingPane(node)) {
-      if (!existingSectionIds.has(node.section)) {
-        throw new Error(
-          `Section ${node.section} not found on this page. ` +
-            `Available sections: ${[...existingSectionIds].join(', ')}`
-        )
-      }
+    const sectionId = getSectionIdFromNode(node)
+    if (sectionId !== null) {
+      assertSectionExists(sectionId, existingSectionIds)
     }
 
     if (isColSplit(node)) {
-      node.cols.forEach(walk)
+      for (const col of node.cols) walk(col)
     }
-
     if (isRowSplit(node)) {
-      node.rows.forEach(walk)
+      for (const row of node.rows) walk(row)
     }
   }
 

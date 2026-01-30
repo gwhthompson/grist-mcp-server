@@ -417,6 +417,69 @@ const RawWidgetOperationSchema = z.discriminatedUnion('action', [
   DeleteWidgetOperationSchema
 ])
 
+// Widget operation validation helpers
+type WidgetOperation = z.infer<typeof RawWidgetOperationSchema>
+type ZodContext = z.RefinementCtx
+
+/** Check if widget was deleted in a previous operation */
+function validateWidgetNotDeleted(
+  op: WidgetOperation,
+  index: number,
+  deletedWidgets: Set<string>,
+  ctx: ZodContext
+): void {
+  if (op.action === 'delete' || op.action === 'add') return
+  if (!('widget' in op)) return
+
+  const widgetKey = `${op.page_name}:${op.widget}`
+  if (deletedWidgets.has(widgetKey)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Operation ${index + 1}: Cannot ${op.action} widget "${op.widget}" on page "${op.page_name}" - it was deleted in a previous operation`,
+      path: ['operations', index]
+    })
+  }
+}
+
+/** Validate modify operation has at least one field to change */
+function validateModifyOperation(op: WidgetOperation, index: number, ctx: ZodContext): void {
+  if (op.action !== 'modify') return
+
+  const hasChange =
+    op.widget_type !== undefined ||
+    op.table !== undefined ||
+    op.title !== undefined ||
+    op.description !== undefined ||
+    op.visible_fields !== undefined
+
+  if (!hasChange) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Operation ${index + 1}: Modify operation must specify at least one field to change (widget_type, table, title, description, or visible_fields)`,
+      path: ['operations', index]
+    })
+  }
+}
+
+/** Validate link operation column consistency */
+function validateLinkOperation(op: WidgetOperation, index: number, ctx: ZodContext): void {
+  if (op.action !== 'link') return
+
+  const { source_col, target_col } = op.link_config
+  if (source_col === undefined || target_col === undefined) return
+
+  const sourceIsTableLevel = source_col === 0
+  const targetIsTableLevel = target_col === 0
+
+  if (sourceIsTableLevel !== targetIsTableLevel) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Operation ${index + 1}: Link configuration invalid - both source_col and target_col must be table-level (0) or both must be column-level (non-zero). Cannot mix table and column linking`,
+      path: ['operations', index, 'link_config']
+    })
+  }
+}
+
 export const ConfigureWidgetSchema = z
   .strictObject({
     docId: DocIdSchema,
@@ -430,56 +493,14 @@ export const ConfigureWidgetSchema = z
   .superRefine((data, ctx) => {
     const deletedWidgets = new Set<string>()
 
-    data.operations.forEach((op, index) => {
+    for (const [index, op] of data.operations.entries()) {
       if (op.action === 'delete') {
-        const widgetKey = `${op.page_name}:${op.widget}`
-        deletedWidgets.add(widgetKey)
+        deletedWidgets.add(`${op.page_name}:${op.widget}`)
       }
-
-      if (op.action !== 'delete' && op.action !== 'add' && 'widget' in op) {
-        const widgetKey = `${op.page_name}:${op.widget}`
-        if (deletedWidgets.has(widgetKey)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Operation ${index + 1}: Cannot ${op.action} widget "${op.widget}" on page "${op.page_name}" - it was deleted in a previous operation`,
-            path: ['operations', index]
-          })
-        }
-      }
-
-      if (op.action === 'modify') {
-        const hasChange =
-          op.widget_type !== undefined ||
-          op.table !== undefined ||
-          op.title !== undefined ||
-          op.description !== undefined ||
-          op.visible_fields !== undefined
-
-        if (!hasChange) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Operation ${index + 1}: Modify operation must specify at least one field to change (widget_type, table, title, description, or visible_fields)`,
-            path: ['operations', index]
-          })
-        }
-      }
-
-      if (op.action === 'link') {
-        const { source_col, target_col } = op.link_config
-        if (source_col !== undefined && target_col !== undefined) {
-          const sourceIsTableLevel = source_col === 0
-          const targetIsTableLevel = target_col === 0
-
-          if (sourceIsTableLevel !== targetIsTableLevel) {
-            ctx.addIssue({
-              code: z.ZodIssueCode.custom,
-              message: `Operation ${index + 1}: Link configuration invalid - both source_col and target_col must be table-level (0) or both must be column-level (non-zero). Cannot mix table and column linking`,
-              path: ['operations', index, 'link_config']
-            })
-          }
-        }
-      }
-    })
+      validateWidgetNotDeleted(op, index, deletedWidgets, ctx)
+      validateModifyOperation(op, index, ctx)
+      validateLinkOperation(op, index, ctx)
+    }
   })
 
 export type ConfigureWidgetInput = z.infer<typeof ConfigureWidgetSchema>
@@ -515,74 +536,118 @@ const DeletePageOperationSchema = z.strictObject({
     )
 })
 
+const RawPageOperationSchema = z.discriminatedUnion('action', [
+  RenamePageOperationSchema,
+  ReorderPageOperationSchema,
+  DeletePageOperationSchema
+])
+
+// Page operation validation context
+interface PageValidationState {
+  pageNameMap: Map<string, string>
+  deletedPages: Set<string>
+  createdNames: Set<string>
+}
+
+type PageOperation = z.infer<typeof RawPageOperationSchema>
+
+/** Get effective page name after any renames */
+function getEffectivePageName(pageName: string, state: PageValidationState): string {
+  return state.pageNameMap.get(pageName) || pageName
+}
+
+/** Validate rename operation */
+function validateRenamePageOp(
+  op: PageOperation,
+  index: number,
+  state: PageValidationState,
+  ctx: ZodContext
+): void {
+  if (op.action !== 'rename') return
+
+  const currentName = getEffectivePageName(op.page_name, state)
+
+  if (state.deletedPages.has(currentName)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Operation ${index + 1}: Cannot rename page "${op.page_name}" - it was deleted in a previous operation`,
+      path: ['operations', index]
+    })
+  }
+
+  if (state.createdNames.has(op.new_name)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Operation ${index + 1}: Cannot rename to "${op.new_name}" - this name is already used by another page in this batch`,
+      path: ['operations', index, 'new_name']
+    })
+  }
+
+  state.pageNameMap.set(op.page_name, op.new_name)
+  state.createdNames.add(op.new_name)
+}
+
+/** Validate delete operation */
+function validateDeletePageOp(
+  op: PageOperation,
+  index: number,
+  state: PageValidationState,
+  ctx: ZodContext
+): void {
+  if (op.action !== 'delete') return
+
+  const currentName = getEffectivePageName(op.page_name, state)
+  if (state.deletedPages.has(currentName)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Operation ${index + 1}: Cannot delete page "${op.page_name}" - it was already deleted in a previous operation`,
+      path: ['operations', index]
+    })
+  }
+  state.deletedPages.add(currentName)
+}
+
+/** Validate reorder operation */
+function validateReorderPageOp(
+  op: PageOperation,
+  index: number,
+  state: PageValidationState,
+  ctx: ZodContext
+): void {
+  if (op.action !== 'reorder') return
+
+  const currentName = getEffectivePageName(op.page_name, state)
+  if (state.deletedPages.has(currentName)) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `Operation ${index + 1}: Cannot reorder page "${op.page_name}" - it was deleted in a previous operation`,
+      path: ['operations', index]
+    })
+  }
+}
+
 export const UpdatePageSchema = z
   .strictObject({
     docId: DocIdSchema,
     operations: z
-      .array(
-        z.discriminatedUnion('action', [
-          RenamePageOperationSchema,
-          ReorderPageOperationSchema,
-          DeletePageOperationSchema
-        ])
-      )
+      .array(RawPageOperationSchema)
       .min(1)
       .max(50)
       .describe('Page operations to perform (1-50 operations, executed in order)'),
     response_format: ResponseFormatSchema.optional().default('markdown')
   })
   .superRefine((data, ctx) => {
-    const pageNameMap = new Map<string, string>()
-    const deletedPages = new Set<string>()
-    const createdNames = new Set<string>()
+    const state: PageValidationState = {
+      pageNameMap: new Map(),
+      deletedPages: new Set(),
+      createdNames: new Set()
+    }
 
-    data.operations.forEach((op, index) => {
-      if (op.action === 'rename') {
-        const currentName = pageNameMap.get(op.page_name) || op.page_name
-
-        if (deletedPages.has(currentName)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Operation ${index + 1}: Cannot rename page "${op.page_name}" - it was deleted in a previous operation`,
-            path: ['operations', index]
-          })
-        }
-
-        if (createdNames.has(op.new_name)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Operation ${index + 1}: Cannot rename to "${op.new_name}" - this name is already used by another page in this batch`,
-            path: ['operations', index, 'new_name']
-          })
-        }
-
-        pageNameMap.set(op.page_name, op.new_name)
-        createdNames.add(op.new_name)
-      }
-
-      if (op.action === 'delete') {
-        const currentName = pageNameMap.get(op.page_name) || op.page_name
-        if (deletedPages.has(currentName)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Operation ${index + 1}: Cannot delete page "${op.page_name}" - it was already deleted in a previous operation`,
-            path: ['operations', index]
-          })
-        }
-        deletedPages.add(currentName)
-      }
-
-      if (op.action === 'reorder') {
-        const currentName = pageNameMap.get(op.page_name) || op.page_name
-        if (deletedPages.has(currentName)) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: `Operation ${index + 1}: Cannot reorder page "${op.page_name}" - it was deleted in a previous operation`,
-            path: ['operations', index]
-          })
-        }
-      }
-    })
+    for (const [index, op] of data.operations.entries()) {
+      validateRenamePageOp(op, index, state, ctx)
+      validateDeletePageOp(op, index, state, ctx)
+      validateReorderPageOp(op, index, state, ctx)
+    }
   })
 
 export type UpdatePageInput = z.infer<typeof UpdatePageSchema>

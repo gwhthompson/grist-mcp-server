@@ -1,15 +1,14 @@
 import axios, { type AxiosError, type AxiosInstance, type AxiosRequestConfig } from 'axios'
 import type { z } from 'zod'
 import { API_TIMEOUT, CLIENT_IDENTIFIER } from '../constants.js'
+import { ApiError, type HttpMethod } from '../errors/ApiError.js'
+import { NotFoundError } from '../errors/NotFoundError.js'
 import { safeValidate, validateApiResponse } from '../schemas/api-responses.js'
 import type { ApiPath } from '../types/advanced.js'
-import type { UserActionObject, UserActionTuple } from '../types.js'
 import { Logger, LogLevel } from '../utils/logger.js'
 import { RateLimiter, type RateLimiterConfig } from '../utils/rate-limiter.js'
 import { ResponseCache, type ResponseCacheConfig } from '../utils/response-cache.js'
 import { sanitizeMessage } from '../utils/sanitizer.js'
-
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 interface RetryConfig {
   maxRetries: number
@@ -19,6 +18,14 @@ interface RetryConfig {
 }
 
 type RequestBody = Record<string, unknown> | unknown[] | string | number | boolean | null
+
+// Top-level regex patterns for path extraction (performance optimization)
+const TABLES_PATH_REGEX = /\/tables\/([^/]+)/
+const DOCS_PATH_REGEX = /\/docs\/([^/]+)/
+const WORKSPACES_PATH_REGEX = /\/workspaces\/([^/]+)/
+const ORGS_PATH_REGEX = /\/orgs\/([^/]+)/
+// Regex for extracting key names from KeyError messages (e.g., "KeyError 'NonExistentColumn'")
+const KEY_ERROR_REGEX = /['`]([^'`]+)['`]/
 
 interface RequestOptions<TResponse = unknown> {
   schema?: z.ZodSchema<TResponse>
@@ -382,6 +389,41 @@ export class GristClient {
     }
   }
 
+  /** Calculate exponential backoff delay with jitter */
+  private calculateBackoffDelay(attempt: number): number {
+    const exponentialDelay = this.retryConfig.baseDelayMs * 2 ** attempt
+    const jitter = Math.random() * 0.3 * exponentialDelay
+    return Math.min(exponentialDelay + jitter, this.retryConfig.maxDelayMs)
+  }
+
+  /** Check if we should throw the error (non-retryable or exhausted retries) */
+  private shouldThrowRetryError(error: unknown, attempt: number, context: string): boolean {
+    if (!this.isRetryableError(error)) {
+      return true
+    }
+    if (attempt === this.retryConfig.maxRetries) {
+      this.logger.error('Retry exhausted', {
+        attempt: attempt + 1,
+        maxRetries: this.retryConfig.maxRetries,
+        context,
+        status: this.getErrorStatus(error)
+      })
+      return true
+    }
+    return false
+  }
+
+  /** Log retry attempt */
+  private logRetryAttempt(attempt: number, context: string, delayMs: number, error: unknown): void {
+    this.logger.debug('Retrying request after error', {
+      attempt: attempt + 1,
+      maxRetries: this.retryConfig.maxRetries,
+      context,
+      delayMs: Math.round(delayMs),
+      status: this.getErrorStatus(error)
+    })
+  }
+
   // Exponential backoff with jitter to prevent thundering herd
   private async retryWithBackoff<T>(fn: () => Promise<T>, context: string): Promise<T> {
     let lastError: Error | undefined
@@ -390,47 +432,17 @@ export class GristClient {
       try {
         return await fn()
       } catch (error) {
-        // Check if this is a retryable error
-        const isRetryable = this.isRetryableError(error)
-        const isLastAttempt = attempt === this.retryConfig.maxRetries
-
-        if (!isRetryable || isLastAttempt) {
-          // Log critical error on final retry exhaustion
-          if (isLastAttempt && isRetryable) {
-            this.logger.error('Retry exhausted', {
-              attempt: attempt + 1,
-              maxRetries: this.retryConfig.maxRetries,
-              context,
-              status: this.getErrorStatus(error)
-            })
-          }
-          // Not retryable or out of retries - throw immediately
+        if (this.shouldThrowRetryError(error, attempt, context)) {
           throw error
         }
 
-        // Calculate delay with exponential backoff and jitter
-        const exponentialDelay = this.retryConfig.baseDelayMs * 2 ** attempt
-        const jitter = Math.random() * 0.3 * exponentialDelay // 0-30% jitter
-        const delayMs = Math.min(exponentialDelay + jitter, this.retryConfig.maxDelayMs)
-
-        // Store error for potential final throw
+        const delayMs = this.calculateBackoffDelay(attempt)
         lastError = error instanceof Error ? error : new Error(String(error))
-
-        // Log retry attempt at debug level (quiet in normal operation)
-        this.logger.debug('Retrying request after error', {
-          attempt: attempt + 1,
-          maxRetries: this.retryConfig.maxRetries,
-          context,
-          delayMs: Math.round(delayMs),
-          status: this.getErrorStatus(error)
-        })
-
-        // Wait before retrying
+        this.logRetryAttempt(attempt, context, delayMs, error)
         await this.sleep(delayMs)
       }
     }
 
-    // Should never reach here due to throw in loop, but TypeScript needs this
     throw lastError || new Error(`Retry failed for ${context}`)
   }
 
@@ -508,7 +520,7 @@ export class GristClient {
 
   private buildKeyError(sanitizedMessage: string): Error {
     // Extract the key name from messages like "KeyError 'NonExistentColumn'"
-    const keyMatch = sanitizedMessage.match(/'([^']+)'/)
+    const keyMatch = sanitizedMessage.match(KEY_ERROR_REGEX)
     const keyName = keyMatch ? keyMatch[1] : 'unknown'
 
     return new Error(
@@ -545,33 +557,23 @@ export class GristClient {
     )
   }
 
-  private build400Error(sanitizedMessage: string): Error {
-    return new Error(
-      `Bad request (400): ${sanitizedMessage}\n\n` +
-        `The request was rejected by Grist. Common issues:\n` +
-        `- Invalid parameter format\n` +
-        `- Missing required fields\n` +
-        `- Malformed data structure\n\n` +
-        `Check the tool description for correct parameter formats.`
-    )
+  private build400Error(sanitizedMessage: string, method: HttpMethod, path: string): ApiError {
+    return new ApiError(400, method, path, sanitizedMessage, { baseUrl: this.baseUrl })
   }
 
-  private buildServerError(status: number): Error {
-    return new Error(
-      `Grist server error (${status}). This is a temporary server issue. ` +
-        `Try again in a few moments. If problem persists, check https://status.getgrist.com`
-    )
+  private buildServerError(status: number, method: HttpMethod, path: string): ApiError {
+    return new ApiError(status, method, path, 'Server error', { baseUrl: this.baseUrl })
   }
 
-  private handle500Error(path: string, sanitizedMessage: string): Error {
+  private handle500Error(path: string, sanitizedMessage: string, method: HttpMethod): Error {
     if (path.includes('/apply') && this.detect500EncodingError(sanitizedMessage)) {
       return this.buildEncodingError(sanitizedMessage)
     }
 
-    return this.buildServerError(500)
+    return this.buildServerError(500, method, path)
   }
 
-  private handle400Error(path: string, sanitizedMessage: string): Error {
+  private handle400Error(path: string, sanitizedMessage: string, method: HttpMethod): Error {
     if (this.detect400SqlError(path)) {
       return this.buildSqlError(sanitizedMessage)
     }
@@ -585,7 +587,7 @@ export class GristClient {
       return this.buildValidationError(sanitizedMessage)
     }
 
-    return this.build400Error(sanitizedMessage)
+    return this.build400Error(sanitizedMessage, method, path)
   }
 
   private handleError(error: unknown, method: HttpMethod, path: string): Error {
@@ -617,97 +619,63 @@ export class GristClient {
     // Sanitize the error message from API
     const sanitizedMessage = sanitizeMessage(userError || message)
 
-    // Status code handler lookup
-    const handlers: Record<number, () => Error> = {
-      401: () =>
-        new Error(
-          `Authentication failed. Check that GRIST_API_KEY is valid and not expired. ` +
-            `Get your API key from: ${this.baseUrl}/settings/keys`
-        ),
-      403: () =>
-        new Error(
-          `Permission denied for ${method} ${path}. API key lacks required access. ` +
-            `Try using grist_get_documents to see which documents you can access.`
-        ),
-      404: () => this.build404Error(path),
-      429: () =>
-        new Error(
-          `Rate limit exceeded. The Grist server is limiting your requests. ` +
-            `Wait 60 seconds before retrying this operation.`
-        ),
-      400: () => this.handle400Error(path, sanitizedMessage),
-      500: () => this.handle500Error(path, sanitizedMessage),
-      502: () => this.buildServerError(502),
-      503: () => this.buildServerError(503),
-      504: () => this.buildServerError(504)
+    if (!status) {
+      if (axiosError.code === 'ECONNABORTED') {
+        return new Error(
+          `Request timed out after ${API_TIMEOUT}ms. The operation took too long. ` +
+            `Try reducing the amount of data requested or check your network connection.`
+        )
+      }
+      return new Error(`Request failed: ${sanitizedMessage}. ${method} ${path} returned no status.`)
     }
 
-    if (status && handlers[status]) {
-      return handlers[status]()
+    // Special handling for 400 and 500 with sub-detection logic
+    if (status === 400) return this.handle400Error(path, sanitizedMessage, method)
+    if (status === 500) return this.handle500Error(path, sanitizedMessage, method)
+
+    // 404 → NotFoundError (structured)
+    if (status === 404) return this.build404Error(path)
+
+    // 429 → ApiError with retryAfter
+    if (status === 429) {
+      const retryAfterHeader = axiosError.response?.headers?.['retry-after']
+      const retryAfter = retryAfterHeader ? Number.parseInt(retryAfterHeader, 10) : undefined
+      return new ApiError(429, method, path, sanitizedMessage, {
+        baseUrl: this.baseUrl,
+        retryAfter
+      })
     }
 
-    if (axiosError.code === 'ECONNABORTED') {
-      return new Error(
-        `Request timed out after ${API_TIMEOUT}ms. The operation took too long. ` +
-          `Try reducing the amount of data requested or check your network connection.`
-      )
-    }
-
-    return new Error(
-      `Request failed: ${sanitizedMessage}. ${method} ${path} returned status ${status}.`
-    )
+    // All other status codes → ApiError
+    return new ApiError(status, method, path, sanitizedMessage, { baseUrl: this.baseUrl })
   }
 
   // Check more specific paths first (table before doc)
-  private build404Error(path: string): Error {
-    const tableMatch = path.match(/\/tables\/([^/]+)/)
-    const docMatch = path.match(/\/docs\/([^/]+)/)
-    const workspaceMatch = path.match(/\/workspaces\/([^/]+)/)
-    const orgMatch = path.match(/\/orgs\/([^/]+)/)
+  private build404Error(path: string): NotFoundError {
+    const tableMatch = path.match(TABLES_PATH_REGEX)
+    const docMatch = path.match(DOCS_PATH_REGEX)
+    const workspaceMatch = path.match(WORKSPACES_PATH_REGEX)
+    const orgMatch = path.match(ORGS_PATH_REGEX)
 
     // Check table errors FIRST (more specific than document)
-    if (tableMatch) {
-      const tableId = tableMatch[1]
-      return new Error(
-        `Table not found (ID: '${tableId}'). ` +
-          `Possible causes: invalid table ID (check spelling/case), table was deleted/renamed, or wrong document. ` +
-          `Use grist_get_tables to see available tables and verify ID matches exactly.`
-      )
+    if (tableMatch?.[1]) {
+      return new NotFoundError('table', tableMatch[1])
     }
 
-    if (docMatch) {
-      const docId = docMatch[1]
-      return new Error(
-        `Document not found (ID: '${docId}'). ` +
-          `Possible causes: invalid document ID, no access permission, or document was deleted. ` +
-          `Use grist_get_documents to see available documents and check API key has required permissions.`
-      )
+    if (docMatch?.[1]) {
+      return new NotFoundError('document', docMatch[1])
     }
 
-    if (workspaceMatch) {
-      const workspaceId = workspaceMatch[1]
-      return new Error(
-        `Workspace not found (ID: '${workspaceId}'). ` +
-          `Possible causes: invalid workspace ID, no access permission, or workspace was deleted. ` +
-          `Use grist_get_workspaces to see available workspaces and verify you have access.`
-      )
+    if (workspaceMatch?.[1]) {
+      return new NotFoundError('workspace', workspaceMatch[1])
     }
 
-    if (orgMatch) {
-      const orgId = orgMatch[1]
-      return new Error(
-        `Organization not found (ID: '${orgId}'). ` +
-          `Possible causes: invalid organization ID or no access permission. ` +
-          `Use grist_get_workspaces to see available organizations.`
-      )
+    if (orgMatch?.[1]) {
+      return new NotFoundError('organization', orgMatch[1])
     }
 
-    // Generic 404
-    return new Error(
-      `Resource not found at path: ${path}. ` +
-        `The requested resource does not exist or you don't have access. ` +
-        `Verify the resource ID is correct, check permissions, and use discovery tools (grist_get_workspaces, grist_get_documents, grist_get_tables).`
-    )
+    // Generic 404 — use path as resource identifier
+    return new NotFoundError('document', path)
   }
 
   getBaseUrl(): string {
@@ -750,7 +718,7 @@ export class GristClient {
     }
 
     // Extract document ID from path
-    const docMatch = path.match(/\/docs\/([^/]+)/)
+    const docMatch = path.match(DOCS_PATH_REGEX)
     if (!docMatch) {
       // Can't determine scope, clear all cache to be safe
       this.cache.clear()
@@ -773,94 +741,6 @@ export class GristClient {
   getCacheStats() {
     return this.cache.getStats()
   }
-}
-
-/**
- * Serializes a type-safe UserActionObject to the tuple format expected by Grist API.
- * This provides a clean boundary between type-safe action building and API wire format.
- *
- * @example
- * // Build action with full type safety
- * const action: BulkAddRecordAction = {
- *   action: 'BulkAddRecord',
- *   tableId: 'Contacts',
- *   rowIds: [null],
- *   columns: { Name: ['John'] }
- * }
- * // Serialize for API call
- * const tuple = serializeUserAction(action)
- * // tuple = ['BulkAddRecord', 'Contacts', [null], { Name: ['John'] }]
- */
-export function serializeUserAction(action: UserActionObject): UserActionTuple {
-  switch (action.action) {
-    // Record operations
-    case 'BulkAddRecord':
-      return ['BulkAddRecord', action.tableId, action.rowIds, action.columns]
-    case 'BulkUpdateRecord':
-      return ['BulkUpdateRecord', action.tableId, action.rowIds, action.columns]
-    case 'BulkRemoveRecord':
-      return ['BulkRemoveRecord', action.tableId, action.rowIds]
-    case 'UpdateRecord':
-      return ['UpdateRecord', action.tableId, action.rowId, action.fields]
-    case 'AddRecord':
-      return ['AddRecord', action.tableId, action.rowId, action.fields]
-
-    // Table operations
-    case 'AddTable':
-      return ['AddTable', action.tableName, action.columns]
-    case 'RenameTable':
-      return ['RenameTable', action.tableId, action.newTableId]
-    case 'RemoveTable':
-      return ['RemoveTable', action.tableId]
-
-    // Column operations
-    case 'AddColumn':
-      return ['AddColumn', action.tableId, action.colId, action.colInfo]
-    case 'AddHiddenColumn':
-      return ['AddHiddenColumn', action.tableId, action.colId, action.colInfo]
-    case 'ModifyColumn':
-      return ['ModifyColumn', action.tableId, action.colId, action.updates]
-    case 'RemoveColumn':
-      return ['RemoveColumn', action.tableId, action.colId]
-    case 'RenameColumn':
-      return ['RenameColumn', action.tableId, action.oldColId, action.newColId]
-
-    // Display formula operations
-    case 'SetDisplayFormula':
-      return ['SetDisplayFormula', action.tableId, action.colId, action.fieldRef, action.formula]
-
-    // Conditional formatting operations
-    case 'AddEmptyRule':
-      return ['AddEmptyRule', action.tableId, action.fieldRef, action.colRef]
-
-    // Page/Widget operations
-    case 'CreateViewSection':
-      return [
-        'CreateViewSection',
-        action.tableRef,
-        action.viewRef,
-        action.widgetType,
-        action.visibleCols,
-        action.title
-      ]
-
-    // Metadata table updates - serializes to 'UpdateRecord' for Grist API
-    case 'UpdateMetadata':
-      return ['UpdateRecord', action.metaTableId, action.rowId, action.updates]
-
-    default: {
-      // Exhaustiveness check - TypeScript will error if a case is missing
-      const _exhaustive: never = action
-      throw new Error(`Unknown action type: ${(_exhaustive as UserActionObject).action}`)
-    }
-  }
-}
-
-/**
- * Serializes multiple UserActionObjects to tuple format for batch API calls.
- */
-export function serializeUserActions(actions: UserActionObject[]): UserActionTuple[] {
-  return actions.map(serializeUserAction)
 }
 
 export type { RequestOptions, ValidatedResponse, HttpMethod, RequestBody }

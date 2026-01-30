@@ -11,7 +11,6 @@
 
 import { describe, expect, it } from 'vitest'
 import {
-  createNormalizer,
   deepEqual,
   normalizeValue,
   throwIfFailed,
@@ -79,28 +78,6 @@ describe('Domain Operations Base Utilities', () => {
     it('handles RefList arrays', () => {
       const result = normalizeValue([1, 2, 3], 'RefList:Table')
       expect(Array.isArray(result)).toBe(true)
-    })
-  })
-
-  // ===========================================================================
-  // createNormalizer
-  // ===========================================================================
-  describe('createNormalizer', () => {
-    it('returns a function', () => {
-      const normalizer = createNormalizer(new Map())
-      expect(typeof normalizer).toBe('function')
-    })
-
-    it('normalizes value when columnType is provided', () => {
-      const normalizer = createNormalizer(new Map([['Name', 'Text']]))
-      const result = normalizer('hello', 'Text')
-      expect(result).toBe('hello')
-    })
-
-    it('returns value unchanged when no columnType provided', () => {
-      const normalizer = createNormalizer(new Map())
-      const value = { complex: 'object' }
-      expect(normalizer(value)).toBe(value)
     })
   })
 

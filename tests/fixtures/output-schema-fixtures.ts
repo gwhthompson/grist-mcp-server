@@ -123,7 +123,7 @@ export const GetTablesFixtures = {
         id: 'Customers',
         columns: [
           {
-            id: 'Name',
+            colId: 'Name',
             label: 'Name',
             type: 'Text',
             isFormula: false,
@@ -133,7 +133,7 @@ export const GetTablesFixtures = {
             visibleColName: null
           },
           {
-            id: 'Email',
+            colId: 'Email',
             label: 'Email',
             type: 'Text',
             isFormula: false,

@@ -24,7 +24,7 @@ export class RateLimiter {
     }
   }
 
-  async schedule<T>(fn: () => Promise<T>): Promise<T> {
+  schedule<T>(fn: () => Promise<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       if (this.queue.length >= this.config.maxQueueSize) {
         reject(

@@ -1,7 +1,7 @@
 import type { z } from 'zod'
 import { ValidationError } from '../errors/index.js'
 
-export function createTypeGuard<T extends z.ZodType<any, any>>(
+export function createTypeGuard<T extends z.ZodTypeAny>(
   schema: T
 ): (value: unknown) => value is z.infer<T> {
   return (value: unknown): value is z.infer<T> => {
@@ -9,7 +9,7 @@ export function createTypeGuard<T extends z.ZodType<any, any>>(
   }
 }
 
-export function safeParse<T extends z.ZodType<any, any>>(
+export function safeParse<T extends z.ZodTypeAny>(
   schema: T,
   value: unknown
 ): { success: true; data: z.infer<T> } | { success: false; error: ValidationError } {

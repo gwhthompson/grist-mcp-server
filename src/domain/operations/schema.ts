@@ -27,28 +27,98 @@ import {
   buildRenameColumnAction,
   buildRenameTableAction
 } from '../../services/action-builder.js'
-import { serializeUserAction } from '../../services/grist-client.js'
+import { serializeUserAction } from '../../services/action-serializer.js'
 import type { ColumnMetadata } from '../../services/schema-cache.js'
 import type { DocId, TableId } from '../../types/advanced.js'
 import { toColId, toDocId, toTableId } from '../../types/advanced.js'
 import type { ApplyResponse } from '../../types.js'
 import { validateRetValues } from '../../validators/apply-response.js'
-import {
-  type AddColumnInput,
-  type AddColumnResult,
-  type CreateTableInput,
-  type CreateTableResult,
-  type DeleteTableResult,
-  type DomainColumn,
-  DomainColumnSchema,
-  type DomainTable,
-  DomainTableSchema,
-  type ModifyColumnInput,
-  type ModifyColumnResult,
-  type RemoveColumnResult,
-  type RenameColumnResult,
-  type RenameTableResult
-} from '../schemas/table.js'
+// =============================================================================
+// Domain Types (inlined from deleted domain/schemas/table.ts)
+// =============================================================================
+
+export interface DomainColumn {
+  tableId: string
+  colId: string
+  type: string
+  label?: string
+  isFormula: boolean
+  formula?: string
+  visibleCol?: number
+  widgetOptions?: Record<string, unknown>
+}
+
+export interface DomainTable {
+  docId: string
+  tableId: string
+  columns?: DomainColumn[]
+}
+
+export interface AddColumnInput {
+  colId: string
+  type: string
+  label?: string
+  isFormula?: boolean
+  formula?: string
+  visibleCol?: string | number
+  widgetOptions?: Record<string, unknown>
+}
+
+export interface ModifyColumnInput {
+  type?: string
+  label?: string
+  isFormula?: boolean
+  formula?: string
+  visibleCol?: string | number
+  widgetOptions?: Record<string, unknown>
+}
+
+export interface AddColumnResult {
+  entity: DomainColumn
+  verified: true
+  colRef: number
+}
+
+export interface ModifyColumnResult {
+  entity: DomainColumn
+  verified: true
+}
+
+export interface RemoveColumnResult {
+  tableId: string
+  colId: string
+  deleted: true
+  verified: true
+}
+
+export interface RenameColumnResult {
+  entity: DomainColumn
+  verified: true
+  oldColId: string
+}
+
+export interface CreateTableInput {
+  tableId: string
+  columns?: AddColumnInput[]
+}
+
+export interface CreateTableResult {
+  entity: DomainTable
+  verified: true
+}
+
+export interface RenameTableResult {
+  entity: DomainTable
+  verified: true
+  oldTableId: string
+}
+
+export interface DeleteTableResult {
+  tableId: string
+  deleted: true
+  verified: true
+}
+
 import { deepEqual, throwIfFailed } from './base.js'
 
 // =============================================================================
@@ -135,7 +205,7 @@ export async function addColumn(
   const colRef = retValue?.colRef ?? 0
 
   // Build the expected domain column
-  const writtenColumn: DomainColumn = DomainColumnSchema.parse({
+  const writtenColumn: DomainColumn = {
     tableId: tableIdStr,
     colId: input.colId,
     type: input.type,
@@ -144,7 +214,7 @@ export async function addColumn(
     formula: input.formula,
     visibleCol: typeof input.visibleCol === 'number' ? input.visibleCol : undefined,
     widgetOptions: input.widgetOptions
-  })
+  }
 
   // Invalidate cache
   ctx.schemaCache.invalidateCache(toDocId(docIdStr), tableIdBranded)
@@ -398,19 +468,19 @@ export async function renameColumn(
       })
     }
 
-    if (!newColumn) {
-      checks.push({
-        description: `New column ${newColId} should exist`,
-        passed: false,
-        expected: 'exists',
-        actual: null
-      })
-    } else {
+    if (newColumn) {
       checks.push({
         description: `New column ${newColId} exists`,
         passed: true,
         expected: 'exists',
         actual: newColumn
+      })
+    } else {
+      checks.push({
+        description: `New column ${newColId} should exist`,
+        passed: false,
+        expected: 'exists',
+        actual: null
       })
     }
 
@@ -459,10 +529,10 @@ export async function getTables(
   const tables: DomainTable[] = []
 
   for (const [tableId] of tableRefs) {
-    const table: DomainTable = DomainTableSchema.parse({
+    const table: DomainTable = {
       docId: docIdStr,
       tableId
-    })
+    }
 
     if (includeColumns) {
       table.columns = await getColumns(ctx, docIdStr, tableId)
@@ -493,10 +563,10 @@ export async function getTable(
     return null
   }
 
-  const table: DomainTable = DomainTableSchema.parse({
+  const table: DomainTable = {
     docId: docIdStr,
     tableId: tableIdStr
-  })
+  }
 
   if (includeColumns) {
     table.columns = await getColumns(ctx, docIdStr, tableIdStr)
@@ -678,19 +748,19 @@ export async function renameTable(
       })
     }
 
-    if (!newTable) {
-      checks.push({
-        description: `New table ${newTableIdStr} should exist`,
-        passed: false,
-        expected: 'exists',
-        actual: null
-      })
-    } else {
+    if (newTable) {
       checks.push({
         description: `New table ${newTableIdStr} exists`,
         passed: true,
         expected: 'exists',
         actual: newTable
+      })
+    } else {
+      checks.push({
+        description: `New table ${newTableIdStr} should exist`,
+        passed: false,
+        expected: 'exists',
+        actual: null
       })
     }
 
@@ -792,7 +862,7 @@ function apiColumnToDomain(tableId: string, col: ColumnMetadata): DomainColumn {
     }
   }
 
-  return DomainColumnSchema.parse({
+  return {
     tableId,
     colId: col.id,
     type: col.fields.type,
@@ -801,7 +871,7 @@ function apiColumnToDomain(tableId: string, col: ColumnMetadata): DomainColumn {
     formula: col.fields.formula || undefined,
     visibleCol: col.fields.visibleCol || undefined,
     widgetOptions
-  })
+  } satisfies DomainColumn
 }
 
 /**

@@ -40,11 +40,75 @@ export interface RegistrationStrategy {
   onError?: (error: Error, toolName: string) => boolean
 }
 
-export async function registerTool<TSchema extends z.ZodType<any, any>>(
+// Logging context for tool invocation
+interface ToolLogContext {
+  shouldLogCalls: boolean
+  shouldLogParams: boolean
+}
+
+/** Create logging context from environment variables */
+function createLogContext(): ToolLogContext {
+  const debugMode = process.env.GRIST_MCP_DEBUG_MODE === 'true'
+  return {
+    shouldLogCalls: debugMode || process.env.GRIST_MCP_LOG_TOOL_CALLS === 'true',
+    shouldLogParams:
+      debugMode ||
+      process.env.GRIST_MCP_LOG_TOOL_PARAMS === 'true' ||
+      process.env.DEBUG_MCP_PARAMS === 'true'
+  }
+}
+
+/** Log tool invocation if logging is enabled */
+function logToolInvocation(toolName: string, params: unknown, ctx: ToolLogContext): void {
+  if (ctx.shouldLogCalls) {
+    log.info('Tool invoked', {
+      tool: toolName,
+      params: ctx.shouldLogParams ? params : undefined
+    })
+  }
+  log.debug(`Tool called: ${toolName}`, { params })
+}
+
+/** Validate output against schema in development mode */
+function validateOutputSchema(
+  toolName: string,
+  result: { structuredContent?: unknown },
+  outputSchema?: z.ZodTypeAny
+): void {
+  if (process.env.NODE_ENV !== 'development') return
+  if (!outputSchema || !result.structuredContent) return
+
+  const validation = outputSchema.safeParse(result.structuredContent)
+  if (!validation.success) {
+    log.warn('Output schema validation failed', {
+      tool: toolName,
+      issues: validation.error.issues.slice(0, 3),
+      hint: 'Output does not match outputSchema - update schema or handler'
+    })
+  }
+}
+
+/** Log tool completion if logging is enabled */
+function logToolCompletion(toolName: string, duration: number, ctx: ToolLogContext): void {
+  if (ctx.shouldLogCalls) {
+    log.info('Tool completed', { tool: toolName, duration, success: true })
+  }
+}
+
+/** Log tool error */
+function logToolError(toolName: string, duration: number, error: unknown): void {
+  log.error(
+    'Tool failed',
+    { tool: toolName, duration, error: error instanceof Error ? error.message : String(error) },
+    error instanceof Error ? error : undefined
+  )
+}
+
+export function registerTool<TSchema extends z.ZodTypeAny>(
   server: McpServer,
   context: ToolContext,
   definition: ToolDefinition<TSchema>
-): Promise<ToolRegistrationResult> {
+): ToolRegistrationResult {
   const _startTime = Date.now()
 
   try {
@@ -59,66 +123,18 @@ export async function registerTool<TSchema extends z.ZodType<any, any>>(
     }
 
     const wrappedHandler = async (params: unknown) => {
-      const shouldLogCalls =
-        process.env.GRIST_MCP_DEBUG_MODE === 'true' ||
-        process.env.GRIST_MCP_LOG_TOOL_CALLS === 'true'
-      const shouldLogParams =
-        process.env.GRIST_MCP_DEBUG_MODE === 'true' ||
-        process.env.GRIST_MCP_LOG_TOOL_PARAMS === 'true' ||
-        process.env.DEBUG_MCP_PARAMS === 'true'
+      const logCtx = createLogContext()
       const startTime = Date.now()
 
-      if (shouldLogCalls) {
-        log.info('Tool invoked', {
-          tool: definition.name,
-          params: shouldLogParams ? params : undefined
-        })
-      }
-
-      log.debug(`Tool called: ${definition.name}`, { params })
+      logToolInvocation(definition.name, params, logCtx)
 
       try {
         const result = await definition.handler(context, params as z.infer<TSchema>)
-
-        // Development-mode output validation (MCP spec: "Servers MUST provide structured
-        // results that conform to this schema")
-        if (
-          process.env.NODE_ENV === 'development' &&
-          definition.outputSchema &&
-          result.structuredContent
-        ) {
-          const validation = definition.outputSchema.safeParse(result.structuredContent)
-          if (!validation.success) {
-            log.warn('Output schema validation failed', {
-              tool: definition.name,
-              issues: validation.error.issues.slice(0, 3), // First 3 issues
-              hint: 'Output does not match outputSchema - update schema or handler'
-            })
-          }
-        }
-
-        if (shouldLogCalls) {
-          const duration = Date.now() - startTime
-          log.info('Tool completed', {
-            tool: definition.name,
-            duration,
-            success: true
-          })
-        }
-
+        validateOutputSchema(definition.name, result, definition.outputSchema)
+        logToolCompletion(definition.name, Date.now() - startTime, logCtx)
         return result
       } catch (error) {
-        const duration = Date.now() - startTime
-        log.error(
-          'Tool failed',
-          {
-            tool: definition.name,
-            duration,
-            error: error instanceof Error ? error.message : String(error)
-          },
-          error instanceof Error ? error : undefined
-        )
-
+        logToolError(definition.name, Date.now() - startTime, error)
         throw error
       }
     }
@@ -140,12 +156,12 @@ export async function registerTool<TSchema extends z.ZodType<any, any>>(
   }
 }
 
-export async function registerToolsBatch(
+export function registerToolsBatch(
   server: McpServer,
   context: ToolContext,
   tools: ReadonlyArray<ToolDefinition>,
   strategy?: RegistrationStrategy
-): Promise<BatchRegistrationSummary> {
+): BatchRegistrationSummary {
   const startTime = Date.now()
   const results: ToolRegistrationResult[] = []
   const categoryCounts = new Map<ToolCategory, number>()
@@ -155,7 +171,7 @@ export async function registerToolsBatch(
   for (const tool of tools) {
     strategy?.beforeTool?.(tool.name)
 
-    const result = await registerTool(server, context, tool)
+    const result = registerTool(server, context, tool)
     results.push(result)
 
     if (result.success) {
@@ -191,49 +207,49 @@ export async function registerToolsBatch(
   return summary
 }
 
-export async function registerToolsByCategory(
+export function registerToolsByCategory(
   server: McpServer,
   context: ToolContext,
   tools: ReadonlyArray<ToolDefinition>,
   categories: ReadonlyArray<ToolCategory>,
   strategy?: RegistrationStrategy
-): Promise<BatchRegistrationSummary> {
+): BatchRegistrationSummary {
   const categorySet = new Set(categories)
   const filteredTools = tools.filter((tool) => categorySet.has(tool.category))
 
   return registerToolsBatch(server, context, filteredTools, strategy)
 }
 
-export async function registerToolsExcept(
+export function registerToolsExcept(
   server: McpServer,
   context: ToolContext,
   tools: ReadonlyArray<ToolDefinition>,
   excludedNames: ReadonlyArray<string>,
   strategy?: RegistrationStrategy
-): Promise<BatchRegistrationSummary> {
+): BatchRegistrationSummary {
   const excludedSet = new Set(excludedNames)
   const filteredTools = tools.filter((tool) => !excludedSet.has(tool.name))
 
   return registerToolsBatch(server, context, filteredTools, strategy)
 }
 
-export async function registerReadOnlyTools(
+export function registerReadOnlyTools(
   server: McpServer,
   context: ToolContext,
   tools: ReadonlyArray<ToolDefinition>,
   strategy?: RegistrationStrategy
-): Promise<BatchRegistrationSummary> {
+): BatchRegistrationSummary {
   const readOnlyTools = tools.filter((tool) => tool.annotations.readOnlyHint === true)
 
   return registerToolsBatch(server, context, readOnlyTools, strategy)
 }
 
-export async function registerNonDestructiveTools(
+export function registerNonDestructiveTools(
   server: McpServer,
   context: ToolContext,
   tools: ReadonlyArray<ToolDefinition>,
   strategy?: RegistrationStrategy
-): Promise<BatchRegistrationSummary> {
+): BatchRegistrationSummary {
   const safeTools = tools.filter((tool) => tool.annotations.destructiveHint !== true)
 
   return registerToolsBatch(server, context, safeTools, strategy)
@@ -392,27 +408,27 @@ export function getToolsByAnnotations(
 export function composeStrategies(...strategies: RegistrationStrategy[]): RegistrationStrategy {
   return {
     beforeBatch: (toolCount: number) => {
-      strategies.forEach((s) => {
+      for (const s of strategies) {
         s.beforeBatch?.(toolCount)
-      })
+      }
     },
 
     beforeTool: (toolName: string) => {
-      strategies.forEach((s) => {
+      for (const s of strategies) {
         s.beforeTool?.(toolName)
-      })
+      }
     },
 
     afterTool: (result: ToolRegistrationResult) => {
-      strategies.forEach((s) => {
+      for (const s of strategies) {
         s.afterTool?.(result)
-      })
+      }
     },
 
     afterBatch: (summary: BatchRegistrationSummary) => {
-      strategies.forEach((s) => {
+      for (const s of strategies) {
         s.afterBatch?.(summary)
-      })
+      }
     },
 
     onError: (error: Error, toolName: string) => {

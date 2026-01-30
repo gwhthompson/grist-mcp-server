@@ -6,17 +6,16 @@
  * this module validates VALUE validity against live Grist data.
  */
 
-import {
-  InvalidChoiceError,
-  InvalidChoiceListError,
-  InvalidReferenceError,
-  InvalidRefListError,
-  RowNotFoundError
-} from '../errors/DataIntegrityError.js'
+import { DataIntegrityError } from '../errors/DataIntegrityError.js'
 import type { CellValue } from '../schemas/api-responses.js'
 import type { ColumnMetadata, SchemaCache } from '../services/schema-cache.js'
 import { parseChoiceOptions } from '../services/schema-cache.js'
 import { type DocId, type TableId, toTableId } from '../types/advanced.js'
+import { validateRecordValues } from './column-type-validators.js'
+import { validateColumnExistence, validateWritableColumns } from './writable-columns.js'
+
+// Module-level regex for extracting table name from Ref/RefList type
+const REF_TYPE_REGEX = /^Ref(?:List)?:(.+)$/
 
 /**
  * Extracts the referenced table name from a Ref or RefList column type.
@@ -24,13 +23,13 @@ import { type DocId, type TableId, toTableId } from '../types/advanced.js'
  * @example getRefTableName('RefList:Orders') => 'Orders'
  */
 export function getRefTableName(columnType: string): string | null {
-  const match = columnType.match(/^Ref(?:List)?:(.+)$/)
+  const match = columnType.match(REF_TYPE_REGEX)
   return match?.[1] ?? null
 }
 
 /**
  * Validates that a Ref column value references an existing row.
- * @throws {InvalidReferenceError} if the row ID doesn't exist
+ * @throws {DataIntegrityError} with kind 'invalid_reference' if the row ID doesn't exist
  */
 export async function validateRefValue(
   value: number,
@@ -47,19 +46,19 @@ export async function validateRefValue(
   const validRowIds = await schemaCache.getRowIds(docId, refTableId)
 
   if (!validRowIds.has(value)) {
-    throw new InvalidReferenceError(
+    throw new DataIntegrityError('invalid_reference', tableId as string, {
       columnId,
       value,
-      refTableName,
-      tableId as string,
-      validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
-    )
+      refTableId: refTableName,
+      validRowIds:
+        validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
+    })
   }
 }
 
 /**
  * Validates that all RefList values reference existing rows.
- * @throws {InvalidRefListError} if any row IDs don't exist
+ * @throws {DataIntegrityError} with kind 'invalid_reflist' if any row IDs don't exist
  */
 export async function validateRefListValue(
   values: number[],
@@ -78,19 +77,19 @@ export async function validateRefListValue(
   const invalidValues = nonZeroValues.filter((id) => !validRowIds.has(id))
 
   if (invalidValues.length > 0) {
-    throw new InvalidRefListError(
+    throw new DataIntegrityError('invalid_reflist', tableId as string, {
       columnId,
       invalidValues,
-      refTableName,
-      tableId as string,
-      validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
-    )
+      refTableId: refTableName,
+      validRowIds:
+        validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
+    })
   }
 }
 
 /**
  * Validates that a Choice column value is in the allowed choices.
- * @throws {InvalidChoiceError} if the value is not in allowed choices
+ * @throws {DataIntegrityError} with kind 'invalid_choice' if the value is not in allowed choices
  */
 export function validateChoiceValue(
   value: string,
@@ -102,13 +101,17 @@ export function validateChoiceValue(
   if (value === '') return
 
   if (!allowedChoices.includes(value)) {
-    throw new InvalidChoiceError(columnId, value, allowedChoices, tableId as string)
+    throw new DataIntegrityError('invalid_choice', tableId as string, {
+      columnId,
+      value,
+      allowedChoices
+    })
   }
 }
 
 /**
  * Validates that all ChoiceList values are in the allowed choices.
- * @throws {InvalidChoiceListError} if any values are not in allowed choices
+ * @throws {DataIntegrityError} with kind 'invalid_choicelist' if any values are not in allowed choices
  */
 export function validateChoiceListValue(
   values: string[],
@@ -124,14 +127,18 @@ export function validateChoiceListValue(
   const invalidValues = nonEmptyValues.filter((v) => !allowedSet.has(v))
 
   if (invalidValues.length > 0) {
-    throw new InvalidChoiceListError(columnId, invalidValues, allowedChoices, tableId as string)
+    throw new DataIntegrityError('invalid_choicelist', tableId as string, {
+      columnId,
+      invalidValues,
+      allowedChoices
+    })
   }
 }
 
 /**
  * Validates that all provided row IDs exist in the table.
  * Used for update/delete operations.
- * @throws {RowNotFoundError} if any row IDs don't exist
+ * @throws {DataIntegrityError} with kind 'row_not_found' if any row IDs don't exist
  */
 export async function validateRowIdsExist(
   rowIds: number[],
@@ -143,7 +150,9 @@ export async function validateRowIdsExist(
   const invalidRowIds = rowIds.filter((id) => !validRowIds.has(id))
 
   if (invalidRowIds.length > 0) {
-    throw new RowNotFoundError(invalidRowIds, tableId as string)
+    throw new DataIntegrityError('row_not_found', tableId as string, {
+      rowIds: invalidRowIds
+    })
   }
 }
 
@@ -152,9 +161,7 @@ export async function validateRowIdsExist(
  */
 export interface DataIntegrityValidationResult {
   valid: boolean
-  errors: Array<
-    InvalidReferenceError | InvalidRefListError | InvalidChoiceError | InvalidChoiceListError
-  >
+  errors: DataIntegrityError[]
 }
 
 /**
@@ -193,7 +200,7 @@ async function prefetchRowIds(
 
 /**
  * Validates a Ref value against pre-fetched row IDs.
- * @throws {InvalidReferenceError} if the row ID doesn't exist
+ * @throws {DataIntegrityError} with kind 'invalid_reference' if the row ID doesn't exist
  */
 function validateRefValueWithPrefetch(
   value: number,
@@ -206,19 +213,19 @@ function validateRefValueWithPrefetch(
   if (value === 0) return
 
   if (!validRowIds.has(value)) {
-    throw new InvalidReferenceError(
+    throw new DataIntegrityError('invalid_reference', tableId as string, {
       columnId,
       value,
-      refTableName,
-      tableId as string,
-      validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
-    )
+      refTableId: refTableName,
+      validRowIds:
+        validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
+    })
   }
 }
 
 /**
  * Validates RefList values against pre-fetched row IDs.
- * @throws {InvalidRefListError} if any row IDs don't exist
+ * @throws {DataIntegrityError} with kind 'invalid_reflist' if any row IDs don't exist
  */
 function validateRefListValueWithPrefetch(
   values: number[],
@@ -234,13 +241,107 @@ function validateRefListValueWithPrefetch(
   const invalidValues = nonZeroValues.filter((id) => !validRowIds.has(id))
 
   if (invalidValues.length > 0) {
-    throw new InvalidRefListError(
+    throw new DataIntegrityError('invalid_reflist', tableId as string, {
       columnId,
       invalidValues,
-      refTableName,
-      tableId as string,
-      validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
-    )
+      refTableId: refTableName,
+      validRowIds:
+        validRowIds.size <= 100 ? Array.from(validRowIds).sort((a, b) => a - b) : undefined
+    })
+  }
+}
+
+/**
+ * Validates a Ref column value against pre-fetched row IDs.
+ */
+function validateRefColumn(
+  value: CellValue,
+  colId: string,
+  columnType: string,
+  tableId: TableId,
+  rowIdsByTable: Map<string, Set<number>>
+): void {
+  if (typeof value !== 'number') return
+  const refTableName = getRefTableName(columnType)
+  if (!refTableName) return
+  const validRowIds = rowIdsByTable.get(refTableName)
+  if (validRowIds) {
+    validateRefValueWithPrefetch(value, colId, refTableName, tableId, validRowIds)
+  }
+}
+
+/**
+ * Validates a RefList column value against pre-fetched row IDs.
+ */
+function validateRefListColumn(
+  value: CellValue,
+  colId: string,
+  columnType: string,
+  tableId: TableId,
+  rowIdsByTable: Map<string, Set<number>>
+): void {
+  if (!Array.isArray(value)) return
+  const refTableName = getRefTableName(columnType)
+  if (!refTableName) return
+  const validRowIds = rowIdsByTable.get(refTableName)
+  if (validRowIds) {
+    const rowIds = value[0] === 'L' ? (value.slice(1) as number[]) : (value as number[])
+    validateRefListValueWithPrefetch(rowIds, colId, refTableName, tableId, validRowIds)
+  }
+}
+
+/**
+ * Validates a Choice column value against allowed choices.
+ */
+function validateChoiceColumn(
+  value: CellValue,
+  colId: string,
+  column: ColumnMetadata,
+  tableId: TableId
+): void {
+  if (typeof value !== 'string') return
+  const choiceOptions = parseChoiceOptions(column.fields.widgetOptions)
+  if (choiceOptions?.choices && choiceOptions.choices.length > 0) {
+    validateChoiceValue(value, colId, choiceOptions.choices, tableId)
+  }
+}
+
+/**
+ * Validates a ChoiceList column value against allowed choices.
+ */
+function validateChoiceListColumn(
+  value: CellValue,
+  colId: string,
+  column: ColumnMetadata,
+  tableId: TableId
+): void {
+  if (!Array.isArray(value)) return
+  const choiceOptions = parseChoiceOptions(column.fields.widgetOptions)
+  if (choiceOptions?.choices && choiceOptions.choices.length > 0) {
+    const choices = value[0] === 'L' ? (value.slice(1) as string[]) : (value as string[])
+    validateChoiceListValue(choices, colId, choiceOptions.choices, tableId)
+  }
+}
+
+/**
+ * Dispatches validation to the appropriate type-specific validator.
+ */
+function validateColumnValue(
+  colId: string,
+  value: CellValue,
+  columnType: string,
+  column: ColumnMetadata,
+  tableId: TableId,
+  rowIdsByTable: Map<string, Set<number>>
+): void {
+  if (columnType.startsWith('Ref:')) {
+    validateRefColumn(value, colId, columnType, tableId, rowIdsByTable)
+  } else if (columnType.startsWith('RefList:')) {
+    validateRefListColumn(value, colId, columnType, tableId, rowIdsByTable)
+  } else if (columnType === 'Choice') {
+    validateChoiceColumn(value, colId, column, tableId)
+  } else if (columnType === 'ChoiceList') {
+    validateChoiceListColumn(value, colId, column, tableId)
   }
 }
 
@@ -257,61 +358,15 @@ function validateRecordWithPrefetch(
   const errors: DataIntegrityValidationResult['errors'] = []
 
   for (const [colId, value] of Object.entries(record)) {
-    // Skip null values - they're always valid
     if (value === null) continue
 
     const column = columns.find((c) => c.id === colId)
     if (!column) continue
 
-    const columnType = column.fields.type
-
     try {
-      // Ref validation using pre-fetched row IDs
-      if (columnType.startsWith('Ref:') && typeof value === 'number') {
-        const refTableName = getRefTableName(columnType)
-        if (refTableName) {
-          const validRowIds = rowIdsByTable.get(refTableName)
-          if (validRowIds) {
-            validateRefValueWithPrefetch(value, colId, refTableName, tableId, validRowIds)
-          }
-        }
-      }
-
-      // RefList validation using pre-fetched row IDs
-      if (columnType.startsWith('RefList:') && Array.isArray(value)) {
-        const refTableName = getRefTableName(columnType)
-        if (refTableName) {
-          const validRowIds = rowIdsByTable.get(refTableName)
-          if (validRowIds) {
-            const rowIds = value[0] === 'L' ? (value.slice(1) as number[]) : (value as number[])
-            validateRefListValueWithPrefetch(rowIds, colId, refTableName, tableId, validRowIds)
-          }
-        }
-      }
-
-      // Choice validation (sync - no API call needed)
-      if (columnType === 'Choice' && typeof value === 'string') {
-        const choiceOptions = parseChoiceOptions(column.fields.widgetOptions)
-        if (choiceOptions?.choices && choiceOptions.choices.length > 0) {
-          validateChoiceValue(value, colId, choiceOptions.choices, tableId)
-        }
-      }
-
-      // ChoiceList validation (sync - no API call needed)
-      if (columnType === 'ChoiceList' && Array.isArray(value)) {
-        const choiceOptions = parseChoiceOptions(column.fields.widgetOptions)
-        if (choiceOptions?.choices && choiceOptions.choices.length > 0) {
-          const choices = value[0] === 'L' ? (value.slice(1) as string[]) : (value as string[])
-          validateChoiceListValue(choices, colId, choiceOptions.choices, tableId)
-        }
-      }
+      validateColumnValue(colId, value, column.fields.type, column, tableId, rowIdsByTable)
     } catch (error) {
-      if (
-        error instanceof InvalidReferenceError ||
-        error instanceof InvalidRefListError ||
-        error instanceof InvalidChoiceError ||
-        error instanceof InvalidChoiceListError
-      ) {
+      if (error instanceof DataIntegrityError) {
         errors.push(error)
       } else {
         throw error
@@ -357,7 +412,7 @@ export async function validateRecordDataIntegrity(
  * Pre-fetches row IDs once for all Ref tables, then validates each record.
  * Stops at first error for fail-fast behavior.
  *
- * @throws First error encountered (InvalidReferenceError, InvalidChoiceError, etc.)
+ * @throws First DataIntegrityError encountered
  */
 export async function validateRecordsDataIntegrity(
   records: Record<string, CellValue>[],
@@ -384,7 +439,7 @@ export async function validateRecordsDataIntegrity(
  * Pre-fetches row IDs once for all Ref tables, then validates each record.
  * Only validates the fields property if present.
  *
- * @throws First error encountered (InvalidReferenceError, InvalidChoiceError, etc.)
+ * @throws First DataIntegrityError encountered
  */
 export async function validateUpsertRecordsDataIntegrity(
   records: Array<{ require?: Record<string, CellValue>; fields?: Record<string, CellValue> }>,
@@ -413,6 +468,73 @@ export async function validateUpsertRecordsDataIntegrity(
       if (!result.valid && result.errors.length > 0) {
         throw result.errors[0]
       }
+    }
+  }
+}
+
+// =============================================================================
+// Record Validation (structural + type checks)
+// =============================================================================
+
+/**
+ * Validates a single record against column metadata.
+ * Checks for column existence, formula columns, and type mismatches.
+ * @throws {NotFoundError} If record references non-existent columns
+ * @throws {FormulaColumnWriteError} If record contains formula columns
+ * @throws {ColumnValidationError} If record contains type mismatches
+ */
+export function validateRecord(
+  record: Record<string, CellValue>,
+  columns: ColumnMetadata[],
+  tableId?: string
+): void {
+  // Check column existence first for clearer error messages
+  if (tableId) {
+    validateColumnExistence(record, columns, tableId)
+  }
+  validateWritableColumns(record, columns)
+  const validationErrors = validateRecordValues(record, columns)
+  if (validationErrors.length > 0) {
+    throw validationErrors[0]
+  }
+}
+
+/**
+ * Validates multiple records against column metadata.
+ * Stops at first error for fail-fast behavior.
+ * @throws {NotFoundError} If any record references non-existent columns
+ * @throws {FormulaColumnWriteError} If any record contains formula columns
+ * @throws {ColumnValidationError} If any record contains type mismatches
+ */
+export function validateRecords(
+  records: Record<string, CellValue>[],
+  columns: ColumnMetadata[],
+  tableId?: string
+): void {
+  for (const record of records) {
+    validateRecord(record, columns, tableId)
+  }
+}
+
+/**
+ * Validates upsert records where fields are optional.
+ * Only validates the fields property if present.
+ * @throws {NotFoundError} If any record.fields references non-existent columns
+ * @throws {FormulaColumnWriteError} If any record.fields contains formula columns
+ * @throws {ColumnValidationError} If any record.fields contains type mismatches
+ */
+export function validateUpsertRecords(
+  records: Array<{ require?: Record<string, CellValue>; fields?: Record<string, CellValue> }>,
+  columns: ColumnMetadata[],
+  tableId?: string
+): void {
+  for (const record of records) {
+    if (record.fields) {
+      validateRecord(record.fields, columns, tableId)
+    }
+    // Also validate require fields for column existence
+    if (record.require && tableId) {
+      validateColumnExistence(record.require, columns, tableId)
     }
   }
 }

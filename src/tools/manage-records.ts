@@ -32,14 +32,17 @@ import {
   ResponseFormatSchema,
   TableIdSchema
 } from '../schemas/common.js'
+import { normalizeRecordOperation } from '../schemas/normalization.js'
 import { toDocId, toTableId } from '../types/advanced.js'
 import type { UpsertResponse } from '../types.js'
+import { log } from '../utils/logger.js'
 import {
+  validateRecords,
   validateRecordsDataIntegrity,
   validateRowIdsExist,
+  validateUpsertRecords,
   validateUpsertRecordsDataIntegrity
 } from '../validators/data-integrity-validators.js'
-import { validateRecords, validateUpsertRecords } from '../validators/record-validator.js'
 import { defineBatchTool } from './factory/index.js'
 import { nextSteps } from './utils/next-steps.js'
 
@@ -130,7 +133,11 @@ const RecordOperationSchema = z.discriminatedUnion('action', [
 /** Main schema for grist_manage_records */
 export const ManageRecordsSchema = z.strictObject({
   docId: DocIdSchema,
-  operations: jsonSafeArray(RecordOperationSchema, { min: 1, max: 10 }),
+  operations: jsonSafeArray(RecordOperationSchema, {
+    min: 1,
+    max: 10,
+    normalize: normalizeRecordOperation
+  }),
   response_format: ResponseFormatSchema
 })
 
@@ -151,7 +158,7 @@ interface RecordsResponse {
 /**
  * Execute a single record operation.
  */
-async function executeSingleOperation(
+function executeSingleOperation(
   ctx: ToolContext,
   docId: string,
   tableId: string,
@@ -398,8 +405,13 @@ async function findAffectedRecordIds(
       for (const rec of response.records || []) {
         allIds.add(rec.id)
       }
-    } catch {
-      // Continue with other records if query fails
+    } catch (error) {
+      // Log and continue - batch operations should not fail due to single query error
+      log.debug(
+        'Record lookup query failed',
+        { docId, tableId, require: record.require },
+        error instanceof Error ? error : undefined
+      )
     }
   }
 
@@ -524,8 +536,11 @@ export const MANAGE_RECORDS_TOOL = defineBatchTool<
     }
   },
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async afterExecute(result, params, _ctx) {
-    const addResults = result.results.filter((r) => r.action === 'add' && r.recordIds?.length)
+    const addResults = result.results.filter(
+      (r) => r.action === 'add' && (r.recordIds?.length ?? 0) > 0
+    )
     const updateResults = result.results.filter((r) => r.action === 'update')
     const deleteResults = result.results.filter((r) => r.action === 'delete')
     const firstAdd = addResults[0]
@@ -540,7 +555,7 @@ export const MANAGE_RECORDS_TOOL = defineBatchTool<
     } else if (result.success) {
       builder
         .addIf(
-          !!firstAdd?.recordIds?.length,
+          (firstAdd?.recordIds?.length ?? 0) > 0,
           `Use grist_get_records with docId="${params.docId}" and tableId="${firstAdd?.tableId}" to verify added records`
         )
         .addIf(updateResults.length > 0, 'Use grist_get_records to verify updated data')
@@ -559,7 +574,7 @@ export const MANAGE_RECORDS_TOOL = defineBatchTool<
 
   docs: {
     overview:
-      'CRUD for records: add, update, delete, upsert. Batched operations execute sequentially for cross-table dependencies. Use natural formats (no "L" prefix for lists).',
+      'CRUD for records: add, update, delete, upsert. Batched operations execute sequentially for cross-table dependencies. Use natural formats (no "L" prefix for lists). Update accepts both canonical {id, fields: {...}} and flat {id, Name: "val"} record shapes.',
     parameters:
       'DATA TYPES: Text="string", Numeric=42, Bool=true, Date="2024-03-15", DateTime="2024-03-15T14:30:00Z", Choice="Option1", ChoiceList=["a","b"], Ref=42 (row ID), RefList=[1,2]. Never use "L" prefix.',
     examples: [
@@ -617,7 +632,7 @@ export const MANAGE_RECORDS_TOOL = defineBatchTool<
   }
 })
 
-export async function manageRecords(context: ToolContext, params: ManageRecordsInput) {
+export function manageRecords(context: ToolContext, params: ManageRecordsInput) {
   return MANAGE_RECORDS_TOOL.handler(context, params)
 }
 

@@ -7,28 +7,27 @@
  * - Config: configure_widget
  */
 
-import { z } from 'zod'
 import { reorderPages as reorderPagesOp } from '../domain/operations/pages.js'
 import type { ToolContext, ToolDefinition } from '../registry/types.js'
 import { ApplyResponseSchema } from '../schemas/api-responses.js'
-import {
-  createBatchOutputSchema,
-  type GenericBatchResponse,
-  type GenericOperationResult,
-  GenericOperationResultSchema
+import type {
+  GenericBatchResponse,
+  GenericOperationResult
 } from '../schemas/batch-operation-schemas.js'
-import { DocIdSchema, jsonSafe, jsonSafeArray, ResponseFormatSchema } from '../schemas/common.js'
+import {
+  type ManagePagesInput,
+  ManagePagesOutputSchema,
+  ManagePagesSchema,
+  type PageOperation
+} from '../schemas/page-operations.js'
 import {
   buildLinkActions,
   executeCreatePage,
   executeGetLayout,
   executeSetLayout,
-  LayoutNodeSchema,
-  LinkSchema,
   type ResolvedLink,
   resolveLink,
   type WidgetId,
-  WidgetIdSchema,
   WidgetRegistry
 } from '../services/declarative-layout/index.js'
 import type { WidgetInfo as LinkWidgetInfo } from '../services/declarative-layout/link-resolver.js'
@@ -48,160 +47,34 @@ import { defineBatchTool } from './factory/index.js'
 import { fetchWidgetTableMetadata } from './pages/shared.js'
 import { nextSteps } from './utils/next-steps.js'
 
+export {
+  type ManagePagesInput,
+  ManagePagesSchema,
+  type PageOperation,
+  PageRefSchema
+} from '../schemas/page-operations.js'
+
 // =============================================================================
-// Batch State Management
+// Batch Context
 // =============================================================================
 
-/**
- * Batch state is used to track page renames and cache page info within a single batch execution.
- * Since the factory pattern doesn't have built-in state, we use module-level state
- * that gets reset when beforeExecute runs.
- */
-let batchPageNameMap = new Map<string, string>()
-let batchPageInfoCache = new Map<string, { id: number; viewRef: number; pagePos: number }>()
-
-function resetBatchState(): void {
-  batchPageNameMap = new Map()
-  batchPageInfoCache = new Map()
+/** Per-batch context tracking page renames and caching page info. */
+interface PagesBatchContext {
+  /** Maps old page name → new name for in-flight renames */
+  readonly renames: Map<string, string>
+  /** Caches page info lookups within the batch */
+  readonly pageInfo: Map<string, { id: number; viewRef: number; pagePos: number }>
 }
 
-// =============================================================================
-// Shared Schemas
-// =============================================================================
+function createBatchContext(): PagesBatchContext {
+  return { renames: new Map(), pageInfo: new Map() }
+}
 
-/** Page reference: name (string) or viewId (number) */
-export const PageRefSchema = z
-  .union([z.string().min(1), z.number().int().positive()])
-  .meta({ id: 'PageRef' })
-
-// =============================================================================
-// Layout Operation Schemas
-// =============================================================================
-
-const CreatePageOperationSchema = z
-  .object({
-    action: z.literal('create_page'),
-    name: z.string().min(1).max(100).describe('Page name (not "title")'),
-    layout: LayoutNodeSchema.describe(
-      'Layout: {table: "TableName"} for single widget, or {cols: [...]} / {rows: [...]} for multi-widget'
-    )
-  })
-  .describe('create page')
-
-const SetLayoutOperationSchema = z
-  .object({
-    action: z.literal('set_layout'),
-    page: PageRefSchema.describe('name or viewId'),
-    layout: LayoutNodeSchema,
-    remove: jsonSafe(z.array(z.number().int().positive()))
-      .optional()
-      .describe('sectionIds to remove')
-  })
-  .describe('update layout')
-
-const GetLayoutOperationSchema = z
-  .object({
-    action: z.literal('get_layout'),
-    page: PageRefSchema.describe('name or viewId')
-  })
-  .describe('get layout')
-
-// =============================================================================
-// Metadata Operation Schemas
-// =============================================================================
-
-const RenamePageOperationSchema = z
-  .object({
-    action: z.literal('rename_page'),
-    page: z.string().min(1),
-    newName: z.string().min(1).max(100)
-  })
-  .describe('rename page')
-
-const DeletePageOperationSchema = z
-  .object({
-    action: z.literal('delete_page'),
-    page: z.string().min(1),
-    deleteData: z.boolean().default(false).describe('also delete tables')
-  })
-  .describe('delete page')
-
-const ReorderPagesOperationSchema = z
-  .object({
-    action: z.literal('reorder_pages'),
-    order: jsonSafe(z.array(z.string().min(1)).min(1)).describe('page names in order')
-  })
-  .describe('reorder pages')
-
-// =============================================================================
-// Config Operation Schema
-// =============================================================================
-
-const ConfigureWidgetOperationSchema = z
-  .object({
-    action: z.literal('configure_widget'),
-    page: z.string().min(1),
-    widget: z.string().min(1).describe('widget title'),
-    title: z.string().optional(),
-    sortBy: z
-      .array(z.union([z.number(), z.string()]))
-      .optional()
-      .describe('e.g. ["-Date", "Amount"]')
-  })
-  .describe('configure widget')
-
-// =============================================================================
-// Link Operation Schema (Architecture B)
-// =============================================================================
-
-/** Link specification for connecting two widgets */
-const LinkSpecSchema = z
-  .object({
-    source: WidgetIdSchema,
-    target: WidgetIdSchema,
-    link: LinkSchema
-  })
-  .describe('widget link spec')
-
-/** Architecture B: Configure widget links using sectionIds from create_page response */
-const LinkWidgetsOperationSchema = z
-  .object({
-    action: z.literal('link_widgets'),
-    viewId: z.number().int().positive(),
-    links: jsonSafeArray(LinkSpecSchema, { min: 1, max: 20 })
-  })
-  .describe('link widgets')
-
-// =============================================================================
-// Discriminated Union and Main Schema
-// =============================================================================
-
-const PageOperationSchema = z.discriminatedUnion('action', [
-  CreatePageOperationSchema,
-  SetLayoutOperationSchema,
-  GetLayoutOperationSchema,
-  RenamePageOperationSchema,
-  DeletePageOperationSchema,
-  ReorderPagesOperationSchema,
-  ConfigureWidgetOperationSchema,
-  LinkWidgetsOperationSchema
-])
-
-export const ManagePagesSchema = z.strictObject({
-  docId: DocIdSchema,
-  operations: jsonSafeArray(PageOperationSchema, { min: 1, max: 20 }),
-  response_format: ResponseFormatSchema
-})
-
-export type ManagePagesInput = z.infer<typeof ManagePagesSchema>
-export type PageOperation = z.infer<typeof PageOperationSchema>
-
-// =============================================================================
-// Response Types (using shared interfaces from batch-operation-schemas.ts)
-// =============================================================================
-
-// OperationResult → GenericOperationResult
-// GenericBatchResponse → GenericBatchResponse
+/**
+ * Module-level batch context, reset before each batch execution.
+ * Threaded explicitly through the operation chain as a parameter.
+ */
+let batchContext: PagesBatchContext = createBatchContext()
 
 // =============================================================================
 // Helper Functions for Operations
@@ -210,26 +83,27 @@ export type PageOperation = z.infer<typeof PageOperationSchema>
 /**
  * Execute a single page operation.
  */
-async function executeSingleOperation(
+function executeSingleOperation(
   ctx: ToolContext,
   docId: string,
-  op: PageOperation
+  op: PageOperation,
+  batch: PagesBatchContext
 ): Promise<GenericOperationResult> {
   switch (op.action) {
     case 'create_page':
       return executeCreatePageOp(ctx, docId, op)
     case 'set_layout':
-      return executeSetLayoutOp(ctx, docId, op)
+      return executeSetLayoutOp(ctx, docId, op, batch)
     case 'get_layout':
-      return executeGetLayoutOp(ctx, docId, op)
+      return executeGetLayoutOp(ctx, docId, op, batch)
     case 'rename_page':
-      return executeRenamePage(ctx, docId, op)
+      return executeRenamePage(ctx, docId, op, batch)
     case 'delete_page':
-      return executeDeletePage(ctx, docId, op)
+      return executeDeletePage(ctx, docId, op, batch)
     case 'reorder_pages':
       return executeReorderPagesOp(ctx, docId, op)
     case 'configure_widget':
-      return executeConfigureWidget(ctx, docId, op)
+      return executeConfigureWidget(ctx, docId, op, batch)
     case 'link_widgets':
       return executeLinkWidgets(ctx, docId, op)
   }
@@ -280,13 +154,16 @@ async function executeCreatePageOp(
 async function executeSetLayoutOp(
   ctx: ToolContext,
   docId: string,
-  op: Extract<PageOperation, { action: 'set_layout' }>
+  op: Extract<PageOperation, { action: 'set_layout' }>,
+  batch: PagesBatchContext
 ): Promise<GenericOperationResult> {
   const { client } = ctx
 
   // Resolve page
   const viewId =
-    typeof op.page === 'number' ? op.page : (await resolvePageName(client, docId, op.page)).viewRef
+    typeof op.page === 'number'
+      ? op.page
+      : (await resolvePageName(client, docId, op.page, batch)).viewRef
 
   const result = await executeSetLayout(
     client,
@@ -344,13 +221,16 @@ async function executeSetLayoutOp(
 async function executeGetLayoutOp(
   ctx: ToolContext,
   docId: string,
-  op: Extract<PageOperation, { action: 'get_layout' }>
+  op: Extract<PageOperation, { action: 'get_layout' }>,
+  batch: PagesBatchContext
 ): Promise<GenericOperationResult> {
   const { client } = ctx
 
   // Resolve page
   const viewId =
-    typeof op.page === 'number' ? op.page : (await resolvePageName(client, docId, op.page)).viewRef
+    typeof op.page === 'number'
+      ? op.page
+      : (await resolvePageName(client, docId, op.page, batch)).viewRef
 
   const result = await executeGetLayout(client, docId, viewId)
 
@@ -371,14 +251,15 @@ async function executeGetLayoutOp(
 async function executeRenamePage(
   ctx: ToolContext,
   docId: string,
-  op: Extract<PageOperation, { action: 'rename_page' }>
+  op: Extract<PageOperation, { action: 'rename_page' }>,
+  batch: PagesBatchContext
 ): Promise<GenericOperationResult> {
   const { client } = ctx
-  const page = await resolvePageName(client, docId, op.page)
+  const page = await resolvePageName(client, docId, op.page, batch)
 
-  // Track rename in batch state
-  batchPageNameMap.set(op.page, op.newName)
-  batchPageInfoCache.set(op.newName, page)
+  // Track rename in batch context
+  batch.renames.set(op.page, op.newName)
+  batch.pageInfo.set(op.newName, page)
 
   await client.post<ApplyResponse>(
     `/docs/${docId}/apply`,
@@ -402,10 +283,11 @@ async function executeRenamePage(
 async function executeDeletePage(
   ctx: ToolContext,
   docId: string,
-  op: Extract<PageOperation, { action: 'delete_page' }>
+  op: Extract<PageOperation, { action: 'delete_page' }>,
+  batch: PagesBatchContext
 ): Promise<GenericOperationResult> {
   const { client } = ctx
-  const page = await resolvePageName(client, docId, op.page)
+  const page = await resolvePageName(client, docId, op.page, batch)
   const actions: Array<['BulkRemoveRecord' | 'RemoveTable', string, number[] | string]> = [
     ['BulkRemoveRecord', '_grist_Pages', [page.id]]
   ]
@@ -470,10 +352,11 @@ async function executeReorderPagesOp(
 async function executeConfigureWidget(
   ctx: ToolContext,
   docId: string,
-  op: Extract<PageOperation, { action: 'configure_widget' }>
+  op: Extract<PageOperation, { action: 'configure_widget' }>,
+  batch: PagesBatchContext
 ): Promise<GenericOperationResult> {
   const { client } = ctx
-  const page = await resolvePageName(client, docId, op.page)
+  const page = await resolvePageName(client, docId, op.page, batch)
   const sectionId = await resolveWidgetNameToSectionId(client, docId, page.viewRef, op.widget)
 
   const service = new ViewSectionService(client)
@@ -678,10 +561,11 @@ async function fetchWidgetsOnPage(
 async function resolvePageName(
   client: ToolContext['client'],
   docId: string,
-  pageName: string
+  pageName: string,
+  batch: PagesBatchContext
 ): Promise<{ id: number; viewRef: number; pagePos: number }> {
   // Check for in-flight rename
-  const newNameFromRename = batchPageNameMap.get(pageName)
+  const newNameFromRename = batch.renames.get(pageName)
   if (newNameFromRename) {
     throw new Error(
       `Page "${pageName}" was renamed to "${newNameFromRename}" in an earlier operation. ` +
@@ -690,15 +574,50 @@ async function resolvePageName(
   }
 
   // Check cache
-  const cached = batchPageInfoCache.get(pageName)
+  const cached = batch.pageInfo.get(pageName)
   if (cached) {
     return cached
   }
 
   // Fetch from database
   const page = await getPageByName(client, docId, pageName)
-  batchPageInfoCache.set(pageName, page)
+  batch.pageInfo.set(pageName, page)
   return page
+}
+
+/** Parse a sort spec string into its components */
+interface ParsedSortItem {
+  isDescending: boolean
+  columnPart: string
+  flagsPart: string
+}
+
+function parseSortString(item: string): ParsedSortItem {
+  const isDescending = item.startsWith('-')
+  const withoutPrefix = isDescending ? item.slice(1) : item
+  const colonIndex = withoutPrefix.indexOf(':')
+
+  return {
+    isDescending,
+    columnPart: colonIndex >= 0 ? withoutPrefix.slice(0, colonIndex) : withoutPrefix,
+    flagsPart: colonIndex >= 0 ? withoutPrefix.slice(colonIndex) : ''
+  }
+}
+
+/** Format a resolved column ref with sign and flags */
+function formatSortResult(
+  colRef: number,
+  isDescending: boolean,
+  flagsPart: string
+): number | string {
+  const signedColRef = isDescending ? -colRef : colRef
+  return flagsPart ? `${signedColRef}${flagsPart}` : signedColRef
+}
+
+/** Check if a string represents a numeric column ref */
+function isNumericColumnRef(columnPart: string): boolean {
+  const numericValue = Number(columnPart)
+  return !Number.isNaN(numericValue) && columnPart.trim() !== ''
 }
 
 async function resolveSortSpec(
@@ -712,33 +631,22 @@ async function resolveSortSpec(
   for (const item of sortSpec) {
     if (typeof item === 'number') {
       resolved.push(item)
-    } else {
-      const isDescending = item.startsWith('-')
-      const withoutPrefix = isDescending ? item.slice(1) : item
-      const colonIndex = withoutPrefix.indexOf(':')
-      const columnPart = colonIndex >= 0 ? withoutPrefix.slice(0, colonIndex) : withoutPrefix
-      const flagsPart = colonIndex >= 0 ? withoutPrefix.slice(colonIndex) : ''
+      continue
+    }
 
-      const numericValue = Number(columnPart)
-      if (!Number.isNaN(numericValue) && columnPart.trim() !== '') {
-        const colId = isDescending ? -numericValue : numericValue
-        resolved.push(flagsPart ? `${colId}${flagsPart}` : colId)
-      } else {
-        const colRef = await resolveColumnNameToColRef(client, docId, tableId, columnPart)
-        const signedColRef = isDescending ? -colRef : colRef
-        resolved.push(flagsPart ? `${signedColRef}${flagsPart}` : signedColRef)
-      }
+    const parsed = parseSortString(item)
+
+    if (isNumericColumnRef(parsed.columnPart)) {
+      const colRef = Number(parsed.columnPart)
+      resolved.push(formatSortResult(colRef, parsed.isDescending, parsed.flagsPart))
+    } else {
+      const colRef = await resolveColumnNameToColRef(client, docId, tableId, parsed.columnPart)
+      resolved.push(formatSortResult(colRef, parsed.isDescending, parsed.flagsPart))
     }
   }
 
   return resolved
 }
-
-// =============================================================================
-// Output Schema
-// =============================================================================
-
-export const ManagePagesOutputSchema = createBatchOutputSchema(GenericOperationResultSchema)
 
 // =============================================================================
 // Tool Definition (Factory Pattern)
@@ -770,13 +678,14 @@ export const MANAGE_PAGES_TOOL = defineBatchTool<
   getDocId: (params) => params.docId,
   getActionName: (operation) => operation.action,
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async beforeExecute() {
-    // Reset batch state for page name tracking across operations
-    resetBatchState()
+    // Create fresh batch context for page name tracking across operations
+    batchContext = createBatchContext()
   },
 
-  async executeOperation(ctx, docId, operation, _index) {
-    return executeSingleOperation(ctx, docId, operation)
+  executeOperation(ctx, docId, operation, _index) {
+    return executeSingleOperation(ctx, docId, operation, batchContext)
   },
 
   buildSuccessResponse(docId, results, params) {
@@ -808,6 +717,7 @@ export const MANAGE_PAGES_TOOL = defineBatchTool<
     }
   },
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async afterExecute(result, params, _ctx) {
     const createResults = result.results.filter((r) => r.action === 'create_page' && r.success)
     // Check if any create_page results have multiple widgets (sectionIds array)
@@ -899,7 +809,7 @@ export const MANAGE_PAGES_TOOL = defineBatchTool<
   }
 })
 
-export async function managePages(context: ToolContext, params: ManagePagesInput) {
+export function managePages(context: ToolContext, params: ManagePagesInput) {
   return MANAGE_PAGES_TOOL.handler(context, params)
 }
 

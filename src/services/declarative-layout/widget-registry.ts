@@ -5,28 +5,12 @@
  * local IDs (e.g., `"id": "list"`). Other widgets can link to these IDs
  * before the actual section IDs are known.
  *
- * The registry tracks:
- * - Local ID → section ID mappings (populated as widgets are created)
- * - Pending links (to be configured after all widgets exist)
+ * The registry tracks local ID → section ID mappings (populated as widgets are created).
  */
-
-import type { Link } from './schema.js'
-
-export interface PendingLink {
-  sectionId: number
-  link: Link
-  tableId: string // Target widget's table (needed for validation)
-}
 
 export class WidgetRegistry {
   /** Maps local ID → section ID */
   private localIdToSectionId = new Map<string, number>()
-
-  /** Maps section ID → local ID (reverse lookup) */
-  private sectionIdToLocalId = new Map<number, string>()
-
-  /** Links to configure after all widgets are created */
-  private pendingLinks: PendingLink[] = []
 
   /**
    * Register a newly created widget with an optional local ID.
@@ -43,7 +27,6 @@ export class WidgetRegistry {
         )
       }
       this.localIdToSectionId.set(localId, sectionId)
-      this.sectionIdToLocalId.set(sectionId, localId)
     }
   }
 
@@ -67,60 +50,5 @@ export class WidgetRegistry {
       )
     }
     return sectionId
-  }
-
-  /**
-   * Check if a local ID is registered.
-   */
-  hasLocalId(localId: string): boolean {
-    return this.localIdToSectionId.has(localId)
-  }
-
-  /**
-   * Get the local ID for a section ID (if any).
-   */
-  getLocalId(sectionId: number): string | undefined {
-    return this.sectionIdToLocalId.get(sectionId)
-  }
-
-  /**
-   * Queue a link to be configured after all widgets are created.
-   *
-   * @param sectionId - The section to configure linking for
-   * @param link - The link configuration from the layout
-   * @param tableId - The table ID of the target widget
-   */
-  queueLink(sectionId: number, link: Link, tableId: string): void {
-    this.pendingLinks.push({ sectionId, link, tableId })
-  }
-
-  /**
-   * Get all pending links for configuration.
-   */
-  getPendingLinks(): readonly PendingLink[] {
-    return this.pendingLinks
-  }
-
-  /**
-   * Clear all pending links (after they've been configured).
-   */
-  clearPendingLinks(): void {
-    this.pendingLinks = []
-  }
-
-  /**
-   * Get all registered mappings (for debugging/logging).
-   */
-  getMappings(): Map<string, number> {
-    return new Map(this.localIdToSectionId)
-  }
-
-  /**
-   * Reset the registry (for reuse or testing).
-   */
-  reset(): void {
-    this.localIdToSectionId.clear()
-    this.sectionIdToLocalId.clear()
-    this.pendingLinks = []
   }
 }

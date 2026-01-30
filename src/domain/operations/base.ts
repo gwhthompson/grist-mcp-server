@@ -5,6 +5,7 @@
  * Used by all entity operations (records, columns, tables, pages, widgets).
  */
 
+import { isDeepStrictEqual } from 'node:util'
 import {
   createFailingResult,
   type VerificationCheck,
@@ -13,7 +14,8 @@ import {
 } from '../../errors/VerificationError.js'
 import { decodeFromApi, encodeForApi } from '../../schemas/cell-codecs.js'
 import type { ColumnMetadata } from '../../services/schema-cache.js'
-import type { ColumnTypeMap, ValueNormalizer } from './types.js'
+/** Map of column ID to column type string (e.g., 'Text', 'Date', 'Ref:Contacts') */
+export type ColumnTypeMap = Map<string, string>
 
 // =============================================================================
 // Column Type Utilities
@@ -41,30 +43,11 @@ export function buildColumnTypeMap(columns: ColumnMetadata[]): ColumnTypeMap {
  *
  * Encodes to API format, then decodes back to ensure canonical form.
  * This leverages existing codecs for DRY normalization.
- *
- * @example
- * ```typescript
- * // DateTime normalization
- * normalizeValue('2024-12-25T10:30:00Z', 'DateTime')
- * // Returns: '2024-12-25T10:30:00.000Z' (canonical form)
- * ```
  */
 export function normalizeValue(value: unknown, columnType: string): unknown {
   if (value === null || value === undefined) return value
   const encoded = encodeForApi(value, columnType)
   return decodeFromApi(encoded, columnType)
-}
-
-/**
- * Create a normalizer function for a specific column type map.
- */
-export function createNormalizer(_columnTypes: ColumnTypeMap): ValueNormalizer {
-  return (value: unknown, columnType?: string) => {
-    if (columnType) {
-      return normalizeValue(value, columnType)
-    }
-    return value
-  }
 }
 
 // =============================================================================
@@ -74,46 +57,13 @@ export function createNormalizer(_columnTypes: ColumnTypeMap): ValueNormalizer {
 /**
  * Deep equality check with optional type-aware normalization.
  *
- * Uses codec round-trip to ensure values are in canonical form before comparison.
- * This handles cases like DateTime format differences:
- * - '2024-12-25T10:30:00Z' vs '2024-12-25T10:30:00.000Z'
- *
- * @param a - First value to compare
- * @param b - Second value to compare
- * @param columnType - Optional column type for normalization
+ * Uses codec round-trip to ensure values are in canonical form before comparison,
+ * then delegates to node:util isDeepStrictEqual.
  */
 export function deepEqual(a: unknown, b: unknown, columnType?: string): boolean {
-  // Normalize values if column type is provided
-  if (columnType) {
-    a = normalizeValue(a, columnType)
-    b = normalizeValue(b, columnType)
-  }
-
-  // Identity check
-  if (a === b) return true
-
-  // Null check
-  if (a === null || b === null) return a === b
-
-  // Type check
-  if (typeof a !== typeof b) return false
-
-  // Array comparison
-  if (Array.isArray(a) && Array.isArray(b)) {
-    if (a.length !== b.length) return false
-    return a.every((val, i) => deepEqual(val, b[i]))
-  }
-
-  // Object comparison
-  if (typeof a === 'object' && typeof b === 'object') {
-    const aObj = a as Record<string, unknown>
-    const bObj = b as Record<string, unknown>
-    const keys = Object.keys(aObj)
-    if (keys.length !== Object.keys(bObj).length) return false
-    return keys.every((key) => deepEqual(aObj[key], bObj[key]))
-  }
-
-  return false
+  const valA = columnType ? normalizeValue(a, columnType) : a
+  const valB = columnType ? normalizeValue(b, columnType) : b
+  return isDeepStrictEqual(valA, valB)
 }
 
 // =============================================================================

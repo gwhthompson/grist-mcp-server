@@ -95,7 +95,7 @@ export const GetDocumentsOutputSchema = z.object({
  * Output provides `visibleCol` (numeric ID) and `visibleColName` (resolved name).
  */
 const FullColumnSchema = z.object({
-  id: z.string(),
+  colId: z.string(),
   label: z.string(),
   type: z.string(),
   isFormula: z.boolean(),

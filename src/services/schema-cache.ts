@@ -2,6 +2,15 @@ import type { DocId, TableId } from '../types/advanced.js'
 import type { SQLQueryResponse } from '../types.js'
 import type { GristClient } from './grist-client.js'
 
+/**
+ * Detect Cloudflare Workers runtime (stateless - timers don't make sense).
+ * Workers create fresh instances per request, so cleanup timers are wasteful.
+ */
+function isWorkersRuntime(): boolean {
+  // Workers don't have process.versions; Node.js does
+  return typeof process === 'undefined' || !('versions' in process)
+}
+
 export interface ColumnMetadata {
   id: string
   fields: {
@@ -83,7 +92,7 @@ export class SchemaCache {
   private tableRefCache: Map<string, TableRefCacheEntry> = new Map()
   private readonly ttl: number
   private readonly maxSize: number = 500
-  private cleanupTimer?: NodeJS.Timeout
+  private cleanupTimer?: ReturnType<typeof setInterval>
 
   constructor(
     private readonly client: GristClient,
@@ -148,7 +157,7 @@ export class SchemaCache {
    * Always fetches fresh - Grist query latency (~20-50ms) is negligible
    * compared to LLM round-trip time (1-5s).
    */
-  async getPageSections(docId: DocId, viewId: number): Promise<SectionInfo[]> {
+  getPageSections(docId: DocId, viewId: number): Promise<SectionInfo[]> {
     return this.fetchPageSections(docId, viewId)
   }
 
@@ -200,7 +209,7 @@ export class SchemaCache {
    * Fetches fresh column metadata directly from API (bypasses cache).
    * Use for validation when you need the latest widgetOptions.
    */
-  async getFreshColumns(docId: DocId, tableId: TableId): Promise<ColumnMetadata[]> {
+  getFreshColumns(docId: DocId, tableId: TableId): Promise<ColumnMetadata[]> {
     return this.fetchColumns(docId, tableId)
   }
 
@@ -321,11 +330,19 @@ export class SchemaCache {
   }
 
   private startAutoCleanup(): void {
+    // Skip timer in Workers - stateless runtime creates fresh instances per request
+    if (isWorkersRuntime()) {
+      return
+    }
+
     this.cleanupTimer = setInterval(() => {
       this.pruneExpired()
     }, 60000)
 
-    this.cleanupTimer.unref()
+    // unref() prevents timer from keeping Node.js process alive
+    if (typeof this.cleanupTimer.unref === 'function') {
+      this.cleanupTimer.unref()
+    }
   }
 
   stopCleanup(): void {

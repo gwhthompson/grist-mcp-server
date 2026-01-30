@@ -36,7 +36,7 @@ let toolDefsPromise: Promise<{
  *
  * Uses dynamic import() for ESM/Vitest compatibility.
  */
-async function getToolRegistry(): Promise<{
+function getToolRegistry(): Promise<{
   ALL_TOOLS: ReadonlyArray<ToolDefinition>
   TOOLS_BY_NAME: Readonly<Record<string, ToolDefinition>>
 }> {
@@ -92,12 +92,12 @@ async function generateBatchSchemas(toolNames: string[]): Promise<{
     const tool = toolsByName[name]
     if (!tool) continue
 
-    const schema = generateToolSchema(tool) as { $defs?: Record<string, unknown> }
+    const fullSchema = generateToolSchema(tool) as { $defs?: Record<string, unknown> }
 
-    // Merge $defs (identical definitions overwrite harmlessly)
-    if (schema.$defs) {
-      Object.assign(allDefs, schema.$defs)
-      delete schema.$defs
+    // Extract and merge $defs (identical definitions overwrite harmlessly)
+    const { $defs, ...schema } = fullSchema
+    if ($defs) {
+      Object.assign(allDefs, $defs)
     }
 
     schemas[name] = schema
@@ -115,6 +115,7 @@ async function generateBatchSchemas(toolNames: string[]): Promise<{
 
 /**
  * Truncate text at word boundary with ellipsis.
+ * Always prefers word boundary if any space exists to avoid mid-word cuts.
  */
 function truncateAtWordBoundary(text: string, maxLength: number): string {
   if (text.length <= maxLength) {
@@ -123,8 +124,8 @@ function truncateAtWordBoundary(text: string, maxLength: number): string {
   // Find last space before maxLength
   const truncated = text.slice(0, maxLength)
   const lastSpace = truncated.lastIndexOf(' ')
-  if (lastSpace > maxLength * 0.6) {
-    // Only use word boundary if it's not too far back
+  // Always prefer word boundary if any space exists
+  if (lastSpace > 0) {
     return `${truncated.slice(0, lastSpace)}...`
   }
   return `${truncated}...`
@@ -354,6 +355,7 @@ export const HELP_TOOL = defineStandardTool<typeof HelpSchema, HelpResponse | He
     return await buildToolHelpResponse(params.tools, sections)
   },
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async afterExecute(result, params, _ctx) {
     // Only add nextSteps for legacy format
     if ('toolName' in result) {
@@ -399,10 +401,7 @@ export const HELP_TOOL = defineStandardTool<typeof HelpSchema, HelpResponse | He
 })
 
 // Export handler for backwards compatibility
-export async function getHelp(
-  context: import('../registry/types.js').ToolContext,
-  params: HelpInput
-) {
+export function getHelp(context: import('../registry/types.js').ToolContext, params: HelpInput) {
   return HELP_TOOL.handler(context, params)
 }
 

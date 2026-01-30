@@ -19,6 +19,13 @@ import { defineStandardTool } from './factory/index.js'
 import { nextSteps } from './utils/next-steps.js'
 
 // =============================================================================
+// Module-Level Constants
+// =============================================================================
+
+const SQL_LIMIT_REGEX = /\bLIMIT\b/i
+const SQL_OFFSET_REGEX = /\bOFFSET\b/i
+
+// =============================================================================
 // Shared Types
 // =============================================================================
 
@@ -102,8 +109,8 @@ function hasLikelyTimestamps(records: Array<Record<string, CellValue>>): boolean
 }
 
 function addPaginationToSql(sql: string, limit: number, offset: number): string {
-  const hasLimit = /\bLIMIT\b/i.test(sql)
-  const hasOffset = /\bOFFSET\b/i.test(sql)
+  const hasLimit = SQL_LIMIT_REGEX.test(sql)
+  const hasOffset = SQL_OFFSET_REGEX.test(sql)
 
   let paginatedSql = sql.trim()
   if (!hasLimit) {
@@ -186,6 +193,7 @@ export const QUERY_SQL_TOOL = defineStandardTool<typeof QuerySQLSchema, SqlRespo
     }
   },
 
+  // biome-ignore lint/suspicious/useAwait: Factory type requires async return
   async afterExecute(result, _params, _ctx) {
     // Truncation is handled by the base formatter, just add nextSteps
     return {
@@ -253,7 +261,7 @@ export const QUERY_SQL_TOOL = defineStandardTool<typeof QuerySQLSchema, SqlRespo
   }
 })
 
-export async function querySql(context: ToolContext, params: QuerySQLInput) {
+export function querySql(context: ToolContext, params: QuerySQLInput) {
   return QUERY_SQL_TOOL.handler(context, params)
 }
 
@@ -297,6 +305,18 @@ function convertToGristFilters(
   }
 
   return gristFilters
+}
+
+function collectErrorColumns(records: GristRecord[]): Set<string> {
+  const cols = new Set<string>()
+  for (const r of records) {
+    if (r.errors) {
+      for (const col of Object.keys(r.errors)) {
+        cols.add(col)
+      }
+    }
+  }
+  return cols
 }
 
 function selectColumns(records: GristRecord[], columns?: string[]): GristRecord[] {
@@ -398,14 +418,7 @@ export const GET_RECORDS_TOOL = defineStandardTool<typeof GetRecordsSchema, GetR
       const recordsWithErrors = selectedRecords.filter(
         (r) => r.errors && Object.keys(r.errors).length > 0
       )
-      const errorColumns = new Set<string>()
-      selectedRecords.forEach((r) => {
-        if (r.errors) {
-          Object.keys(r.errors).forEach((col) => {
-            errorColumns.add(col)
-          })
-        }
-      })
+      const errorColumns = collectErrorColumns(selectedRecords)
 
       return {
         docId: params.docId,
@@ -429,6 +442,7 @@ export const GET_RECORDS_TOOL = defineStandardTool<typeof GetRecordsSchema, GetR
       }
     },
 
+    // biome-ignore lint/suspicious/useAwait: Factory type requires async return
     async afterExecute(result, params, _ctx) {
       // Handle truncation within afterExecute since factory doesn't support formatResponse
       const format = params.response_format || 'json'
@@ -483,7 +497,7 @@ export const GET_RECORDS_TOOL = defineStandardTool<typeof GetRecordsSchema, GetR
   }
 )
 
-export async function getRecords(context: ToolContext, params: GetRecordsInput) {
+export function getRecords(context: ToolContext, params: GetRecordsInput) {
   return GET_RECORDS_TOOL.handler(context, params)
 }
 

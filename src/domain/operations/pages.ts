@@ -30,24 +30,148 @@ import { toDocId } from '../../types/advanced.js'
 import type { ApplyResponse, SQLQueryResponse } from '../../types.js'
 import { first } from '../../utils/array-helpers.js'
 import { extractFields } from '../../utils/grist-field-extractor.js'
-import {
-  type ConfigureWidgetInput,
-  type ConfigureWidgetResult,
-  type CreatePageWithLayoutInput,
-  type DeletePageResult,
-  type DomainPage,
-  DomainPageSchema,
-  type DomainWidget,
-  DomainWidgetSchema,
-  type GetLayoutResult,
-  type LayoutWidgetInfo,
-  type LinkWidgetInput,
-  type LinkWidgetResult,
-  type RemoveWidgetResult,
-  type RenamePageResult,
-  type SetLayoutResult
-} from '../schemas/page.js'
+// =============================================================================
+// Domain Types (inlined from deleted domain/schemas/page.ts)
+// =============================================================================
+
+export interface DomainWidget {
+  sectionId: number
+  viewId: number
+  tableId: string
+  tableRef?: number
+  widgetType: string
+  title?: string
+  linkSrcSectionRef?: number
+  linkSrcColRef?: number
+  linkTargetColRef?: number
+  summarySourceTable?: number
+}
+
+export interface DomainPage {
+  viewId: number
+  docId: string
+  name: string
+  pagePos?: number | null
+  pageId?: number | null
+  widgets?: DomainWidget[]
+}
+
+export interface ConfigureWidgetInput {
+  title?: string
+  sortColRefs?: string
+}
+
+export interface LinkWidgetInput {
+  linkSrcSectionRef?: number
+  linkSrcColRef?: number
+  linkTargetColRef?: number
+}
+
+export interface CreatePageWithLayoutInput {
+  name: string
+  layout: unknown
+}
+
+export interface LayoutWidgetInfo {
+  section: number
+  table: string
+  widget: string
+  title?: string
+}
+
+export interface ConfigureWidgetResult {
+  entity: DomainWidget
+  verified: true
+}
+
+export interface LinkWidgetResult {
+  entity: DomainWidget
+  verified: true
+  sourceWidget?: DomainWidget
+}
+
+export interface RemoveWidgetResult {
+  sectionId: number
+  deleted: true
+  verified: true
+}
+
+export interface RenamePageResult {
+  entity: DomainPage
+  verified: true
+  oldName: string
+}
+
+export interface DeletePageResult {
+  viewId: number
+  name: string
+  deleted: true
+  verified: true
+}
+
+export interface GetLayoutResult {
+  entity: DomainPage
+  layout: unknown
+  widgets: LayoutWidgetInfo[]
+}
+
+export interface SetLayoutResult {
+  entity: DomainPage
+  verified: true
+  widgetsAdded: number
+  widgetsRemoved: number
+}
+
+export interface CreatePageResult {
+  entity: DomainPage
+  verified: true
+  sectionIds: number[]
+}
+
+export interface ReorderPagesResult {
+  entities: DomainPage[]
+  count: number
+  verified: true
+  newOrder: string[]
+}
+
 import { deepEqual, throwIfFailed } from './base.js'
+
+// =============================================================================
+// Link Widget Helpers
+// =============================================================================
+
+/** Link field definitions for building updates and checks */
+const LINK_FIELDS = ['linkSrcSectionRef', 'linkSrcColRef', 'linkTargetColRef'] as const
+
+/** Build updates object from link input (only defined fields) */
+function buildLinkUpdates(link: LinkWidgetInput): Record<string, unknown> {
+  const updates: Record<string, unknown> = {}
+  for (const field of LINK_FIELDS) {
+    if (link[field] !== undefined) {
+      updates[field] = link[field]
+    }
+  }
+  return updates
+}
+
+/** Build verification checks from link input and read widget */
+function buildLinkChecks(link: LinkWidgetInput, readWidget: DomainWidget): VerificationCheck[] {
+  const checks: VerificationCheck[] = []
+  for (const field of LINK_FIELDS) {
+    if (link[field] !== undefined) {
+      const expected = link[field]
+      const actual = readWidget[field]
+      checks.push({
+        description: field,
+        passed: deepEqual(expected, actual),
+        expected,
+        actual
+      })
+    }
+  }
+  return checks
+}
 
 // =============================================================================
 // Page Read Operations
@@ -83,13 +207,13 @@ export async function getPages(
 
   for (const record of response.records) {
     const fields = extractFields(record)
-    const page: DomainPage = DomainPageSchema.parse({
+    const page: DomainPage = {
       viewId: fields.viewId as number,
       docId: docIdStr,
       name: fields.name as string,
       pagePos: fields.pagePos as number | undefined,
       pageId: fields.pageId as number | undefined
-    })
+    }
 
     if (includeWidgets) {
       page.widgets = await getWidgets(ctx, docIdStr, page.viewId)
@@ -136,13 +260,13 @@ export async function getPage(
   }
 
   const fields = extractFields(first(response.records, 'Page'))
-  const page: DomainPage = DomainPageSchema.parse({
+  const page: DomainPage = {
     viewId: fields.viewId as number,
     docId: docIdStr,
     name: fields.name as string,
     pagePos: fields.pagePos as number | undefined,
     pageId: fields.pageId as number | undefined
-  })
+  }
 
   if (includeWidgets) {
     page.widgets = await getWidgets(ctx, docIdStr, page.viewId)
@@ -493,19 +617,8 @@ export async function linkWidget(
     throw new Error(`Widget ${sectionId} not found on page ${viewId}`)
   }
 
-  // Build link updates
-  const updates: Record<string, unknown> = {}
-  if (link.linkSrcSectionRef !== undefined) {
-    updates.linkSrcSectionRef = link.linkSrcSectionRef
-  }
-  if (link.linkSrcColRef !== undefined) {
-    updates.linkSrcColRef = link.linkSrcColRef
-  }
-  if (link.linkTargetColRef !== undefined) {
-    updates.linkTargetColRef = link.linkTargetColRef
-  }
-
-  // Execute link configuration
+  // Build and execute link updates
+  const updates = buildLinkUpdates(link)
   await ctx.client.post<ApplyResponse>(
     `/docs/${docIdStr}/apply`,
     [['UpdateRecord', '_grist_Views_section', sectionId, updates]],
@@ -515,11 +628,10 @@ export async function linkWidget(
     }
   )
 
-  // Verify by reading back
-  if (verify) {
-    const readWidget = await getWidget(ctx, docIdStr, viewId, sectionId)
-
-    if (!readWidget) {
+  // Read back widget (always needed for result)
+  const readWidget = await getWidget(ctx, docIdStr, viewId, sectionId)
+  if (!readWidget) {
+    if (verify) {
       throw new VerificationError(
         {
           passed: false,
@@ -532,47 +644,15 @@ export async function linkWidget(
             }
           ]
         },
-        {
-          operation: 'linkWidget',
-          entityType: 'Widget',
-          entityId: String(sectionId)
-        }
+        { operation: 'linkWidget', entityType: 'Widget', entityId: String(sectionId) }
       )
     }
+    throw new Error(`Widget ${sectionId} not found after linkWidget operation`)
+  }
 
-    // Verify link fields
-    const checks: VerificationCheck[] = []
-
-    if (link.linkSrcSectionRef !== undefined) {
-      const passed = deepEqual(link.linkSrcSectionRef, readWidget.linkSrcSectionRef)
-      checks.push({
-        description: 'linkSrcSectionRef',
-        passed,
-        expected: link.linkSrcSectionRef,
-        actual: readWidget.linkSrcSectionRef
-      })
-    }
-
-    if (link.linkSrcColRef !== undefined) {
-      const passed = deepEqual(link.linkSrcColRef, readWidget.linkSrcColRef)
-      checks.push({
-        description: 'linkSrcColRef',
-        passed,
-        expected: link.linkSrcColRef,
-        actual: readWidget.linkSrcColRef
-      })
-    }
-
-    if (link.linkTargetColRef !== undefined) {
-      const passed = deepEqual(link.linkTargetColRef, readWidget.linkTargetColRef)
-      checks.push({
-        description: 'linkTargetColRef',
-        passed,
-        expected: link.linkTargetColRef,
-        actual: readWidget.linkTargetColRef
-      })
-    }
-
+  // Verify link fields if requested
+  if (verify) {
+    const checks = buildLinkChecks(link, readWidget)
     const verification: VerificationResult = {
       passed: checks.every((c) => c.passed),
       checks
@@ -583,22 +663,15 @@ export async function linkWidget(
       entityType: 'Widget',
       entityId: String(sectionId)
     })
-
-    // Get source widget for result
-    let sourceWidget: DomainWidget | undefined
-    if (link.linkSrcSectionRef) {
-      sourceWidget = (await getWidget(ctx, docIdStr, viewId, link.linkSrcSectionRef)) ?? undefined
-    }
-
-    return { entity: readWidget, verified: true, sourceWidget }
   }
 
-  // Without verification, read back to return the widget
-  const readWidget = await getWidget(ctx, docIdStr, viewId, sectionId)
-  if (!readWidget) {
-    throw new Error(`Widget ${sectionId} not found after linkWidget operation`)
+  // Get source widget for result
+  let sourceWidget: DomainWidget | undefined
+  if (link.linkSrcSectionRef) {
+    sourceWidget = (await getWidget(ctx, docIdStr, viewId, link.linkSrcSectionRef)) ?? undefined
   }
-  return { entity: readWidget, verified: true }
+
+  return { entity: readWidget, verified: true, sourceWidget }
 }
 
 /**
@@ -679,7 +752,7 @@ export async function createPage(
   docId: DocId | string,
   input: CreatePageWithLayoutInput,
   options: { verify?: boolean } = {}
-): Promise<import('../schemas/page.js').CreatePageResult> {
+): Promise<CreatePageResult> {
   const { verify = true } = options
   const docIdStr = typeof docId === 'string' ? docId : String(docId)
 
@@ -944,7 +1017,7 @@ export async function reorderPages(
   docId: DocId | string,
   pageNames: string[],
   options: { verify?: boolean } = {}
-): Promise<import('../schemas/page.js').ReorderPagesResult> {
+): Promise<ReorderPagesResult> {
   const { verify = true } = options
   const docIdStr = typeof docId === 'string' ? docId : String(docId)
 
@@ -1031,7 +1104,7 @@ export async function reorderPages(
  * Convert SectionInfo from schema cache to DomainWidget shape.
  */
 function sectionInfoToDomainWidget(viewId: number, section: SectionInfo): DomainWidget {
-  return DomainWidgetSchema.parse({
+  return {
     sectionId: section.sectionId,
     viewId,
     tableId: section.tableId,
@@ -1041,5 +1114,5 @@ function sectionInfoToDomainWidget(viewId: number, section: SectionInfo): Domain
     linkSrcColRef: section.linkSrcColRef || undefined,
     linkTargetColRef: section.linkTargetColRef || undefined,
     summarySourceTable: section.summarySourceTable || undefined
-  })
+  } satisfies DomainWidget
 }

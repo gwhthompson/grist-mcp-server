@@ -1,10 +1,9 @@
 import { GristError } from '../errors/GristError.js'
 import type { CellValue } from '../schemas/api-responses.js'
 import type { ColumnMetadata } from '../services/schema-cache.js'
-import { log } from '../utils/shared-logger.js'
 
-// Track unknown column types we've warned about (avoid log spam)
-const warnedColumnTypes = new Set<string>()
+// Module-level regex for date validation
+const ISO_DATE_REGEX = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?/
 
 export class ColumnValidationError extends GristError {
   constructor(
@@ -81,15 +80,7 @@ export function validateCellValueForColumnType(
 
     default:
       // Graceful degradation: accept any value for unknown column types
-      // but warn once per type so we can track new Grist column types
-      if (!warnedColumnTypes.has(columnType)) {
-        warnedColumnTypes.add(columnType)
-        log.warn('Unknown column type encountered, skipping validation', {
-          columnType,
-          colId,
-          hint: 'This may indicate a new Grist column type. The MCP will accept any value for this type.'
-        })
-      }
+      // (e.g. Ref:TableName, RefList:TableName, Attachments, etc.)
       break
   }
 }
@@ -136,8 +127,7 @@ function validateTextColumn(value: CellValue, colId: string): void {
 function validateDateColumn(value: CellValue, colId: string, columnType: string): void {
   // Accept user-friendly formats (transformation happens after validation)
   const isUnixTimestamp = typeof value === 'number'
-  const isIsoDateString =
-    typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}:\d{2})?/.test(value)
+  const isIsoDateString = typeof value === 'string' && ISO_DATE_REGEX.test(value)
 
   if (!isUnixTimestamp && !isIsoDateString) {
     const providedType = Array.isArray(value) ? 'array' : typeof value

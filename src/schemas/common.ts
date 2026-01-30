@@ -162,89 +162,7 @@ export type ColId = z.infer<typeof ColIdSchema>
 
 // Note: Column type schemas are defined in column-types.ts
 // ColumnTypeLiteralSchema is registered as 'columnType' for JSON Schema $refs
-
-// visibleCol is top-level, NOT in widgetOptions
-export const RefWidgetOptionsSchema = z.strictObject({
-  showColumn: z.union([z.string(), z.boolean()]).optional().describe('show/hide in views')
-})
-
-export const ChoiceWidgetOptionsSchema = z.strictObject({
-  choices: z.array(z.string()).optional().describe('e.g. ["High","Medium","Low"]'),
-  choiceColors: z.record(z.string(), z.string()).optional().describe('{"High":"#FF0000"}')
-})
-
-export const NumericWidgetOptionsSchema = z.strictObject({
-  numMode: z.enum(['currency', 'decimal', 'percent', 'scientific']).optional(),
-  numSign: z.enum(['parens']).optional().describe('parens for negatives'),
-  decimals: z.number().int().min(0).max(20).optional(),
-  maxDecimals: z.number().int().min(0).max(20).optional(),
-  currency: z.string().length(3).optional().describe('e.g. USD, EUR')
-})
-
-export const DateWidgetOptionsSchema = z.strictObject({
-  dateFormat: z.string().optional().describe('e.g. YYYY-MM-DD'),
-  isCustomDateFormat: z.boolean().optional(),
-  timeFormat: z.string().optional().describe('e.g. h:mma'),
-  isCustomTimeFormat: z.boolean().optional()
-})
-
-export const TextWidgetOptionsSchema = z.strictObject({
-  alignment: z.enum(['left', 'center', 'right']).optional(),
-  wrap: z.boolean().optional(),
-  fontBold: z.boolean().optional(),
-  fontItalic: z.boolean().optional(),
-  fontUnderline: z.boolean().optional(),
-  fontStrikethrough: z.boolean().optional()
-})
-
-export const BoolWidgetOptionsSchema = z.strictObject({
-  widget: z.enum(['TextBox', 'CheckBox']).optional()
-})
-
-export const AttachmentsWidgetOptionsSchema = z.strictObject({
-  height: z.number().int().positive().optional().describe('preview height px')
-})
-
-export const EmptyWidgetOptionsSchema = z.strictObject({})
-
-export const WidgetOptionsSchema = z.union([
-  RefWidgetOptionsSchema,
-  ChoiceWidgetOptionsSchema,
-  NumericWidgetOptionsSchema,
-  DateWidgetOptionsSchema,
-  TextWidgetOptionsSchema,
-  BoolWidgetOptionsSchema,
-  AttachmentsWidgetOptionsSchema,
-  EmptyWidgetOptionsSchema
-])
-
-export function createWidgetOptionsSchema(columnType: string): z.ZodType<any, any> {
-  if (columnType === 'Ref' || columnType === 'RefList') {
-    return RefWidgetOptionsSchema
-  }
-  if (columnType === 'Choice' || columnType === 'ChoiceList') {
-    return ChoiceWidgetOptionsSchema
-  }
-  if (columnType === 'Numeric' || columnType === 'Int') {
-    return NumericWidgetOptionsSchema
-  }
-  if (columnType === 'Date' || columnType === 'DateTime') {
-    return DateWidgetOptionsSchema
-  }
-  if (columnType === 'Text') {
-    return TextWidgetOptionsSchema
-  }
-  if (columnType === 'Bool') {
-    return BoolWidgetOptionsSchema
-  }
-  if (columnType === 'Attachments') {
-    return AttachmentsWidgetOptionsSchema
-  }
-  return EmptyWidgetOptionsSchema
-}
-
-// Note: ColumnDefinitionSchema is defined in column-types.ts with flat options structure
-// It's registered as 'ColumnDefinition' for JSON Schema $refs
+// Widget option schemas are defined in widget-options.ts
 
 export const RowIdsSchema = z.array(z.number().int().positive()).min(1).max(500)
 
@@ -292,6 +210,12 @@ export interface JsonSafeArrayOptions {
   min?: number
   max?: number
   description?: string
+  /**
+   * Optional normalization function applied to each element BEFORE Zod validation.
+   * Use for property alias conversion (e.g., tableId → name) without breaking
+   * discriminatedUnion() which requires pure ZodObject members.
+   */
+  normalize?: (val: unknown) => unknown
 }
 
 /**
@@ -316,11 +240,21 @@ export function jsonSafeArray<T extends z.ZodType>(
   elementSchema: T,
   options: JsonSafeArrayOptions = {}
 ) {
-  const { min, max, description } = options
+  const { min, max, description, normalize } = options
+
+  // Build element preprocessor: parse JSON string, then optionally normalize
+  const preprocessElement = (val: unknown) => {
+    let parsed = parseJsonString(val)
+    if (normalize) {
+      parsed = normalize(parsed)
+    }
+    return parsed
+  }
 
   // Build inner array with element-level preprocessing
   // This handles: ["{...}", "{...}"] → [{...}, {...}]
-  let arraySchema = z.array(z.preprocess(parseJsonString, elementSchema))
+  // Plus normalization for property aliases (e.g., tableId → name)
+  let arraySchema = z.array(z.preprocess(preprocessElement, elementSchema))
   if (min !== undefined) arraySchema = arraySchema.min(min)
   if (max !== undefined) arraySchema = arraySchema.max(max)
   if (description) arraySchema = arraySchema.describe(description)

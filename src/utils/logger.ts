@@ -97,6 +97,7 @@ export class Logger {
 
     const output = this.config.prettyPrint ? JSON.stringify(entry, null, 2) : JSON.stringify(entry)
 
+    // biome-ignore lint/suspicious/noConsole: Logger intentionally outputs to stderr
     console.error(output)
   }
 

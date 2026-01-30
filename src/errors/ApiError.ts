@@ -3,6 +3,8 @@ import { GristError } from './GristError.js'
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
 
 export class ApiError extends GristError {
+  public readonly retryAfter?: number
+
   constructor(
     public readonly statusCode: number,
     public readonly method: HttpMethod,
@@ -11,6 +13,11 @@ export class ApiError extends GristError {
     context?: Record<string, unknown>
   ) {
     super(message, `API_ERROR_${statusCode}`, { ...context, statusCode, method, path })
+    this.retryAfter = typeof context?.retryAfter === 'number' ? context.retryAfter : undefined
+  }
+
+  getRetryDelay(): number {
+    return (this.retryAfter ?? 60) * 1000
   }
 
   toUserMessage(): string {

@@ -8,9 +8,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { ToolContext } from './registry/types.js'
 import { GristClient } from './services/grist-client.js'
-import type { MetricsCollector } from './services/metrics-collector.js'
 import { SchemaCache } from './services/schema-cache.js'
-import { sharedLogger } from './utils/shared-logger.js'
 
 /**
  * Server instructions for LLMs using this MCP server.
@@ -51,10 +49,6 @@ export interface ServerConfig {
   readonly gristBaseUrl: string
   /** Grist API key */
   readonly gristApiKey: string
-  /** Enable metrics collection */
-  readonly enableMetrics?: boolean
-  /** Metrics reporting interval in ms (default: 60000) */
-  readonly metricsInterval?: number
 }
 
 /**
@@ -65,8 +59,6 @@ export interface ServerDependencies {
   client?: GristClient
   /** Pre-configured schema cache */
   schemaCache?: SchemaCache
-  /** Pre-configured metrics collector */
-  metrics?: MetricsCollector
 }
 
 /**
@@ -81,8 +73,6 @@ export interface ServerInstance {
   readonly schemaCache: SchemaCache
   /** The tool context for dependency injection */
   readonly context: ToolContext
-  /** Optional metrics collector */
-  readonly metrics?: MetricsCollector
   /** Cleanup function to call on shutdown */
   readonly cleanup: () => Promise<void>
 }
@@ -110,10 +100,10 @@ export interface ServerInstance {
  * await cleanup()
  * ```
  */
-export async function createGristMcpServer(
+export function createGristMcpServer(
   config: ServerConfig,
   deps?: ServerDependencies
-): Promise<ServerInstance> {
+): ServerInstance {
   // Create or use injected client
   const client = deps?.client ?? new GristClient(config.gristBaseUrl, config.gristApiKey)
 
@@ -131,24 +121,6 @@ export async function createGristMcpServer(
     }
   )
 
-  // Setup metrics if enabled
-  let metricsCollector: MetricsCollector | undefined = deps?.metrics
-
-  if (!metricsCollector && config.enableMetrics) {
-    const { MetricsCollector: MetricsCollectorClass } = await import(
-      './services/metrics-collector.js'
-    )
-
-    metricsCollector = new MetricsCollectorClass(
-      client.getRateLimiter(),
-      client.getResponseCache(),
-      sharedLogger,
-      { interval: config.metricsInterval ?? 60000 }
-    )
-
-    metricsCollector.start()
-  }
-
   // Create tool context for dependency injection
   const context: ToolContext = { client, schemaCache }
 
@@ -158,13 +130,8 @@ export async function createGristMcpServer(
     client,
     schemaCache,
     context,
-    metrics: metricsCollector,
+    // biome-ignore lint/suspicious/useAwait: Returns Promise<void> for waitUntil() compatibility in worker.ts
     cleanup: async () => {
-      // Stop metrics collection
-      if (metricsCollector) {
-        metricsCollector.stop()
-      }
-
       // Stop and clear schema cache
       schemaCache.stopCleanup()
       schemaCache.clearAll()

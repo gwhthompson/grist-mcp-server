@@ -7,27 +7,45 @@
 
 import type { VerificationCheck, VerificationResult } from '../../errors/VerificationError.js'
 import type { ToolContext } from '../../registry/types.js'
-import { ApplyResponseSchema } from '../../schemas/api-responses.js'
+import { ApplyResponseSchema, type CellValue, decodeRecord } from '../../schemas/api-responses.js'
 import { decodeFromApi, encodeRecordForApi } from '../../schemas/cell-codecs.js'
 import {
   buildBulkAddRecordAction,
   buildBulkRemoveRecordAction,
   buildBulkUpdateRecordAction
 } from '../../services/action-builder.js'
-import { serializeUserAction } from '../../services/grist-client.js'
+import { serializeUserAction } from '../../services/action-serializer.js'
 import type { DocId, TableId } from '../../types/advanced.js'
 import { toDocId, toRowId, toTableId } from '../../types/advanced.js'
 import type { ApplyResponse } from '../../types.js'
 import { validateRetValues } from '../../validators/apply-response.js'
-import { decodeRecord } from '../codecs/index.js'
-import {
-  type AddRecordsResult,
-  type CellValue,
-  type DeleteRecordsResult,
-  type DomainRecord,
-  DomainRecordSchema,
-  type UpdateRecordsResult
-} from '../schemas/record.js'
+
+// =============================================================================
+// Domain Types (inlined from deleted domain/schemas/record.ts)
+// =============================================================================
+
+export interface DomainRecord {
+  tableId: string
+  id: number
+  fields: Record<string, unknown>
+  [key: string]: unknown
+}
+
+export interface AddRecordsResult {
+  records: DomainRecord[]
+  count: number
+}
+
+export interface UpdateRecordsResult {
+  records: DomainRecord[]
+  count: number
+}
+
+export interface DeleteRecordsResult {
+  deletedIds: number[]
+  count: number
+}
+
 import { buildColumnTypeMap, deepEqual, throwIfFailed, verifyDeleted } from './base.js'
 
 // =============================================================================
@@ -80,11 +98,11 @@ export async function getRecords(
         const colType = columnTypes.get(key) || 'Text'
         typedFields[key] = decodeFromApi(value, colType)
       }
-      return DomainRecordSchema.parse({
+      return {
         tableId: tableIdStr,
         id: decoded.id,
         fields: typedFields
-      })
+      } satisfies DomainRecord
     })
 }
 
@@ -151,12 +169,13 @@ export async function addRecords(
   }
 
   // Build domain records
-  const writtenRecords: DomainRecord[] = records.map((fields, i) =>
-    DomainRecordSchema.parse({
-      tableId: tableIdStr,
-      id: ids[i],
-      fields
-    })
+  const writtenRecords: DomainRecord[] = records.map(
+    (fields, i) =>
+      ({
+        tableId: tableIdStr,
+        id: ids[i] as number,
+        fields
+      }) satisfies DomainRecord
   )
 
   // Verify by reading back

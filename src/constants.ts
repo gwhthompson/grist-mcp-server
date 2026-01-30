@@ -27,7 +27,7 @@ export const CHARACTER_LIMIT = STRICT_MODE ? 10_000 : 25_000
 /**
  * Maximum error message size to prevent client crashes
  */
-export const MAX_ERROR_LENGTH = 1000 satisfies number
+export const MAX_ERROR_LENGTH = 1000
 
 /**
  * Warn when approaching limit
@@ -38,30 +38,30 @@ export const TRUNCATION_WARNING_THRESHOLD = STRICT_MODE ? 8_000 : 20_000
 // Pagination Defaults (using satisfies for type safety)
 // ============================================================================
 
-export const DEFAULT_LIMIT = 100 satisfies number
-export const DEFAULT_OFFSET = 0 satisfies number
-export const MAX_LIMIT = 1000 satisfies number
+export const DEFAULT_LIMIT = 100
+export const DEFAULT_OFFSET = 0
+export const MAX_LIMIT = 1000
 
 // ============================================================================
 // Batch Operation Limits (using satisfies for type safety)
 // ============================================================================
 
-export const MAX_RECORDS_PER_BATCH = 500 satisfies number
-export const MAX_COLUMN_OPERATIONS = 50 satisfies number
+export const MAX_RECORDS_PER_BATCH = 500
+export const MAX_COLUMN_OPERATIONS = 50
 
 // ============================================================================
 // API Defaults (using satisfies for type safety)
 // ============================================================================
 
-export const DEFAULT_BASE_URL = 'https://docs.getgrist.com' satisfies string
-export const API_TIMEOUT = 30000 satisfies number // 30 seconds
+export const DEFAULT_BASE_URL = 'https://docs.getgrist.com'
+export const API_TIMEOUT = 30000 // 30 seconds
 
 /**
  * Client identification header sent with all Grist API requests.
  * Helps with debugging and allows Grist to track MCP usage.
  * Version is manually updated on releases.
  */
-export const CLIENT_IDENTIFIER = 'grist-mcp-server/1.0' satisfies string
+export const CLIENT_IDENTIFIER = 'grist-mcp-server/1.0'
 
 // ============================================================================
 // HTTP Status Codes (as const object with readonly properties)
@@ -95,7 +95,7 @@ export type HttpStatusCode = (typeof HTTP_STATUS)[keyof typeof HTTP_STATUS]
 /**
  * API version prefix
  */
-export const API_VERSION = 'api' satisfies string
+export const API_VERSION = 'api'
 
 /**
  * Template literal types for type-safe API paths
@@ -137,24 +137,6 @@ export const CACHE_CONFIG = {
  * Type-safe cache configuration
  */
 export type CacheConfig = typeof CACHE_CONFIG
-
-// ============================================================================
-// Session Analytics Configuration (for debugging Claude Desktop crashes)
-// ============================================================================
-
-export const SESSION_ANALYTICS_CONFIG = {
-  /** Warn when cumulative response bytes exceed this (500KB) */
-  cumulativeBytesWarningThreshold: 500_000,
-  /** Warn when tool call count exceeds this */
-  toolCallCountWarningThreshold: 50,
-  /** Log when single response exceeds this (10KB) */
-  largeResponseThreshold: 10_000
-} as const
-
-/**
- * Type-safe session analytics configuration
- */
-export type SessionAnalyticsConfig = typeof SESSION_ANALYTICS_CONFIG
 
 // ============================================================================
 // Error Messages (as const object for consistency)

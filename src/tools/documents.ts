@@ -104,7 +104,7 @@ export const CREATE_DOCUMENT_TOOL = defineStandardTool<
 })
 
 // Export for handler reference (backwards compatibility)
-export async function createDocument(
+export function createDocument(
   context: import('../registry/types.js').ToolContext,
   params: CreateDocumentInput
 ) {

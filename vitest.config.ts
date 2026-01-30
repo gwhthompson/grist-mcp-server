@@ -43,13 +43,13 @@ export default defineConfig({
       exclude: ['src/**/*.d.ts', 'src/index.ts', 'tests/**/*', 'dist/**/*'],
       clean: false, // Prevent race condition between projects (vitest#4943)
       thresholds: {
-        // Coverage improved from 58% to 61% with new error/schema tests
-        // TODO: Continue adding tests to reach 90%+ coverage
-        // Priority: src/tools/*.ts, src/services/declarative-layout/executor.ts
-        lines: 60,
+        // Coverage target: 90%+ (per CLAUDE.md)
+        // Current: ~61%, raising incrementally as tests are added
+        // Priority gaps: src/services/declarative-layout/executor.ts, src/tools/*.ts
+        lines: 61,
         functions: 65,
         branches: 50,
-        statements: 60
+        statements: 61
       }
     },
 

@@ -61,7 +61,7 @@ export function createTestClient(url?: string, apiKey?: string): GristClient {
 
   if (!resolvedUrl || !resolvedApiKey) {
     throw new Error(
-      'GRIST_BASE_URL and GRIST_API_KEY not available. ' + 'Ensure globalSetup.ts ran successfully.'
+      'GRIST_BASE_URL and GRIST_API_KEY not available. Ensure globalSetup.ts ran successfully.'
     )
   }
 

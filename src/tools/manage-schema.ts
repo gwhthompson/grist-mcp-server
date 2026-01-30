@@ -303,6 +303,40 @@ async function executeAddColumn(
   }
 }
 
+async function resolveModifyVisibleCol(
+  client: ToolContext['client'],
+  docId: string,
+  tableId: string,
+  colId: string,
+  visibleCol: string | number,
+  explicitType: string | undefined,
+  explicitRefTable: string | undefined
+): Promise<number | string> {
+  if (typeof visibleCol !== 'string') return visibleCol
+
+  const columnType = explicitType || (await getColumnType(client, docId, tableId, colId))
+  const parsed = parseGristType(columnType)
+  const refTable = explicitRefTable || parsed.refTable
+  if (refTable) {
+    return await resolveVisibleCol(client, docId, refTable, visibleCol)
+  }
+  return visibleCol
+}
+
+async function applyVisibleColSetup(
+  client: ToolContext['client'],
+  docId: string,
+  tableId: string,
+  colId: string,
+  visibleCol: number,
+  explicitType: string | undefined
+): Promise<void> {
+  const colRef = await getColumnRef(client, docId, tableId, colId)
+  const columnType = explicitType || (await getColumnType(client, docId, tableId, colId))
+  const visibleColService = new VisibleColService(client)
+  await visibleColService.setupBatch([{ docId, tableId, colId, colRef, visibleCol, columnType }])
+}
+
 async function executeModifyColumn(
   ctx: ToolContext,
   docId: string,
@@ -329,17 +363,15 @@ async function executeModifyColumn(
 
   // Handle visibleCol resolution
   if (op.updates.visibleCol !== undefined) {
-    if (typeof op.updates.visibleCol === 'string') {
-      const columnType =
-        op.updates.type || (await getColumnType(client, docId, op.tableId, op.colId))
-      const parsed = parseGristType(columnType)
-      const refTable = op.updates.refTable || parsed.refTable
-      if (refTable) {
-        updates.visibleCol = await resolveVisibleCol(client, docId, refTable, op.updates.visibleCol)
-      }
-    } else {
-      updates.visibleCol = op.updates.visibleCol
-    }
+    updates.visibleCol = await resolveModifyVisibleCol(
+      client,
+      docId,
+      op.tableId,
+      op.colId,
+      op.updates.visibleCol,
+      op.updates.type,
+      op.updates.refTable
+    )
   }
 
   // Build widgetOptions from type-specific updates
@@ -362,20 +394,14 @@ async function executeModifyColumn(
 
   // Handle visibleCol post-processing
   if (updates.visibleCol !== undefined) {
-    const colRef = await getColumnRef(client, docId, op.tableId, op.colId)
-    const columnType =
-      (updates.type as string) || (await getColumnType(client, docId, op.tableId, op.colId))
-    const visibleColService = new VisibleColService(client)
-    await visibleColService.setupBatch([
-      {
-        docId,
-        tableId: op.tableId,
-        colId: op.colId,
-        colRef,
-        visibleCol: updates.visibleCol as number,
-        columnType
-      }
-    ])
+    await applyVisibleColSetup(
+      client,
+      docId,
+      op.tableId,
+      op.colId,
+      updates.visibleCol as number,
+      updates.type as string | undefined
+    )
   }
 
   // Process conditional formatting rules from style.rulesOptions

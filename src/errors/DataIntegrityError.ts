@@ -78,51 +78,62 @@ function kindToCode(kind: DataIntegrityKind): string {
 }
 
 // =============================================================================
+// Formatting Helpers
+// =============================================================================
+
+/**
+ * Formats items truncated to a limit, with "and N more" suffix.
+ * Optional formatter transforms each item (e.g., wrapping in quotes).
+ */
+function formatTruncatedItems<T>(
+  items: T[],
+  limit: number,
+  formatter?: (item: T) => string
+): string {
+  const format = formatter ?? String
+  const shown = items.slice(0, limit).map(format).join(', ')
+  const remaining = items.length - limit
+  return remaining > 0 ? `${shown} and ${remaining} more` : shown
+}
+
+/**
+ * Formats a "Valid IDs: [...]" hint or a count summary.
+ */
+function formatValidIdsHint(validRowIds: number[] | undefined, limit: number): string {
+  if (!validRowIds) return ''
+  if (validRowIds.length <= limit) return `. Valid IDs: [${validRowIds.join(', ')}]`
+  return `. ${validRowIds.length} valid IDs exist`
+}
+
+/**
+ * Formats choices as quoted strings with optional truncation.
+ */
+function formatChoicesDisplay(choices: string[], limit: number): string {
+  return formatTruncatedItems(choices, limit, (c) => `"${c}"`)
+}
+
+// =============================================================================
 // Constructor messages
 // =============================================================================
 
 function buildMessage(kind: DataIntegrityKind, tableId: string, d: DataIntegrityDetails): string {
   switch (kind) {
-    case 'invalid_reference': {
-      const validIdsHint =
-        d.validRowIds && d.validRowIds.length <= 10
-          ? `. Valid IDs: [${d.validRowIds.join(', ')}]`
-          : d.validRowIds
-            ? `. ${d.validRowIds.length} valid IDs exist`
-            : ''
-      return `Invalid reference in column "${d.columnId}": row ID ${d.value} does not exist in table "${d.refTableId}"${validIdsHint}`
-    }
-    case 'invalid_reflist': {
-      const vals = d.invalidValues as number[]
-      const invalidStr = vals.slice(0, 5).join(', ')
-      const moreStr = vals.length > 5 ? ` and ${vals.length - 5} more` : ''
-      return `Invalid references in column "${d.columnId}": row IDs [${invalidStr}${moreStr}] do not exist in table "${d.refTableId}"`
-    }
+    case 'invalid_reference':
+      return `Invalid reference in column "${d.columnId}": row ID ${d.value} does not exist in table "${d.refTableId}"${formatValidIdsHint(d.validRowIds, 10)}`
+    case 'invalid_reflist':
+      return `Invalid references in column "${d.columnId}": row IDs [${formatTruncatedItems(d.invalidValues as number[], 5)}] do not exist in table "${d.refTableId}"`
     case 'invalid_choice': {
       const choices = d.allowedChoices ?? []
       const choicesStr =
         choices.length <= 10
-          ? `[${choices.map((c) => `"${c}"`).join(', ')}]`
+          ? `[${formatChoicesDisplay(choices, 10)}]`
           : `${choices.length} choices defined`
       return `Invalid choice in column "${d.columnId}": "${d.value}" is not in allowed choices ${choicesStr}`
     }
-    case 'invalid_choicelist': {
-      const vals = d.invalidValues as string[]
-      const invalidStr = vals
-        .slice(0, 5)
-        .map((v) => `"${v}"`)
-        .join(', ')
-      const moreStr = vals.length > 5 ? ` and ${vals.length - 5} more` : ''
-      return `Invalid choices in column "${d.columnId}": [${invalidStr}${moreStr}] not in allowed choices`
-    }
-    case 'row_not_found': {
-      const rowIds = d.rowIds ?? []
-      const rowIdsStr =
-        rowIds.length <= 10
-          ? rowIds.join(', ')
-          : `${rowIds.slice(0, 10).join(', ')} and ${rowIds.length - 10} more`
-      return `Row ID(s) not found: [${rowIdsStr}] in table "${tableId}"`
-    }
+    case 'invalid_choicelist':
+      return `Invalid choices in column "${d.columnId}": [${formatTruncatedItems(d.invalidValues as string[], 5, (v) => `"${v}"`)}] not in allowed choices`
+    case 'row_not_found':
+      return `Row ID(s) not found: [${formatTruncatedItems(d.rowIds ?? [], 10)}] in table "${tableId}"`
   }
 }
 
@@ -130,89 +141,51 @@ function buildMessage(kind: DataIntegrityKind, tableId: string, d: DataIntegrity
 // User messages
 // =============================================================================
 
+function formatValidIdsSection(d: DataIntegrityDetails): string {
+  if (!d.validRowIds) return ''
+  if (d.validRowIds.length <= 20)
+    return `\nValid row IDs in "${d.refTableId}": [${d.validRowIds.join(', ')}]`
+  return `\nTable "${d.refTableId}" has ${d.validRowIds.length} rows`
+}
+
 function buildUserMessage(
   kind: DataIntegrityKind,
   tableId: string,
   d: DataIntegrityDetails
 ): string {
   switch (kind) {
-    case 'invalid_reference': {
-      const validIdsSection =
-        d.validRowIds && d.validRowIds.length <= 20
-          ? `\nValid row IDs in "${d.refTableId}": [${d.validRowIds.join(', ')}]`
-          : d.validRowIds
-            ? `\nTable "${d.refTableId}" has ${d.validRowIds.length} rows`
-            : ''
+    case 'invalid_reference':
       return (
         `Invalid reference value in column "${d.columnId}"\n\n` +
-        `Row ID ${d.value} does not exist in referenced table "${d.refTableId}"${validIdsSection}\n\n` +
+        `Row ID ${d.value} does not exist in referenced table "${d.refTableId}"${formatValidIdsSection(d)}\n\n` +
         `The Ref column expects a valid row ID from the referenced table.`
       )
-    }
-    case 'invalid_reflist': {
-      const vals = d.invalidValues as number[]
-      const invalidStr =
-        vals.length <= 10
-          ? vals.join(', ')
-          : `${vals.slice(0, 10).join(', ')} and ${vals.length - 10} more`
+    case 'invalid_reflist':
       return (
         `Invalid reference values in RefList column "${d.columnId}"\n\n` +
-        `Row IDs [${invalidStr}] do not exist in referenced table "${d.refTableId}"\n\n` +
+        `Row IDs [${formatTruncatedItems(d.invalidValues as number[], 10)}] do not exist in referenced table "${d.refTableId}"\n\n` +
         `RefList columns expect an array of valid row IDs from the referenced table.`
       )
-    }
-    case 'invalid_choice': {
-      const choices = d.allowedChoices ?? []
-      const choicesDisplay =
-        choices.length <= 20
-          ? choices.map((c) => `"${c}"`).join(', ')
-          : `${choices
-              .slice(0, 20)
-              .map((c) => `"${c}"`)
-              .join(', ')} and ${choices.length - 20} more`
+    case 'invalid_choice':
       return (
         `Invalid value for Choice column "${d.columnId}"\n\n` +
         `Value "${d.value}" is not in the allowed choices.\n` +
-        `Allowed choices: [${choicesDisplay}]\n\n` +
+        `Allowed choices: [${formatChoicesDisplay(d.allowedChoices ?? [], 20)}]\n\n` +
         `Choice columns only accept values from the predefined list.`
       )
-    }
-    case 'invalid_choicelist': {
-      const vals = d.invalidValues as string[]
-      const choices = d.allowedChoices ?? []
-      const invalidStr =
-        vals.length <= 10
-          ? vals.map((v) => `"${v}"`).join(', ')
-          : `${vals
-              .slice(0, 10)
-              .map((v) => `"${v}"`)
-              .join(', ')} and ${vals.length - 10} more`
-      const choicesDisplay =
-        choices.length <= 20
-          ? choices.map((c) => `"${c}"`).join(', ')
-          : `${choices
-              .slice(0, 20)
-              .map((c) => `"${c}"`)
-              .join(', ')} and ${choices.length - 20} more`
+    case 'invalid_choicelist':
       return (
         `Invalid values for ChoiceList column "${d.columnId}"\n\n` +
-        `Values [${invalidStr}] are not in the allowed choices.\n` +
-        `Allowed choices: [${choicesDisplay}]\n\n` +
+        `Values [${formatTruncatedItems(d.invalidValues as string[], 10, (v) => `"${v}"`)}] are not in the allowed choices.\n` +
+        `Allowed choices: [${formatChoicesDisplay(d.allowedChoices ?? [], 20)}]\n\n` +
         `ChoiceList columns only accept arrays of values from the predefined list.`
       )
-    }
-    case 'row_not_found': {
-      const rowIds = d.rowIds ?? []
-      const rowIdsStr =
-        rowIds.length <= 20
-          ? rowIds.join(', ')
-          : `${rowIds.slice(0, 20).join(', ')} and ${rowIds.length - 20} more`
+    case 'row_not_found':
       return (
         `Row ID(s) not found in table "${tableId}"\n\n` +
-        `Missing row IDs: [${rowIdsStr}]\n\n` +
+        `Missing row IDs: [${formatTruncatedItems(d.rowIds ?? [], 20)}]\n\n` +
         `These rows may have been deleted or the IDs may be incorrect.`
       )
-    }
   }
 }
 

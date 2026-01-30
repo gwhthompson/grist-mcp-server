@@ -115,6 +115,7 @@ async function generateBatchSchemas(toolNames: string[]): Promise<{
 
 /**
  * Truncate text at word boundary with ellipsis.
+ * Always prefers word boundary if any space exists to avoid mid-word cuts.
  */
 function truncateAtWordBoundary(text: string, maxLength: number): string {
   if (text.length <= maxLength) {
@@ -123,8 +124,8 @@ function truncateAtWordBoundary(text: string, maxLength: number): string {
   // Find last space before maxLength
   const truncated = text.slice(0, maxLength)
   const lastSpace = truncated.lastIndexOf(' ')
-  if (lastSpace > maxLength * 0.6) {
-    // Only use word boundary if it's not too far back
+  // Always prefer word boundary if any space exists
+  if (lastSpace > 0) {
     return `${truncated.slice(0, lastSpace)}...`
   }
   return `${truncated}...`

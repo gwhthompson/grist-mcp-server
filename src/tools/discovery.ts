@@ -382,6 +382,49 @@ interface GetTablesOutput {
   nextSteps?: string[]
 }
 
+interface ColumnApiResponse {
+  id: string
+  fields: {
+    label?: string
+    type: string
+    isFormula?: boolean
+    formula?: string | null
+    widgetOptions?: string | Record<string, unknown>
+    visibleCol?: number
+  }
+}
+
+function parseWidgetOptions(
+  raw: string | Record<string, unknown> | undefined
+): string | Record<string, unknown> | null {
+  if (!raw || raw === '') return null
+  return typeof raw === 'string' ? JSON.parse(raw) : raw
+}
+
+async function resolveVisibleColName(
+  client: ToolContext['client'],
+  docId: string,
+  type: string,
+  visibleCol: number | undefined
+): Promise<string | null> {
+  if (!visibleCol || !isReferenceType(type)) return null
+
+  const foreignTable = extractForeignTable(type)
+  if (!foreignTable) return null
+
+  try {
+    return await getColumnNameFromId(client, docId, foreignTable, visibleCol)
+  } catch (error) {
+    // Non-critical - visible column name is a convenience enhancement
+    log.debug(
+      'Failed to resolve visibleColName',
+      { docId, foreignTable, visibleCol },
+      error instanceof Error ? error : undefined
+    )
+    return null
+  }
+}
+
 async function formatTables(
   ctx: ToolContext,
   tables: Array<{ id: string }>,
@@ -392,18 +435,6 @@ async function formatTables(
   }
 
   if (params.detail_level === 'columns' || params.detail_level === 'full_schema') {
-    interface ColumnApiResponse {
-      id: string
-      fields: {
-        label?: string
-        type: string
-        isFormula?: boolean
-        formula?: string | null
-        widgetOptions?: string | Record<string, unknown>
-        visibleCol?: number
-      }
-    }
-
     return await Promise.all(
       tables.map(async (t) => {
         const columnsResponse = await ctx.client.get<{
@@ -421,49 +452,21 @@ async function formatTables(
         return {
           id: t.id,
           columns: await Promise.all(
-            columns.map(async (c) => {
-              let parsedWidgetOptions: string | Record<string, unknown> | null = null
-              if (c.fields.widgetOptions && c.fields.widgetOptions !== '') {
-                parsedWidgetOptions =
-                  typeof c.fields.widgetOptions === 'string'
-                    ? JSON.parse(c.fields.widgetOptions)
-                    : c.fields.widgetOptions
-              }
-
-              let visibleColName: string | null = null
-              if (c.fields.visibleCol && isReferenceType(c.fields.type)) {
-                const foreignTable = extractForeignTable(c.fields.type)
-                if (foreignTable) {
-                  try {
-                    visibleColName = await getColumnNameFromId(
-                      ctx.client,
-                      params.docId,
-                      foreignTable,
-                      c.fields.visibleCol
-                    )
-                  } catch (error) {
-                    // Non-critical - visible column name is a convenience enhancement
-                    log.debug(
-                      'Failed to resolve visibleColName',
-                      { docId: params.docId, foreignTable, visibleCol: c.fields.visibleCol },
-                      error instanceof Error ? error : undefined
-                    )
-                    visibleColName = null
-                  }
-                }
-              }
-
-              return {
-                id: c.id,
-                label: c.fields.label ?? c.id,
-                type: c.fields.type,
-                isFormula: c.fields.isFormula ?? false,
-                formula: c.fields.formula ?? null,
-                widgetOptions: parsedWidgetOptions,
-                visibleCol: c.fields.visibleCol ?? null,
-                visibleColName: visibleColName
-              }
-            })
+            columns.map(async (c) => ({
+              id: c.id,
+              label: c.fields.label ?? c.id,
+              type: c.fields.type,
+              isFormula: c.fields.isFormula ?? false,
+              formula: c.fields.formula ?? null,
+              widgetOptions: parseWidgetOptions(c.fields.widgetOptions),
+              visibleCol: c.fields.visibleCol ?? null,
+              visibleColName: await resolveVisibleColName(
+                ctx.client,
+                params.docId,
+                c.fields.type,
+                c.fields.visibleCol
+              )
+            }))
           )
         }
       })

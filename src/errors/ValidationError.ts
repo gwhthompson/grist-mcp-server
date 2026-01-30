@@ -1,6 +1,88 @@
 import type { z } from 'zod'
 import { GristError } from './GristError.js'
 
+/**
+ * Suggestion rule: pattern matcher + suggestions to add.
+ */
+interface SuggestionRule {
+  match: (field: string, constraint: string) => boolean
+  suggestions: string[]
+}
+
+/**
+ * Table-driven suggestion rules for validation errors.
+ * Each rule has a match function and associated suggestions.
+ */
+const SUGGESTION_RULES: SuggestionRule[] = [
+  {
+    match: (f) => f === 'docid' || f.includes('documentid'),
+    suggestions: [
+      'Use grist_get_documents to find valid document IDs',
+      'Document IDs are 22-character Base58 strings (e.g., "aKt7TZe8YGLp3ak8bDL8TZ")'
+    ]
+  },
+  {
+    match: (f) => f === 'tableid' || f.includes('tablename'),
+    suggestions: [
+      'Use grist_get_tables with the docId to list available tables',
+      'Table names must start with uppercase and use Python identifier rules'
+    ]
+  },
+  {
+    match: (f, c) => f === 'name' && c.includes('required'),
+    suggestions: [
+      'Table name is required: {"name": "Tasks", "columns": [...]}',
+      'Alias: {"tableId": "Tasks", ...} also accepted'
+    ]
+  },
+  {
+    match: (f) => f === 'colid' || f.includes('columnid') || f.includes('column'),
+    suggestions: [
+      'Use grist_get_tables with detail_level="columns" to see column names',
+      'Column names follow Python identifier rules (letters, numbers, underscores)',
+      'Column format: {"colId": "Name", "type": "Text"}'
+    ]
+  },
+  {
+    match: (f) => f === 'rowid' || f.includes('rowids'),
+    suggestions: [
+      'Use grist_get_records to find row IDs for existing records',
+      'Row IDs are positive integers assigned by Grist'
+    ]
+  },
+  {
+    match: (f) => f === 'workspaceid',
+    suggestions: [
+      'Use grist_get_workspaces to find valid workspace IDs',
+      'Workspace IDs are positive integers'
+    ]
+  },
+  {
+    match: (f) => f.includes('widgetoptions'),
+    suggestions: [
+      'Use grist_get_tables with detail_level="full_schema" to see existing widget options',
+      'Call grist_help with tool_name="grist_manage_columns" for widget options examples'
+    ]
+  },
+  {
+    match: (f) => f === 'type' || f.includes('columntype'),
+    suggestions: [
+      'Valid column types: Text, Numeric, Int, Bool, Date, DateTime, Choice, ChoiceList, Ref:TableName, RefList:TableName'
+    ]
+  },
+  {
+    match: (f, c) => f.includes('fields') && c.includes('required'),
+    suggestions: [
+      'Update records require {id, fields} format: {id: 1, fields: {Status: "Done"}}',
+      'NOT flat format: {id: 1, Status: "Done"} (fields property is required)'
+    ]
+  },
+  {
+    match: (f, c) => f === 'records' && c.includes('array'),
+    suggestions: ['Records must be an array: [{"Name": "Alice"}, {"Name": "Bob"}]']
+  }
+]
+
 export class ValidationError extends GristError {
   constructor(
     public readonly field: string,
@@ -37,60 +119,13 @@ export class ValidationError extends GristError {
   getSuggestions(): string[] {
     const suggestions: string[] = []
     const fieldLower = this.field.toLowerCase()
+    const constraintLower = this.constraint.toLowerCase()
 
-    // Document ID suggestions
-    if (fieldLower === 'docid' || fieldLower.includes('documentid')) {
-      suggestions.push('Use grist_get_documents to find valid document IDs')
-      suggestions.push(
-        'Document IDs are 22-character Base58 strings (e.g., "aKt7TZe8YGLp3ak8bDL8TZ")'
-      )
-    }
-
-    // Table ID suggestions
-    if (fieldLower === 'tableid' || fieldLower.includes('tablename')) {
-      suggestions.push('Use grist_get_tables with the docId to list available tables')
-      suggestions.push('Table names must start with uppercase and use Python identifier rules')
-    }
-
-    // Column ID suggestions
-    if (
-      fieldLower === 'colid' ||
-      fieldLower.includes('columnid') ||
-      fieldLower.includes('column')
-    ) {
-      suggestions.push('Use grist_get_tables with detail_level="columns" to see column names')
-      suggestions.push(
-        'Column names follow Python identifier rules (letters, numbers, underscores)'
-      )
-    }
-
-    // Row ID suggestions
-    if (fieldLower === 'rowid' || fieldLower.includes('rowids')) {
-      suggestions.push('Use grist_get_records to find row IDs for existing records')
-      suggestions.push('Row IDs are positive integers assigned by Grist')
-    }
-
-    // Workspace ID suggestions
-    if (fieldLower === 'workspaceid') {
-      suggestions.push('Use grist_get_workspaces to find valid workspace IDs')
-      suggestions.push('Workspace IDs are positive integers')
-    }
-
-    // Widget options suggestions
-    if (fieldLower.includes('widgetoptions')) {
-      suggestions.push(
-        'Use grist_get_tables with detail_level="full_schema" to see existing widget options'
-      )
-      suggestions.push(
-        'Call grist_help with tool_name="grist_manage_columns" for widget options examples'
-      )
-    }
-
-    // Type-related suggestions
-    if (fieldLower === 'type' || fieldLower.includes('columntype')) {
-      suggestions.push(
-        'Valid column types: Text, Numeric, Int, Bool, Date, DateTime, Choice, ChoiceList, Ref:TableName, RefList:TableName'
-      )
+    // Apply matching rules
+    for (const rule of SUGGESTION_RULES) {
+      if (rule.match(fieldLower, constraintLower)) {
+        suggestions.push(...rule.suggestions)
+      }
     }
 
     // Generic fallback

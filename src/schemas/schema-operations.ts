@@ -23,6 +23,7 @@ import {
   TableIdSchema
 } from './common.js'
 import { BaseConditionalRuleSchema } from './conditional-rules.js'
+import { normalizeSchemaOperation } from './normalization.js'
 
 // =============================================================================
 // Table Operation Schemas
@@ -31,8 +32,11 @@ import { BaseConditionalRuleSchema } from './conditional-rules.js'
 const CreateTableOperationSchema = z
   .object({
     action: z.literal('create_table'),
-    name: z.string().min(1).max(100).describe('becomes tableId'),
-    columns: jsonSafeArray(ColumnDefinitionSchema, { min: 0, max: 100 }).default([])
+    name: z.string().min(1).max(100).describe('table name (alias: tableId)'),
+    columns: jsonSafeArray(ColumnDefinitionSchema, {
+      min: 0,
+      max: 100
+    }).default([])
   })
   .describe('create table')
 
@@ -154,7 +158,11 @@ const SchemaOperationSchema = z.discriminatedUnion('action', [
 
 export const ManageSchemaSchema = z.strictObject({
   docId: DocIdSchema,
-  operations: jsonSafeArray(SchemaOperationSchema, { min: 1, max: MAX_COLUMN_OPERATIONS }),
+  operations: jsonSafeArray(SchemaOperationSchema, {
+    min: 1,
+    max: MAX_COLUMN_OPERATIONS,
+    normalize: normalizeSchemaOperation
+  }),
   response_format: ResponseFormatSchema
 })
 

@@ -210,6 +210,12 @@ export interface JsonSafeArrayOptions {
   min?: number
   max?: number
   description?: string
+  /**
+   * Optional normalization function applied to each element BEFORE Zod validation.
+   * Use for property alias conversion (e.g., tableId → name) without breaking
+   * discriminatedUnion() which requires pure ZodObject members.
+   */
+  normalize?: (val: unknown) => unknown
 }
 
 /**
@@ -234,11 +240,21 @@ export function jsonSafeArray<T extends z.ZodType>(
   elementSchema: T,
   options: JsonSafeArrayOptions = {}
 ) {
-  const { min, max, description } = options
+  const { min, max, description, normalize } = options
+
+  // Build element preprocessor: parse JSON string, then optionally normalize
+  const preprocessElement = (val: unknown) => {
+    let parsed = parseJsonString(val)
+    if (normalize) {
+      parsed = normalize(parsed)
+    }
+    return parsed
+  }
 
   // Build inner array with element-level preprocessing
   // This handles: ["{...}", "{...}"] → [{...}, {...}]
-  let arraySchema = z.array(z.preprocess(parseJsonString, elementSchema))
+  // Plus normalization for property aliases (e.g., tableId → name)
+  let arraySchema = z.array(z.preprocess(preprocessElement, elementSchema))
   if (min !== undefined) arraySchema = arraySchema.min(min)
   if (max !== undefined) arraySchema = arraySchema.max(max)
   if (description) arraySchema = arraySchema.describe(description)

@@ -307,6 +307,18 @@ function convertToGristFilters(
   return gristFilters
 }
 
+function collectErrorColumns(records: GristRecord[]): Set<string> {
+  const cols = new Set<string>()
+  for (const r of records) {
+    if (r.errors) {
+      for (const col of Object.keys(r.errors)) {
+        cols.add(col)
+      }
+    }
+  }
+  return cols
+}
+
 function selectColumns(records: GristRecord[], columns?: string[]): GristRecord[] {
   if (!columns || columns.length === 0) {
     return records
@@ -406,14 +418,7 @@ export const GET_RECORDS_TOOL = defineStandardTool<typeof GetRecordsSchema, GetR
       const recordsWithErrors = selectedRecords.filter(
         (r) => r.errors && Object.keys(r.errors).length > 0
       )
-      const errorColumns = new Set<string>()
-      for (const r of selectedRecords) {
-        if (r.errors) {
-          for (const col of Object.keys(r.errors)) {
-            errorColumns.add(col)
-          }
-        }
-      }
+      const errorColumns = collectErrorColumns(selectedRecords)
 
       return {
         docId: params.docId,

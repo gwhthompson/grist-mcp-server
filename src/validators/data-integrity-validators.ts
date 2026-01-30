@@ -252,6 +252,100 @@ function validateRefListValueWithPrefetch(
 }
 
 /**
+ * Validates a Ref column value against pre-fetched row IDs.
+ */
+function validateRefColumn(
+  value: CellValue,
+  colId: string,
+  columnType: string,
+  tableId: TableId,
+  rowIdsByTable: Map<string, Set<number>>
+): void {
+  if (typeof value !== 'number') return
+  const refTableName = getRefTableName(columnType)
+  if (!refTableName) return
+  const validRowIds = rowIdsByTable.get(refTableName)
+  if (validRowIds) {
+    validateRefValueWithPrefetch(value, colId, refTableName, tableId, validRowIds)
+  }
+}
+
+/**
+ * Validates a RefList column value against pre-fetched row IDs.
+ */
+function validateRefListColumn(
+  value: CellValue,
+  colId: string,
+  columnType: string,
+  tableId: TableId,
+  rowIdsByTable: Map<string, Set<number>>
+): void {
+  if (!Array.isArray(value)) return
+  const refTableName = getRefTableName(columnType)
+  if (!refTableName) return
+  const validRowIds = rowIdsByTable.get(refTableName)
+  if (validRowIds) {
+    const rowIds = value[0] === 'L' ? (value.slice(1) as number[]) : (value as number[])
+    validateRefListValueWithPrefetch(rowIds, colId, refTableName, tableId, validRowIds)
+  }
+}
+
+/**
+ * Validates a Choice column value against allowed choices.
+ */
+function validateChoiceColumn(
+  value: CellValue,
+  colId: string,
+  column: ColumnMetadata,
+  tableId: TableId
+): void {
+  if (typeof value !== 'string') return
+  const choiceOptions = parseChoiceOptions(column.fields.widgetOptions)
+  if (choiceOptions?.choices && choiceOptions.choices.length > 0) {
+    validateChoiceValue(value, colId, choiceOptions.choices, tableId)
+  }
+}
+
+/**
+ * Validates a ChoiceList column value against allowed choices.
+ */
+function validateChoiceListColumn(
+  value: CellValue,
+  colId: string,
+  column: ColumnMetadata,
+  tableId: TableId
+): void {
+  if (!Array.isArray(value)) return
+  const choiceOptions = parseChoiceOptions(column.fields.widgetOptions)
+  if (choiceOptions?.choices && choiceOptions.choices.length > 0) {
+    const choices = value[0] === 'L' ? (value.slice(1) as string[]) : (value as string[])
+    validateChoiceListValue(choices, colId, choiceOptions.choices, tableId)
+  }
+}
+
+/**
+ * Dispatches validation to the appropriate type-specific validator.
+ */
+function validateColumnValue(
+  colId: string,
+  value: CellValue,
+  columnType: string,
+  column: ColumnMetadata,
+  tableId: TableId,
+  rowIdsByTable: Map<string, Set<number>>
+): void {
+  if (columnType.startsWith('Ref:')) {
+    validateRefColumn(value, colId, columnType, tableId, rowIdsByTable)
+  } else if (columnType.startsWith('RefList:')) {
+    validateRefListColumn(value, colId, columnType, tableId, rowIdsByTable)
+  } else if (columnType === 'Choice') {
+    validateChoiceColumn(value, colId, column, tableId)
+  } else if (columnType === 'ChoiceList') {
+    validateChoiceListColumn(value, colId, column, tableId)
+  }
+}
+
+/**
  * Validates a single record using pre-fetched row IDs.
  * This is the internal implementation used by batch validation.
  */
@@ -264,54 +358,13 @@ function validateRecordWithPrefetch(
   const errors: DataIntegrityValidationResult['errors'] = []
 
   for (const [colId, value] of Object.entries(record)) {
-    // Skip null values - they're always valid
     if (value === null) continue
 
     const column = columns.find((c) => c.id === colId)
     if (!column) continue
 
-    const columnType = column.fields.type
-
     try {
-      // Ref validation using pre-fetched row IDs
-      if (columnType.startsWith('Ref:') && typeof value === 'number') {
-        const refTableName = getRefTableName(columnType)
-        if (refTableName) {
-          const validRowIds = rowIdsByTable.get(refTableName)
-          if (validRowIds) {
-            validateRefValueWithPrefetch(value, colId, refTableName, tableId, validRowIds)
-          }
-        }
-      }
-
-      // RefList validation using pre-fetched row IDs
-      if (columnType.startsWith('RefList:') && Array.isArray(value)) {
-        const refTableName = getRefTableName(columnType)
-        if (refTableName) {
-          const validRowIds = rowIdsByTable.get(refTableName)
-          if (validRowIds) {
-            const rowIds = value[0] === 'L' ? (value.slice(1) as number[]) : (value as number[])
-            validateRefListValueWithPrefetch(rowIds, colId, refTableName, tableId, validRowIds)
-          }
-        }
-      }
-
-      // Choice validation (sync - no API call needed)
-      if (columnType === 'Choice' && typeof value === 'string') {
-        const choiceOptions = parseChoiceOptions(column.fields.widgetOptions)
-        if (choiceOptions?.choices && choiceOptions.choices.length > 0) {
-          validateChoiceValue(value, colId, choiceOptions.choices, tableId)
-        }
-      }
-
-      // ChoiceList validation (sync - no API call needed)
-      if (columnType === 'ChoiceList' && Array.isArray(value)) {
-        const choiceOptions = parseChoiceOptions(column.fields.widgetOptions)
-        if (choiceOptions?.choices && choiceOptions.choices.length > 0) {
-          const choices = value[0] === 'L' ? (value.slice(1) as string[]) : (value as string[])
-          validateChoiceListValue(choices, colId, choiceOptions.choices, tableId)
-        }
-      }
+      validateColumnValue(colId, value, column.fields.type, column, tableId, rowIdsByTable)
     } catch (error) {
       if (error instanceof DataIntegrityError) {
         errors.push(error)

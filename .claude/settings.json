@@ -1,44 +1,49 @@
 {
-    "permissions": {
-        "allow": [
-            "Skill(mcp-builder)",
-            "Skill(typescript-advanced-types)",
-            "Skill(javascript-testing-patterns)",
-            "mcp__context7",
-            "Bash(mcpb:*)",
-            "Bash(npm:*)",
-            "Bash(tree:*)",
-            "Bash(find:*)",
-            "WebFetch(domain:raw.githubusercontent.com)",
-            "WebFetch(domain:github.com)",
-            "WebFetch(domain:code.claude.com)",
-            "Bash(echo:*)",
-            "Bash(timeout 180 npm test:*)",
-            "Bash(cat:*)",
-            "WebFetch(domain:registry.npmjs.org)",
-            "WebFetch(domain:v3.zod.dev)",
-            "WebFetch(domain:www.npmjs.com)",
-            "Bash(git log:*)",
-            "Bash(cut:*)",
-            "Bash(done)",
-            "Bash(npm run grist:*)",
-            "Bash(docker rm -f grist-mcp-:*)",
-            "Bash(docker run:*)",
-            "Bash(docker ps:*)",
-            "Bash(docker logs:*)",
-            "Bash(docker exec:*)",
-            "Bash(curl:*)"
-        ],
-        "deny": [],
-        "ask": []
+  "permissions": {
+    "allow": [
+      "Skill(mcp-builder)",
+      "Skill(typescript-advanced-types)",
+      "Skill(javascript-testing-patterns)",
+      "mcp__context7",
+      "Bash(mcpb:*)",
+      "Bash(npm:*)",
+      "Bash(tree:*)",
+      "Bash(find:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:code.claude.com)",
+      "Bash(echo:*)",
+      "Bash(timeout 180 npm test:*)",
+      "Bash(cat:*)",
+      "WebFetch(domain:registry.npmjs.org)",
+      "WebFetch(domain:v3.zod.dev)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(git log:*)",
+      "Bash(cut:*)",
+      "Bash(done)",
+      "Bash(npm run grist:*)",
+      "Bash(docker rm -f grist-mcp-:*)",
+      "Bash(docker run:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker logs:*)",
+      "Bash(docker exec:*)",
+      "Bash(curl:*)"
+    ],
+    "deny": [],
+    "ask": []
+  },
+  "enableAllProjectMcpServers": true,
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true,
+    "network": {
+      "allowUnixSockets": [
+        "/Users/george/.orbstack/run/docker.sock"
+      ]
     },
-    "enableAllProjectMcpServers": true,
-    "sandbox": {
-        "excludedCommands": [],
-        "autoAllowBashIfSandboxed": true,
-        "enabled": true,
-        "network": {
-            "allowUnixSockets": ["/Users/george/.orbstack/run/docker.sock"]
-        }
-    }
+    "excludedCommands": []
+  },
+  "enabledPlugins": {
+    "mcp-apps@mcp-apps": true
+  }
 }

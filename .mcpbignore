@@ -74,6 +74,19 @@ yarn-error.log*
 .npm/
 .eslintcache
 
+# Wrangler (Cloudflare Workers dev artifacts)
+.wrangler/
+wrangler.jsonc
+
+# Vite build config (not needed at runtime)
+vite.config.ts
+
+# Registry tokens (secrets!)
+.mcpregistry_*
+
+# References (development-only docs)
+references/
+
 # OS files
 .DS_Store
 Thumbs.db

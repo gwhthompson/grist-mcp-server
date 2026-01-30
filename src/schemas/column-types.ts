@@ -145,7 +145,7 @@ export const VisibleColSchema = z.union([z.string(), z.number()]).meta({ id: 'Vi
 export const ColumnDefinitionSchema = z
   .object({
     // Core properties (all column types)
-    colId: ColIdSchema,
+    colId: ColIdSchema.describe('column identifier (alias: id)'),
     type: ColumnTypeLiteralSchema,
     label: z.string().optional(),
     isFormula: z.boolean().default(false),

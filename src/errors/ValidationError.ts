@@ -71,13 +71,6 @@ const SUGGESTION_RULES: SuggestionRule[] = [
     ]
   },
   {
-    match: (f, c) => f.includes('fields') && c.includes('required'),
-    suggestions: [
-      'Update records require {id, fields} format: {id: 1, fields: {Status: "Done"}}',
-      'NOT flat format: {id: 1, Status: "Done"} (fields property is required)'
-    ]
-  },
-  {
     match: (f, c) => f === 'records' && c.includes('array'),
     suggestions: ['Records must be an array: [{"Name": "Alice"}, {"Name": "Bob"}]']
   }

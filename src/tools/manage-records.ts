@@ -32,6 +32,7 @@ import {
   ResponseFormatSchema,
   TableIdSchema
 } from '../schemas/common.js'
+import { normalizeRecordOperation } from '../schemas/normalization.js'
 import { toDocId, toTableId } from '../types/advanced.js'
 import type { UpsertResponse } from '../types.js'
 import { log } from '../utils/logger.js'
@@ -132,7 +133,11 @@ const RecordOperationSchema = z.discriminatedUnion('action', [
 /** Main schema for grist_manage_records */
 export const ManageRecordsSchema = z.strictObject({
   docId: DocIdSchema,
-  operations: jsonSafeArray(RecordOperationSchema, { min: 1, max: 10 }),
+  operations: jsonSafeArray(RecordOperationSchema, {
+    min: 1,
+    max: 10,
+    normalize: normalizeRecordOperation
+  }),
   response_format: ResponseFormatSchema
 })
 
@@ -569,7 +574,7 @@ export const MANAGE_RECORDS_TOOL = defineBatchTool<
 
   docs: {
     overview:
-      'CRUD for records: add, update, delete, upsert. Batched operations execute sequentially for cross-table dependencies. Use natural formats (no "L" prefix for lists).',
+      'CRUD for records: add, update, delete, upsert. Batched operations execute sequentially for cross-table dependencies. Use natural formats (no "L" prefix for lists). Update accepts both canonical {id, fields: {...}} and flat {id, Name: "val"} record shapes.',
     parameters:
       'DATA TYPES: Text="string", Numeric=42, Bool=true, Date="2024-03-15", DateTime="2024-03-15T14:30:00Z", Choice="Option1", ChoiceList=["a","b"], Ref=42 (row ID), RefList=[1,2]. Never use "L" prefix.',
     examples: [

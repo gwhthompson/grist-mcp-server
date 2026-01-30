@@ -356,7 +356,7 @@ interface FormattedTable {
   columns?:
     | string[]
     | Array<{
-        id: string
+        colId: string
         label: string
         type: string
         isFormula: boolean
@@ -453,7 +453,7 @@ async function formatTables(
           id: t.id,
           columns: await Promise.all(
             columns.map(async (c) => ({
-              id: c.id,
+              colId: c.id,
               label: c.fields.label ?? c.id,
               type: c.fields.type,
               isFormula: c.fields.isFormula ?? false,
@@ -540,7 +540,7 @@ export const GET_TABLES_TOOL = defineStandardTool<typeof GetTablesSchema, GetTab
 
   docs: {
     overview:
-      'Get table structure and schema. Detail levels: names (table IDs only ~20 tokens/table), columns (+ column names ~50 tokens/table), or full_schema (+ types, formulas, widget options ~200 tokens/table). Note: widgetOptions only returned with full_schema.',
+      'Get table structure and schema. Detail levels: names (table IDs only ~20 tokens/table), columns (+ column names ~50 tokens/table), or full_schema (+ types, formulas, widget options ~200 tokens/table). Columns use `colId` to match grist_manage_schema input format. Note: widgetOptions only returned with full_schema.',
     examples: [
       { desc: 'List table names', input: { docId: 'abc123', detail_level: 'names' } },
       {

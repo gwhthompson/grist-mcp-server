@@ -91,7 +91,7 @@ export default {
     // Create server instance with user's credentials (stateless - new per request)
     const instance = await createGristMcpServer({
       name: 'grist-mcp-server',
-      version: '2.0.36',
+      version: '2.0.38',
       gristBaseUrl: baseUrl,
       gristApiKey: apiKey
     })

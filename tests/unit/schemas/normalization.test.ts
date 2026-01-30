@@ -451,6 +451,58 @@ describe('normalizeRecordOperation', () => {
     })
   })
 
+  describe('delete recordIds alias', () => {
+    it('renames recordIds to rowIds when rowIds is absent', () => {
+      const input = {
+        action: 'delete',
+        tableId: 'Tasks',
+        recordIds: [1, 2, 3]
+      }
+      const result = normalizeRecordOperation(input)
+
+      expect(result).toEqual({
+        action: 'delete',
+        tableId: 'Tasks',
+        rowIds: [1, 2, 3]
+      })
+    })
+
+    it('passes through rowIds unchanged when already present', () => {
+      const input = {
+        action: 'delete',
+        tableId: 'Tasks',
+        rowIds: [1, 2]
+      }
+      const result = normalizeRecordOperation(input)
+
+      expect(result).toEqual(input)
+    })
+
+    it('preserves rowIds when both rowIds and recordIds are present', () => {
+      const input = {
+        action: 'delete',
+        tableId: 'Tasks',
+        rowIds: [1, 2],
+        recordIds: [3, 4]
+      }
+      const result = normalizeRecordOperation(input)
+
+      // rowIds wins — recordIds stays for Zod to strip
+      expect(result).toEqual(input)
+    })
+
+    it('does not rename recordIds for non-delete actions', () => {
+      const input = {
+        action: 'add',
+        tableId: 'Tasks',
+        recordIds: [1, 2]
+      }
+      const result = normalizeRecordOperation(input)
+
+      expect(result).toEqual(input)
+    })
+  })
+
   describe('non-update operations pass through', () => {
     it('passes through add operations', () => {
       const input = {
@@ -463,7 +515,7 @@ describe('normalizeRecordOperation', () => {
       expect(result).toEqual(input)
     })
 
-    it('passes through delete operations', () => {
+    it('passes through delete operations with rowIds', () => {
       const input = {
         action: 'delete',
         tableId: 'Tasks',

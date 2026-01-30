@@ -5,6 +5,7 @@
  * - create_table accepts both `name` and `tableId` for consistency
  * - create_table/add_column accept `id` as alias for `colId` in column definitions
  * - update records accept flat shape {id, Name} as alias for {id, fields: {Name}}
+ * - delete operations accept `recordIds` as alias for `rowIds`
  *
  * Key insight: z.preprocess() returns ZodEffects, not ZodObject, which breaks
  * discriminatedUnion(). By normalizing at the array level (via jsonSafeArray's
@@ -163,16 +164,19 @@ export function normalizeSchemaOperation(input: unknown): unknown {
 // =============================================================================
 
 /**
- * Normalize a record operation, converting flat update records to canonical shape.
+ * Normalize a record operation:
+ * - Converts flat update records `{id, Name}` to canonical `{id, fields: {Name}}`
+ * - Renames `recordIds` → `rowIds` for delete (output uses `recordIds`, input expects `rowIds`)
  *
- * LLMs often produce flat update records `{id: 5, Name: "Alice"}` by analogy
- * with the add format. This normalizes to `{id: 5, fields: {Name: "Alice"}}`.
- *
- * Only applies to `action: 'update'` operations. Other actions pass through unchanged.
+ * Other actions pass through unchanged.
  *
  * @example
  * normalizeRecordOperation({action: "update", tableId: "T", records: [{id: 1, Name: "Alice"}]})
  * // → {action: "update", tableId: "T", records: [{id: 1, fields: {Name: "Alice"}}]}
+ *
+ * @example
+ * normalizeRecordOperation({action: "delete", tableId: "T", recordIds: [1, 2]})
+ * // → {action: "delete", tableId: "T", rowIds: [1, 2]}
  */
 export function normalizeRecordOperation(input: unknown): unknown {
   if (typeof input !== 'object' || input === null) {
@@ -180,6 +184,12 @@ export function normalizeRecordOperation(input: unknown): unknown {
   }
 
   const obj = input as Record<string, unknown>
+
+  // Normalize recordIds → rowIds for delete (output uses recordIds, input expects rowIds)
+  if (obj.action === 'delete' && 'recordIds' in obj && !('rowIds' in obj)) {
+    const { recordIds, ...rest } = obj
+    return { ...rest, rowIds: recordIds }
+  }
 
   if (obj.action !== 'update') {
     return input

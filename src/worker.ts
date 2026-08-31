@@ -2,7 +2,7 @@
  * Cloudflare Workers entry point for grist-mcp-server.
  *
  * Provides a remote MCP server using streamable-http transport at /mcp endpoint.
- * Uses header-based authentication (X-Grist-API-Key).
+ * Uses header-based authentication (X-API-Key).
  *
  * Architecture notes:
  * - Stateless design: Each request creates a fresh server instance with the user's

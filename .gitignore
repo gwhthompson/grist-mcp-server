@@ -36,6 +36,10 @@ coverage/
 # MCP bundles (build artifacts)
 *.mcpb
 
+# Packed tarballs and MCP registry login tokens
+*.tgz
+.mcpregistry_*
+
 # MCP configuration with API keys
 .mcp.json
 inspector-config.json

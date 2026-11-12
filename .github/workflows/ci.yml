@@ -245,7 +245,7 @@ jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [quality-gates]
+    needs: [quality-gates, npm-publish]
     if: startsWith(github.ref, 'refs/tags/v')
     permissions:
       contents: write
@@ -272,7 +272,11 @@ jobs:
 
           if [ -f CHANGELOG.md ]; then
             # Extract changelog section for this version
-            awk "/## \[$VERSION\]/,/## \[/" CHANGELOG.md | grep -v "^## \[" | tail -n +1 > release-notes.md
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" { found=1; next }
+              found && /^## \[/ { exit }
+              found { print }
+            ' CHANGELOG.md > release-notes.md
 
             if [ -s release-notes.md ]; then
               echo "✅ Extracted changelog for version $VERSION"
@@ -287,7 +291,7 @@ jobs:
           fi
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           name: v${{ steps.version.outputs.version }}
           body_path: release-notes.md
@@ -324,10 +328,57 @@ jobs:
 
       - uses: actions/setup-node@v6
         with:
-          node-version: ${{ env.NODE_VERSION }}
+          node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
-      - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
       - run: npm publish --provenance --access public
+
+  # ========================================
+  # Publish to MCP Registry
+  # ========================================
+  mcp-registry-publish:
+    name: Publish to MCP Registry
+    runs-on: ubuntu-latest
+    needs: [npm-publish]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      MCP_PUBLISHER_VERSION: v1.8.9
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Download and verify mcp-publisher
+        run: |
+          set -euo pipefail
+          os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+          arch="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+          archive="mcp-publisher_${os}_${arch}.tar.gz"
+          base_url="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+
+          curl --fail --location --silent --show-error --output "$archive" "$base_url/$archive"
+          curl --fail --location --silent --show-error --output "$archive.sigstore.json" "$base_url/$archive.sigstore.json"
+          cosign verify-blob \
+            --bundle "$archive.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+            "$archive"
+          tar xzf "$archive" mcp-publisher
+          rm -f "$archive" "$archive.sigstore.json"
+
+      - name: Authenticate to MCP Registry
+        run: ./mcp-publisher login github-oidc
+
+      - name: Publish server to MCP Registry
+        run: ./mcp-publisher publish
+
+      - name: Hide 2.0.33 in MCP Registry
+        run: ./mcp-publisher status --status deleted --message "Shipped a stray .env file. Use 2.0.34." io.github.gwhthompson/grist-mcp-server 2.0.33

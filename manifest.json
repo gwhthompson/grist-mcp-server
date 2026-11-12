@@ -1,14 +1,14 @@
 {
   "manifest_version": "0.3",
   "name": "grist-mcp-server",
-  "version": "2.0.32",
+  "version": "2.0.34",
   "display_name": "Grist Database Integration",
   "description": "11 tools for managing Grist documents with AI",
   "long_description": "Read and write tables, records, pages, and widgets. Works with Grist Cloud or self-hosted instances.",
   "author": {
     "name": "George Thompson"
   },
-  "license": "MIT",
+  "license": "Apache-2.0",
   "keywords": [
     "mcp",
     "model-context-protocol",

@@ -63,3 +63,6 @@ temp/
 
 # MCP Registry tokens
 .mcpregistry_*
+
+# Packed tarballs
+*.tgz

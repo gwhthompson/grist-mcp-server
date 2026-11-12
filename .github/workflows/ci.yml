@@ -379,6 +379,3 @@ jobs:
 
       - name: Publish server to MCP Registry
         run: ./mcp-publisher publish
-
-      - name: Hide 2.0.33 in MCP Registry
-        run: ./mcp-publisher status --status deleted --message "Shipped a stray .env file. Use 2.0.34." io.github.gwhthompson/grist-mcp-server 2.0.33
